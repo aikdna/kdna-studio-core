@@ -1,0 +1,25 @@
+{
+  "name": "@aikdna/kdna-studio-core",
+  "version": "1.2.1",
+  "description": "Open-source authoring core for turning human judgment into valid, testable, packageable KDNA domains.",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aikdna/kdna-studio-core.git"
+  },
+  "keywords": ["kdna", "domain-judgment", "authoring", "judgment-cards", "human-lock", "compile", "validate"],
+  "dependencies": {
+    "@aikdna/kdna-core": "^0.3.0"
+  },
+  "peerDependencies": {
+    "@aikdna/kdna-cli": ">=0.16.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

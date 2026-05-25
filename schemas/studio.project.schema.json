@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aikdna.com/schemas/studio.project.schema.json",
+  "title": "KDNA Studio Project",
+  "description": "A Studio Project manifest for authoring KDNA domain judgment packages.",
+  "type": "object",
+  "required": ["studio_version", "name", "type", "cards", "stages"],
+  "properties": {
+    "studio_version": {
+      "type": "string",
+      "description": "Studio Core version that created this project.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-z0-9.-]+)?$"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Unique project identifier."
+    },
+    "name": {
+      "type": "string",
+      "description": "Domain name (e.g. leadership_master).",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "enum": ["domain", "cluster"],
+      "description": "Project type."
+    },
+    "created": {
+      "type": "string",
+      "format": "date"
+    },
+    "updated": {
+      "type": "string",
+      "format": "date"
+    },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "id": { "type": "string" }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["drafting", "cards_in_progress", "ready_for_test", "ready_for_release", "released"],
+      "description": "Project-level status across all stages."
+    },
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["axiom", "ontology", "misunderstanding", "boundary", "self_check", "risk", "aesthetic", "scenario", "case"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["draft", "revised", "locked", "tested", "published", "deprecated"]
+          },
+          "locked": { "type": "boolean" },
+          "human_lock": {
+            "type": ["object", "null"],
+            "properties": {
+              "by": { "type": "string" },
+              "at": { "type": "string", "format": "date-time" },
+              "statement": { "type": "string" }
+            }
+          },
+          "feynman_restatement": {
+            "type": ["object", "null"],
+            "properties": {
+              "text": { "type": "string" },
+              "score": { "type": "object" }
+            }
+          },
+          "audit_log": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at": { "type": "string", "format": "date-time" },
+                "event": { "type": "string" },
+                "by": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "title"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string", "enum": ["text", "file", "url", "chat"] },
+          "title": { "type": "string" },
+          "content_hash": { "type": "string" },
+          "source": { "type": "string" },
+          "spans": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "text": { "type": "string" },
+                "candidate_pattern": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "input"],
+        "properties": {
+          "id": { "type": "string" },
+          "input": { "type": "string" },
+          "expected_without_kdna": { "type": "string" },
+          "expected_with_kdna": { "type": "string" },
+          "result": { "type": "string", "enum": ["with_kdna_better", "no_difference", "without_kdna_better"] }
+        }
+      }
+    },
+    "stages": {
+      "type": "object",
+      "properties": {
+        "evidence_room": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "in_progress", "complete"] },
+            "evidence_count": { "type": "integer" }
+          }
+        },
+        "interview_room": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "in_progress", "complete"] },
+            "questions_asked": { "type": "integer" }
+          }
+        },
+        "judgment_cards": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "in_progress", "complete"] },
+            "locked": { "type": "integer" },
+            "total": { "type": "integer" }
+          }
+        },
+        "test_lab": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "in_progress", "complete"] },
+            "evals_passed": { "type": "integer" },
+            "evals_total": { "type": "integer" }
+          }
+        },
+        "export": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "ready", "complete"] }
+          }
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "properties": {
+        "version": { "type": "string" },
+        "published_at": { "type": "string", "format": "date-time" },
+        "compiled_card_count": { "type": "integer" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "studio_core": { "type": "string" },
+        "studio_core_version": { "type": "string" },
+        "build_id": { "type": "string" },
+        "author_id": { "type": "string" },
+        "locked_card_count": { "type": "integer" },
+        "test_case_count": { "type": "integer" },
+        "built_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
