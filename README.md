@@ -1,19 +1,14 @@
-# KDNA Studio Core
+# KDNA Studio
 
-Open-source authoring core for turning human judgment into valid, testable, packageable KDNA domains.
+Open-source authoring kernel for creating KDNA domains — JS/npm package. AI can propose. Humans confirm. Only locked judgment compiles.
 
-**KDNA Studio Core is not a one-click generator.** It is a judgment extraction, validation, locking, testing, and compiling engine. AI can propose judgment candidates. Humans confirm judgment. Only human-locked judgment can be compiled into KDNA.
+**KDNA Studio is the JS authoring kernel.** It is not a UI tool. It is a pure-logic engine for creating KDNA domains from any JavaScript application.
 
-## Why this exists
-
-KDNA should not only be creatable by the official KDNA Studio. Any third-party app, Mac app, iOS app, web tool, or enterprise internal system should be able to create standard KDNA domains — as long as they follow the protocol, validation rules, and human judgment lock.
-
-| Library | Role |
-|---------|------|
-| `@aikdna/kdna-core` | **Use** KDNA (load, validate, format) |
-| `@aikdna/kdna-core-swift` | **Use** KDNA on macOS/iOS |
-| **`@aikdna/kdna-studio-core`** | **Create** KDNA (author, lock, compile, test) |
-| `@aikdna/kdna-cli` | **Operate** KDNA (pack, publish, verify) |
+| Library | Language | Role |
+|---------|----------|------|
+| `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — install, verify, pack, publish |
+| **`@aikdna/kdna-studio`** | JS/npm | **Create** KDNA — author, lock, compile, export |
+| `@aikdna/kdna-core` | JS/npm | **Use** KDNA — load, validate, format |
 
 ## What it does
 
@@ -43,7 +38,7 @@ Evidence Room → Judgment Cards → Human Lock → Quality Gate → Compile →
 ## Install
 
 ```bash
-npm install @aikdna/kdna-studio-core
+npm install @aikdna/kdna-studio
 ```
 
 ## Quick Start

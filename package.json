@@ -1,7 +1,7 @@
 {
-  "name": "@aikdna/kdna-studio-core",
+  "name": "@aikdna/kdna-studio",
   "version": "1.2.1",
-  "description": "Open-source authoring core for turning human judgment into valid, testable, packageable KDNA domains.",
+  "description": "Open-source authoring kernel for creating KDNA domains — JS/npm package. KDNA Studio lets any app create valid, testable, packageable KDNA domains.",
   "type": "commonjs",
   "main": "src/index.js",
   "license": "Apache-2.0",
