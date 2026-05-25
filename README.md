@@ -44,7 +44,7 @@ npm install @aikdna/kdna-studio
 ## Quick Start
 
 ```js
-const { createProject, createCard, lockCard, compileDomain } = require('@aikdna/kdna-studio-core');
+const { createProject, createCard, lockCard, compileDomain } = require('@aikdna/kdna-studio');
 
 // 1. Create a project
 const project = createProject('writing_judgment', 'domain', {
@@ -70,7 +70,7 @@ const locked = lockCard(card, {
 });
 
 // 4. Check readiness
-const { checkHumanLockGate, exportProject } = require('@aikdna/kdna-studio-core');
+const { checkHumanLockGate, exportProject } = require('@aikdna/kdna-studio');
 const gate = checkHumanLockGate(project);
 if (!gate.blocked) {
   // 5. Export
