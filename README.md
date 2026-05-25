@@ -1,5 +1,9 @@
 # KDNA Studio
 
+**KDNA Studio turns raw human experience into AI-loadable cognitive kernels.**
+
+AI may propose judgment candidates. Humans must confirm judgment. Only human-locked judgment can compile into KDNA.
+
 Open-source authoring kernel for creating KDNA domains — JS/npm package. AI can propose. Humans confirm. Only locked judgment compiles.
 
 **KDNA Studio is the JS authoring kernel.** It is not a UI tool. It is a pure-logic engine for creating KDNA domains from any JavaScript application.
