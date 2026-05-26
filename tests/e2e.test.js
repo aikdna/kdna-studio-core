@@ -2,8 +2,8 @@
  * End-to-end validation: prove Studio Core output passes KDNA SPEC validation.
  *
  * Tests:
- *   1. compile → write files → kdna validate passes
- *   2. compile → kdna pack → kdna inspect returns valid container
+ *   1. compile → write files → kdna dev validate passes
+ *   2. compile → kdna dev pack → kdna inspect returns valid asset
  *   3. compile output matches KDNA SPEC reference structure
  *   4. kdna-core schema validation on compiled output
  */
@@ -19,6 +19,13 @@ const { createProject } = require('../src/project');
 const { createCard, lockCard, transitionCard, createFeynmanRestatement, attachRestatementToLock } = require('../src/cards');
 const { compileDomain } = require('../src/compile');
 const { buildProvenance } = require('../src/provenance');
+
+function runKdna(args, options) {
+  if (process.env.KDNA_CLI) {
+    return execFileSync(process.execPath, [process.env.KDNA_CLI, ...args], options);
+  }
+  return execFileSync('kdna', args, options);
+}
 
 function makeLockedCard(type, fields, id) {
   let card = createCard(type, fields, id);
@@ -105,10 +112,10 @@ function createFullProject() {
 
 const TMPDIR = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-e2e-'));
 
-// ─── E2E: compile → kdna validate ────────────────────────────────────
+// ─── E2E: compile → kdna dev validate ────────────────────────────────
 
 describe('E2E: compile → validate', () => {
-  test('compiled output passes kdna validate', () => {
+  test('compiled output passes kdna dev validate', () => {
     const project = createFullProject();
     const result = compileDomain(project);
     const domainDir = path.join(TMPDIR, 'test-domain');
@@ -119,7 +126,7 @@ describe('E2E: compile → validate', () => {
     }
 
     try {
-      const validateResult = execFileSync('kdna', ['validate', domainDir], {
+      const validateResult = runKdna(['dev', 'validate', domainDir], {
         encoding: 'utf8', timeout: 30000,
       });
       assert.match(validateResult, /valid|✓/i);
@@ -208,10 +215,10 @@ describe('E2E: compile → validate', () => {
   });
 });
 
-// ─── E2E: compile → pack → inspect ───────────────────────────────────
+// ─── E2E: compile → dev pack → inspect ───────────────────────────────
 
-describe('E2E: compile → pack → inspect', () => {
-  test('compiled output survives pack→inspect round-trip', () => {
+describe('E2E: compile → dev pack → inspect', () => {
+  test('compiled output survives dev pack→inspect round-trip', () => {
     const project = createFullProject();
     const result = compileDomain(project);
     const domainDir = path.join(TMPDIR, 'pack-test');
@@ -223,7 +230,7 @@ describe('E2E: compile → pack → inspect', () => {
 
     try {
       // Pack
-      const packResult = execFileSync('kdna', ['pack', domainDir, '--output', TMPDIR], {
+      const packResult = runKdna(['dev', 'pack', domainDir, '--output', TMPDIR], {
         encoding: 'utf8', timeout: 60000,
       });
       assert.match(packResult, /Packed|✓/);
@@ -233,7 +240,7 @@ describe('E2E: compile → pack → inspect', () => {
       assert.ok(kdnaFile, 'Should produce a .kdna file');
 
       // Inspect
-      const inspectResult = execFileSync('kdna', ['inspect', path.join(TMPDIR, kdnaFile), '--json'], {
+      const inspectResult = runKdna(['inspect', path.join(TMPDIR, kdnaFile), '--json'], {
         encoding: 'utf8', timeout: 15000,
       });
       const inspected = JSON.parse(inspectResult);

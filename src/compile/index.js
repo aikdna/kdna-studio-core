@@ -23,7 +23,9 @@ function makeMeta(project) {
 }
 
 function compileCore(cards, project) {
-  const lockedAxioms = cards.filter(c => c.type === 'axiom' && c.locked).map(c => ({ id: c.id, ...c.fields }));
+  const lockedAxioms = cards
+    .filter(c => c.type === 'axiom' && c.locked)
+    .map(c => ({ id: c.id, ...c.fields, status: c.status, human_lock: c.human_lock }));
   const lockedOntology = cards.filter(c => c.type === 'ontology' && c.locked).map(c => ({ id: c.id, ...c.fields }));
   const lockedBoundaries = cards.filter(c => c.type === 'boundary' && c.locked);
   const lockedRisks = cards.filter(c => c.type === 'risk' && c.locked).map(c => ({ id: c.id, ...c.fields }));

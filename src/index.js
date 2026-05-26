@@ -12,7 +12,7 @@
  *   compile/      Locked cards → KDNA JSON files
  *   testlab/      Test case model, comparison runner
  *   provenance/   Build metadata, content fingerprinting
- *   packaging/    .kdna / .kdnae pack adapters
+ *   packaging/    signed .kdna asset builders
  *   versioning/   Judgment diff, changelog generation
  *   cli-bridge/   Adapter to kdna-cli subprocess calls
  */
