@@ -3,24 +3,27 @@
  *
  * All subprocess calls use execFileSync (not execSync with string interpolation)
  * to prevent command injection. Studio Core calls kdna-cli as the canonical
- * implementation of pack/verify/sign/publish operations.
+ * implementation of dev pack, verify, sign, and publish operations.
  */
 
 const { execFileSync } = require('child_process');
 const path = require('path');
 
 function packDomain(domainDir, outputDir = null) {
-  const args = ['pack', domainDir];
+  const args = ['dev', 'pack', domainDir];
   if (outputDir) args.push('--output', outputDir);
   const result = execFileSync('kdna', args, { encoding: 'utf8', timeout: 60000 });
   return { success: true, output: result.trim() };
 }
 
 function packEncryptedDomain(domainDir, licensePath, outputDir = null) {
-  const args = ['pack', domainDir, '--encrypt', '--license', licensePath];
-  if (outputDir) args.push('--output', outputDir);
-  const result = execFileSync('kdna', args, { encoding: 'utf8', timeout: 60000 });
-  return { success: true, output: result.trim() };
+  void domainDir;
+  void licensePath;
+  void outputDir;
+  return {
+    success: false,
+    error: 'Encrypted-extension packaging has been removed. Build a licensed .kdna asset and activate it through the entitlement API.',
+  };
 }
 
 function verifyDomain(domainPath) {
@@ -35,7 +38,7 @@ function verifyDomain(domainPath) {
 
 function validateDomain(domainPath) {
   try {
-    const result = execFileSync('kdna', ['validate', domainPath], { encoding: 'utf8', timeout: 30000 });
+    const result = execFileSync('kdna', ['dev', 'validate', domainPath], { encoding: 'utf8', timeout: 30000 });
     return { success: true, output: result.trim() };
   } catch (e) {
     return { success: false, error: e.message, stderr: (e.stderr || '').toString() };
