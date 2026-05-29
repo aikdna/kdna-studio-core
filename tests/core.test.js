@@ -92,6 +92,10 @@ test('compileDomain only includes locked cards', () => {
 
   const result = compileDomain(project);
   assert.ok('KDNA_Core.json' in result.files);
+  assert.ok('KDNA_CARD.json' in result.files);
+  const kdnaCard = JSON.parse(result.files['KDNA_CARD.json']);
+  assert.equal(kdnaCard.name, 'test');
+  assert.equal(kdnaCard.human_lock_summary.locked_cards, 1);
   assert.equal(result.stats.locked_cards, 1);
   assert.equal(result.stats.excluded_cards, 1);
 });
