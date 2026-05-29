@@ -34,25 +34,34 @@ function stableStringify(value) {
   return JSON.stringify(value);
 }
 
-function canonicalEntryBytes(fileName, content) {
-  if (fileName.endsWith('.json')) {
-    try {
-      return stableStringify(JSON.parse(content));
-    } catch (_) {
-      return content;
-    }
+function canonicalizeJson(name, content) {
+  const obj = JSON.parse(content);
+  if (name === 'kdna.json') {
+    const copy = { ...obj };
+    delete copy.signature;
+    delete copy.asset_digest;
+    delete copy.container_sha256;
+    delete copy.content_digest;
+    return stableStringify(copy);
   }
-  return content;
+  return stableStringify(obj);
 }
 
 function computeContentDigest(files) {
-  const excluded = new Set(['kdna.json', 'signature.json', '.DS_Store']);
+  const excluded = new Set(['signature.json', '.DS_Store']);
   const payload = Object.keys(files)
     .filter(name => !excluded.has(name))
-    .filter(name => !name.startsWith('reports/') && name !== 'build-receipt.json')
     .sort()
-    .map(name => `${name}\n${canonicalEntryBytes(name, files[name])}`)
-    .join('\n---entry---\n');
+    .map(name => {
+      let content = files[name];
+      if (name === 'mimetype') content = 'application/vnd.aikdna.kdna+zip';
+      const buf = name.endsWith('.json')
+        ? Buffer.from(canonicalizeJson(name, content))
+        : Buffer.from(content);
+      const hash = crypto.createHash('sha256').update(buf).digest('hex');
+      return `${name}:${hash}`;
+    })
+    .join('\n');
   return `sha256:${crypto.createHash('sha256').update(payload).digest('hex')}`;
 }
 
@@ -395,9 +404,10 @@ function compileDomain(project) {
   if (cases) files['KDNA_Cases.json'] = JSON.stringify(cases, null, 2);
   if (reasoning) files['KDNA_Reasoning.json'] = JSON.stringify(reasoning, null, 2);
   if (evolution) files['KDNA_Evolution.json'] = JSON.stringify(evolution, null, 2);
-  const identity = buildAssetIdentity(project, files);
 
   // ── KDNA Card (governance metadata) ─────────────────────────────
+  // Must be added BEFORE digest computation so it is included in content_digest.
+  const identity = buildAssetIdentity(project, files);
   const provenance = require('../provenance').buildProvenance(project, files, identity);
   const { generateKdnaCard } = require('../governance');
   const kdnaCard = generateKdnaCard(project, {}, provenance);
@@ -412,10 +422,14 @@ function compileDomain(project) {
     kdna_files: Object.keys(files).filter(f => f.startsWith('KDNA_')).length,
     total_files: Object.keys(files).length,
   };
-  Object.assign(files, buildReports(project, files, identity, provenance, stats));
+
+  // Compute content_digest once with all files present, BEFORE building reports.
   identity.content_digest = computeContentDigest(files);
   provenance.content_digest = identity.content_digest;
   provenance.content_fingerprint = identity.content_digest;
+
+  // Now build reports/receipt — they will all see the same digest.
+  Object.assign(files, buildReports(project, files, identity, provenance, stats));
   files['reports/provenance-report.json'] = JSON.stringify(provenance, null, 2);
   files['kdna.json'] = JSON.stringify(compileManifest(project, files, identity), null, 2);
   stats.total_files = Object.keys(files).length;

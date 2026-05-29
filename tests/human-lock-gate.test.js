@@ -35,7 +35,7 @@ test('checkHumanLockGate: blocks when locked axiom has no human_lock record', ()
 
 test('checkHumanLockGate: passes when axiom is properly locked', () => {
   const p = createProject('test');
-  let card = createCard('axiom', { one_sentence: 'Test', full_statement: 'Full.', why: 'Because.' });
+  let card = createCard('axiom', { one_sentence: 'Test', full_statement: 'A complete testable explanation of this judgment principle for the agent.', why: 'Without this the agent would make wrong judgment calls.' });
   card = transitionCard(card, 'revised', { by: 'tester' });
   card = lockCard(card, {
     by: 'tester',
@@ -100,7 +100,7 @@ test('exportProject: throws when judgment cards are not locked', () => {
 
 test('exportProject: succeeds when properly locked', () => {
   const p = createProject('test');
-  let card = createCard('axiom', { one_sentence: 'Test', full_statement: 'Full.', why: 'Because.' });
+  let card = createCard('axiom', { one_sentence: 'Test', full_statement: 'A complete testable explanation for the agent to apply.', why: 'Without this axiom the agent would produce wrong results.' });
   card = transitionCard(card, 'revised', { by: 'tester' });
   card = lockCard(card, {
     by: 'tester',
@@ -129,7 +129,7 @@ test('exportProject: multiple judgment cards, partial lock blocks', () => {
   const p = createProject('test');
 
   // Properly locked axiom
-  let ax = createCard('axiom', { one_sentence: 'Test 1', full_statement: 'F1', why: 'W1' });
+  let ax = createCard('axiom', { one_sentence: 'Test 1', full_statement: 'A complete testable explanation for agent use.', why: 'Prevents incorrect agent judgment calls.' });
   ax = transitionCard(ax, 'revised', { by: 'tester' });
   ax = lockCard(ax, {
     by: 'tester', statement: 'OK',
@@ -165,7 +165,7 @@ test('cardJudgmentFingerprint: ignores non-judgment fields', () => {
 
 test('checkHumanLockGate: detects judgment content changed after lock', () => {
   const p = createProject('test');
-  let card = createCard('axiom', { one_sentence: 'Original', full_statement: 'Original.', why: 'Original.' });
+  let card = createCard('axiom', { one_sentence: 'Original', full_statement: 'A complete testable explanation as originally designed.', why: 'Without this the agent would produce incorrect results.' });
   card = transitionCard(card, 'revised', { by: 'tester' });
   card = lockCard(card, {
     by: 'tester', statement: 'Locked.',

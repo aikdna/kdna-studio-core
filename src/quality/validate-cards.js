@@ -77,6 +77,15 @@ function validateAxiom(card, issues) {
     issues.push({ type: 'too_short', severity: 'blocking', message: `${card.id}: one_sentence too short (${oneLiner.length} chars)`, fix: 'Make it a complete, specific judgment statement.' });
   }
 
+  // SPEC requirement: axiom MUST have full_statement and why
+  if (!card.fields?.full_statement || card.fields.full_statement.length < 20) {
+    issues.push({ type: 'missing_full_statement', severity: 'blocking', message: `${card.id}: full_statement missing or too short — SPEC requires a complete, testable explanation`, fix: 'Add a full_statement that is at least 20 characters and explains the principle in full.' });
+  }
+
+  if (!card.fields?.why || card.fields.why.length < 20) {
+    issues.push({ type: 'missing_why', severity: 'blocking', message: `${card.id}: why missing or too short — SPEC requires an explanation of what the agent would get wrong without this axiom`, fix: 'Add a why field that explains the failure mode this axiom prevents.' });
+  }
+
   // Check for dictionary-definition style (axiom should not start with "X is")
   if (/^\w+\s+is\s/.test(oneLiner) && oneLiner.length < 50) {
     issues.push({ type: 'definition_like', severity: 'warning', message: `${card.id}: one_sentence reads like a definition, not a judgment — rephrase as a principle` });

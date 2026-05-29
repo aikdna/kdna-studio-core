@@ -7,7 +7,12 @@ const { parseCompareOutput, createJudgmentDelta, compareDeltas, formatDeltaMarkd
 const { diffProjects, recommendVersionBump, generateChangelog, bumpVersion, markBreakingChange } = require('../src/versioning');
 
 function makeLockedCard(type, fields, id) {
-  let card = createCard(type, fields, id);
+  const f = { ...fields };
+  if (type === 'axiom') {
+    if (!f.full_statement || f.full_statement.length < 20) f.full_statement = 'A complete testable explanation of this judgment principle with sufficient detail for the agent.';
+    if (!f.why || f.why.length < 20) f.why = 'Without this axiom the agent would make incorrect judgment calls producing wrong outputs.';
+  }
+  let card = createCard(type, f, id);
   card = transitionCard(card, 'revised', { by: 'tester' });
   card = lockCard(card, { by: 'tester', statement: 'ok', checked: { applies_when: true, does_not_apply_when: true, failure_risk: true } });
   return card;
