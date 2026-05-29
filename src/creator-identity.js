@@ -15,7 +15,11 @@ const os = require('os');
 const path = require('path');
 
 const CREATOR_ID_PREFIX = 'kdna:creator:ed25519:';
-const DEFAULT_IDENTITY_DIR = path.join(os.homedir(), '.kdna', 'identity');
+
+function defaultIdentityDir() {
+  return process.env.KDNA_IDENTITY_DIR || path.join(os.homedir(), '.kdna', 'identity');
+}
+
 const PRIVATE_KEY_FILE = 'kdna.key';
 const PUBLIC_KEY_FILE = 'kdna.pub';
 const IDENTITY_JSON_FILE = 'creator.json';
@@ -33,7 +37,7 @@ function creatorFingerprint(publicKeyPem) {
  * Returns the creator identity object. Does NOT overwrite existing keys.
  */
 function initIdentity(displayName, identityDir = null) {
-  const dir = identityDir || DEFAULT_IDENTITY_DIR;
+  const dir = identityDir || defaultIdentityDir();
   fs.mkdirSync(dir, { recursive: true });
 
   const privateKeyPath = path.join(dir, PRIVATE_KEY_FILE);
@@ -75,7 +79,7 @@ function initIdentity(displayName, identityDir = null) {
  * Returns null if no identity has been initialized.
  */
 function loadIdentity(identityDir = null) {
-  const dir = identityDir || DEFAULT_IDENTITY_DIR;
+  const dir = identityDir || defaultIdentityDir();
   const identityJsonPath = path.join(dir, IDENTITY_JSON_FILE);
   const publicKeyPath = path.join(dir, PUBLIC_KEY_FILE);
 
@@ -104,7 +108,7 @@ function loadIdentity(identityDir = null) {
  * Returns the signature in "ed25519:<hex>" format.
  */
 function signPayload(payload, identityDir = null) {
-  const dir = identityDir || DEFAULT_IDENTITY_DIR;
+  const dir = identityDir || defaultIdentityDir();
   const privateKeyPath = path.join(dir, PRIVATE_KEY_FILE);
 
   if (!fs.existsSync(privateKeyPath)) {
@@ -134,7 +138,7 @@ function signHumanLock(cardId, statement, judgmentFingerprint, identityDir = nul
  * Get the public key PEM for the creator identity.
  */
 function loadPublicKey(identityDir = null) {
-  const dir = identityDir || DEFAULT_IDENTITY_DIR;
+  const dir = identityDir || defaultIdentityDir();
   const publicKeyPath = path.join(dir, PUBLIC_KEY_FILE);
   if (!fs.existsSync(publicKeyPath)) return null;
   return fs.readFileSync(publicKeyPath, 'utf8');
@@ -144,7 +148,7 @@ function loadPublicKey(identityDir = null) {
  * Get the private key path. Used by consumers that need direct key access.
  */
 function privateKeyPath(identityDir = null) {
-  return path.join(identityDir || DEFAULT_IDENTITY_DIR, PRIVATE_KEY_FILE);
+  return path.join(identityDir || defaultIdentityDir(), PRIVATE_KEY_FILE);
 }
 
 module.exports = {
@@ -155,6 +159,6 @@ module.exports = {
   creatorFingerprint,
   loadPublicKey,
   privateKeyPath,
+  defaultIdentityDir,
   CREATOR_ID_PREFIX,
-  DEFAULT_IDENTITY_DIR,
 };
