@@ -12,7 +12,12 @@ const { createTestCase, recordHumanRating, linkTestToCards, generateTestSummary,
 const { buildProvenance } = require('../src/provenance');
 
 function makeLockedCard(type, fields = {}, id = null) {
-  let card = createCard(type, fields, id);
+  const f = { ...fields };
+  if (type === 'axiom') {
+    if (!f.full_statement || f.full_statement.length < 20) f.full_statement = 'A complete testable explanation of this judgment principle with sufficient detail for the agent to apply it correctly in real scenarios.';
+    if (!f.why || f.why.length < 20) f.why = 'Without this axiom the agent would make incorrect judgment calls resulting in poor outputs.';
+  }
+  let card = createCard(type, f, id);
   card = transitionCard(card, 'revised', { by: 'tester' });
   card = lockCard(card, {
     by: 'tester',

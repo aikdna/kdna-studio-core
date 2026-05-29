@@ -45,7 +45,7 @@ test('transitionCard blocks draft → locked', () => {
 });
 
 test('lockCard sets human_lock and transitions to locked', () => {
-  let card = createCard('axiom', { one_sentence: 'Test' });
+  let card = createCard('axiom', { one_sentence: 'Test', full_statement: 'A complete testable explanation with enough detail for the agent.', why: 'Without this the agent would make wrong calls.' });
   card = transitionCard(card, 'revised', { by: 'test_user' });
   card = lockCard(card, {
     by: 'test_user',
@@ -66,7 +66,7 @@ test('lockCard rejects missing checked fields', () => {
 
 test('getLockedCards filters correctly', () => {
   const project = { cards: [] };
-  let c1 = createCard('axiom', {});
+  let c1 = createCard('axiom', { full_statement: 'A complete testable explanation for the agent to use.', why: 'This prevents the agent from making wrong calls.' });
   c1 = transitionCard(c1, 'revised', { by: 'u' });
   c1 = lockCard(c1, { by: 'u', statement: 'ok', checked: { applies_when: true, does_not_apply_when: true, failure_risk: true } });
   project.cards.push(c1);
@@ -80,8 +80,8 @@ test('compileDomain only includes locked cards', () => {
   const project = createProject('test');
   let card = createCard('axiom', {
     one_sentence: 'Test axiom.',
-    full_statement: 'Full statement.',
-    why: 'Because.',
+    full_statement: 'A complete testable explanation of the judgment principle.',
+    why: 'Without this axiom the agent makes wrong calls.',
     applies_when: ['when testing'],
     does_not_apply_when: ['when not testing'],
     failure_risk: 'Test may fail.',
@@ -112,6 +112,8 @@ test('computeReadiness locked cards → human_controlled', () => {
   const project = createProject('test');
   let card = createCard('axiom', {
     one_sentence: 'Test.',
+    full_statement: 'When testing this principle, the agent should apply specific judgment rules.',
+    why: 'Without this axiom the agent would produce incorrect and misleading results.',
     applies_when: ['when test'],
     does_not_apply_when: ['when not test'],
     failure_risk: 'risk',
