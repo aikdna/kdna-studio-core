@@ -399,11 +399,9 @@ function compileDomain(project) {
 
   // ── KDNA Card (governance metadata) ─────────────────────────────
   const provenance = require('../provenance').buildProvenance(project, files, identity);
-  if (project.governance) {
-    const { generateKdnaCard } = require('../governance');
-    const kdnaCard = generateKdnaCard(project, {}, provenance);
-    files['KDNA_CARD.json'] = JSON.stringify(kdnaCard, null, 2);
-  }
+  const { generateKdnaCard } = require('../governance');
+  const kdnaCard = generateKdnaCard(project, {}, provenance);
+  files['KDNA_CARD.json'] = JSON.stringify(kdnaCard, null, 2);
 
   const excludedCount = cards.filter(c => !c.locked && !['deprecated'].includes(c.status)).length;
   const stats = {
