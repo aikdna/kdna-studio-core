@@ -82,6 +82,8 @@ function lockCard(card, lockPayload) {
     at: new Date().toISOString(),
     statement: lockPayload.statement,
     checked: lockPayload.checked,
+    creator_id: lockPayload.creator_id || null,
+    signature: lockPayload.signature || null,
     judgment_fingerprint: cardJudgmentFingerprint(lockedCard),
   };
 
@@ -116,6 +118,7 @@ module.exports = {
   unlockCard,
   getLockedCards,
   getPublishableCards,
+  cardJudgmentFingerprint,
   // Feynman restatement (re-exported from feynman.js)
   createFeynmanRestatement: require('./feynman').createFeynmanRestatement,
   evaluateRestatementQuality: require('./feynman').evaluateRestatementQuality,

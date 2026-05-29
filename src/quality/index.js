@@ -30,6 +30,21 @@ function computeReadiness(project) {
   // ── Governance check (v0.6.1) ───────────────────────────────────
   const govResult = validateGovernance(project);
 
+  // ── Source mode trust checks (v1.4.0) ───────────────────────────
+  const sourceMode = project.source_mode || 'blank';
+  if (sourceMode === 'source_folder') {
+    blocking.push('source_folder: all imported cards must be re-locked — legacy trust is not inherited');
+    blocking.push('source_folder: schema audit required; verify all required fields before Human Lock');
+  }
+  if (sourceMode === 'kdna_asset') {
+    const hasRelevantLineage = project.lineage &&
+      (project.lineage.parent_name || project.lineage.parent_asset_uid);
+    if (!hasRelevantLineage) {
+      blocking.push('kdna_asset: lineage missing — must record parent KDNA identity');
+    }
+    warnings.push('kdna_asset: cards imported from existing KDNA must be re-locked; parent trust is not inherited');
+  }
+
   // ── I18N check (v1.2.0) ─────────────────────────────────────────
   const isOfficial = project.name?.startsWith('@aikdna/') || project.release?.official === true;
   const i18nCoverage = computeI18nCoverage(project);
