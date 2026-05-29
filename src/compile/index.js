@@ -11,6 +11,7 @@
  *
  * Only locked cards enter compilation. Draft/Revised excluded silently.
  */
+const crypto = require('crypto');
 
 function makeMeta(project) {
   return {
@@ -142,15 +143,46 @@ function compileEvolution(cards, project) {
 
 function compileManifest(project, files) {
   const kdnaFileCount = Object.keys(files).filter(f => f.startsWith('KDNA_')).length;
+  const lockedCards = (project.cards || []).filter(c => c.locked);
+  const tests = project.tests || [];
+  const version = require('../../package.json').version;
+  const projectDigest = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({
+      project_id: project.project_id,
+      name: project.name,
+      cards: lockedCards.map(c => ({ id: c.id, type: c.type, fields: c.fields, human_lock: c.human_lock })),
+    }))
+    .digest('hex');
   return {
-    kdna_spec: '1.0-rc',
+    format: 'kdna',
+    format_version: '1.0',
+    spec_version: '1.0-rc',
     name: project.name,
     version: (project.release && project.release.version) || '0.1.0',
+    judgment_version: (project.release && project.release.judgment_version) || (project.release && project.release.version) || '0.1.0',
     status: (project.release && project.release.status) || 'experimental',
+    quality_badge: tests.filter(t => t.result === 'with_kdna_better').length >= 10 ? 'tested' : 'untested',
     access: (project.release && project.release.access) || 'open',
+    languages: project.languages || ['en'],
+    default_language: project.default_language || 'en',
     author: project.author || { name: '', id: '' },
+    license: project.license || { type: 'CC-BY-4.0' },
     description: project.release?.description || project.name,
     file_count: kdnaFileCount,
+    authoring: {
+      created_by: 'kdna-studio-sdk',
+      authoring_tool: 'KDNA Studio Core',
+      authoring_tool_version: version,
+      compiler: '@aikdna/kdna-studio',
+      compiler_version: version,
+      studio_project_digest: `sha256:${projectDigest}`,
+      human_lock_required: true,
+      human_lock_count: lockedCards.length,
+      ai_assisted: (project.cards || []).some(c => c.history?.some(h => h.by === 'ai')),
+      human_confirmed: lockedCards.length > 0,
+      compiled_at: new Date().toISOString(),
+    },
     created: project.created || new Date().toISOString().slice(0, 10),
     updated: project.updated || new Date().toISOString().slice(0, 10),
   };

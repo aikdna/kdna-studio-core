@@ -21,13 +21,17 @@ function buildProvenance(project, compiledFiles) {
 
   return {
     studio_core: 'aikdna/kdna-studio',
-    studio_core_version: project.studio_version || '0.1.0',
+    studio_core_version: project.studio_version || require('../../package.json').version,
+    created_by: 'kdna-studio-sdk',
+    compiler: '@aikdna/kdna-studio',
+    compiler_version: project.studio_version || require('../../package.json').version,
     build_id: `build_${crypto.randomUUID()}`,
     project_id: project.project_id,
     author_id: project.author?.id || '',
     locked_card_count: lockedCards.length,
     test_case_count: tests.length,
     built_at: new Date().toISOString(),
+    compiled_at: new Date().toISOString(),
     content_fingerprint: `sha256:${contentFingerprint}`,
   };
 }

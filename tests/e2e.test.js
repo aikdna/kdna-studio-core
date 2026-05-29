@@ -170,7 +170,8 @@ describe('E2E: compile → validate', () => {
     // Verify kdna.json manifest
     const manifest = JSON.parse(result.files['kdna.json']);
     assert.equal(manifest.name, 'leadership_decisions');
-    assert.equal(manifest.kdna_spec, '1.0-rc');
+    assert.equal(manifest.spec_version, '1.0-rc');
+    assert.equal(manifest.authoring.created_by, 'kdna-studio-sdk');
     assert.ok(manifest.file_count >= 2, `file_count should be >= 2, got ${manifest.file_count}`);
 
     // Verify KDNA_Reasoning.json (should exist since we have axioms)
