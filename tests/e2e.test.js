@@ -112,6 +112,15 @@ function createFullProject() {
 
 const TMPDIR = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-e2e-'));
 
+function writeCompiledFiles(domainDir, files) {
+  fs.mkdirSync(domainDir, { recursive: true });
+  for (const [filename, content] of Object.entries(files)) {
+    const target = path.join(domainDir, filename);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content);
+  }
+}
+
 // ─── E2E: compile → kdna dev validate ────────────────────────────────
 
 describe('E2E: compile → validate', () => {
@@ -120,10 +129,7 @@ describe('E2E: compile → validate', () => {
     const result = compileDomain(project);
     const domainDir = path.join(TMPDIR, 'test-domain');
 
-    fs.mkdirSync(domainDir, { recursive: true });
-    for (const [filename, content] of Object.entries(result.files)) {
-      fs.writeFileSync(path.join(domainDir, filename), content);
-    }
+    writeCompiledFiles(domainDir, result.files);
 
     try {
       const validateResult = runKdna(['dev', 'validate', domainDir], {
@@ -224,10 +230,7 @@ describe('E2E: compile → dev pack → inspect', () => {
     const result = compileDomain(project);
     const domainDir = path.join(TMPDIR, 'pack-test');
 
-    fs.mkdirSync(domainDir, { recursive: true });
-    for (const [filename, content] of Object.entries(result.files)) {
-      fs.writeFileSync(path.join(domainDir, filename), content);
-    }
+    writeCompiledFiles(domainDir, result.files);
 
     try {
       // Pack
