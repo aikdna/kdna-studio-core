@@ -3,7 +3,7 @@
  *
  * All subprocess calls use execFileSync (not execSync with string interpolation)
  * to prevent command injection. Studio Core calls kdna-cli as the canonical
- * implementation of dev pack, verify, sign, and publish operations.
+ * implementation of dev-only bundling and runtime verification operations.
  */
 
 const { execFileSync } = require('child_process');

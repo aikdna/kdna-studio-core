@@ -4,14 +4,14 @@
 
 AI may propose judgment candidates. Humans must confirm judgment. Only human-locked judgment can compile into KDNA.
 
-Open-source authoring kernel for creating KDNA domains — JS/npm package. AI can propose. Humans confirm. Only locked judgment compiles.
+Open-source Studio-compatible authoring kernel for creating trusted `.kdna` assets — JS/npm package. AI can propose. Humans confirm. Only locked judgment compiles.
 
-**KDNA Studio is the JS authoring kernel.** It is not a UI tool. It is a pure-logic engine for creating KDNA domains from any JavaScript application.
+**KDNA Studio is the JS authoring kernel.** It is not a UI tool. It is a pure-logic engine for creating KDNA judgment cards, Human Locks, compiler output, and authoring provenance from any JavaScript application.
 
 | Library | Language | Role |
 |---------|----------|------|
-| `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — install, verify, pack, publish |
-| **`@aikdna/kdna-studio`** | JS/npm | **Create** KDNA — author, lock, compile, export |
+| `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — install, verify, load, compare, publish |
+| **`@aikdna/kdna-studio`** | JS/npm | **Create** KDNA — author, Human Lock, compile, export with provenance |
 | `@aikdna/kdna-core` | JS/npm | **Use** KDNA — load, validate, format |
 
 ## What it does
@@ -20,6 +20,8 @@ Open-source authoring kernel for creating KDNA domains — JS/npm package. AI ca
 - **Evidence Room** — import raw material (text, markdown, interviews, cases)
 - **Judgment Cards** — 8 card types: axiom, ontology, stance, framework, misunderstanding, self_check, banned_term, terminology
 - **Human Lock** — AI proposes, human confirms. Only locked cards compile.
+- **Authoring Provenance** — every compiled manifest records Studio-compatible
+  compiler metadata, project digest, Human Lock count, and confirmation status.
 - **Feynman Restatement** — verify understanding, not just agreement
 - **Quality Gates** — readiness check: draft → structurally_ready → judgment_ready → publish_ready
 - **Compiler** — locked cards → `KDNA_Core.json` + `KDNA_Patterns.json`
