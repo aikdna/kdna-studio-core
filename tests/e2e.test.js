@@ -269,7 +269,7 @@ describe('E2E: provenance completeness', () => {
     const result = compileDomain(project);
     const prov = buildProvenance(project, result.files);
 
-    assert.equal(prov.studio_core, 'aikdna/kdna-studio');
+    assert.equal(prov.studio_core, 'aikdna/kdna-studio-core');
     assert.ok(prov.studio_core_version);
     assert.ok(prov.build_id);
     assert.ok(prov.project_id);

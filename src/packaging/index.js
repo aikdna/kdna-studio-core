@@ -1,19 +1,29 @@
 /**
- * Packaging adapter — secure delegation to kdna-cli.
+ * Runtime CLI adapter for dev-source diagnostics and asset verification.
  *
  * All subprocess calls use execFileSync (not execSync with string interpolation)
- * to prevent command injection. Studio Core calls kdna-cli as the canonical
- * implementation of dev-only bundling and runtime verification operations.
+ * to prevent command injection. Trusted compile/export is implemented by
+ * Studio Core itself and exposed through @aikdna/kdna-studio-cli. kdna-cli is
+ * only called here for dev-source diagnostics and runtime verification.
  */
 
 const { execFileSync } = require('child_process');
 const path = require('path');
 
 function packDomain(domainDir, outputDir = null) {
+  return devBundleSource(domainDir, outputDir);
+}
+
+function devBundleSource(domainDir, outputDir = null) {
   const args = ['dev', 'pack', domainDir];
   if (outputDir) args.push('--output', outputDir);
   const result = execFileSync('kdna', args, { encoding: 'utf8', timeout: 60000 });
-  return { success: true, output: result.trim() };
+  return {
+    success: true,
+    trusted: false,
+    canonical: false,
+    output: result.trim(),
+  };
 }
 
 function packEncryptedDomain(domainDir, licensePath, outputDir = null) {
@@ -73,6 +83,6 @@ function generateLicense(domain, issuedTo, savePath = null) {
 }
 
 module.exports = {
-  packDomain, packEncryptedDomain, verifyDomain, validateDomain,
+  packDomain, devBundleSource, packEncryptedDomain, verifyDomain, validateDomain,
   inspectContainer, signDomain, generateLicense,
 };
