@@ -42,15 +42,24 @@ function canonicalizeJson(name, content) {
     delete copy.asset_digest;
     delete copy.container_sha256;
     delete copy.content_digest;
+    if (copy.authoring && typeof copy.authoring === 'object') {
+      const auth = { ...copy.authoring };
+      delete auth.content_digest;
+      copy.authoring = auth;
+    }
     return stableStringify(copy);
   }
   return stableStringify(obj);
 }
 
 function computeContentDigest(files) {
-  const excluded = new Set(['signature.json', '.DS_Store']);
+  // Content digest covers canonical judgment content + public asset metadata.
+  // Reports and build-receipt are build evidence, not content — they change with
+  // every build and would cause self-referencing if included.
+  const excluded = new Set(['signature.json', '.DS_Store', 'build-receipt.json']);
   const payload = Object.keys(files)
     .filter(name => !excluded.has(name))
+    .filter(name => !name.startsWith('reports/'))
     .sort()
     .map(name => {
       let content = files[name];
