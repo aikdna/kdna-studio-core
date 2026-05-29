@@ -19,6 +19,7 @@
 
 const cards = require('./cards');
 const compile = require('./compile');
+const creatorIdentity = require('./creator-identity');
 const evidence = require('./evidence');
 const governance = require('./governance');
 const i18n = require('./i18n');
@@ -44,6 +45,7 @@ module.exports = {
   pipeline,
   governance,
   i18n,
+  creator: creatorIdentity,
 
   // Experimental
   evidence,

@@ -250,12 +250,19 @@ function compileManifest(project, files, identity = null) {
     license: project.license || { type: 'CC-BY-4.0' },
     description: project.release?.description || project.name,
     file_count: kdnaFileCount,
+    creator: project.creator_identity ? {
+      creator_id: project.creator_identity.creator_id,
+      display_name: project.creator_identity.display_name,
+      public_key: project.creator_identity.public_key,
+      verified: project.creator_identity.verified || false,
+    } : null,
     authoring: {
       created_by: 'kdna-studio-sdk',
       authoring_tool: 'KDNA Studio Core',
       authoring_tool_version: version,
       compiler: '@aikdna/kdna-studio-core',
       compiler_version: version,
+      source_mode: project.source_mode || 'blank',
       asset_uid: assetIdentity.asset_uid,
       project_uid: assetIdentity.project_uid,
       build_id: assetIdentity.build_id,
@@ -268,6 +275,7 @@ function compileManifest(project, files, identity = null) {
       human_confirmed: lockedCards.length > 0,
       compiled_at: assetIdentity.compiled_at,
     },
+    lineage: project.lineage || { type: 'original' },
     created: project.created || new Date().toISOString().slice(0, 10),
     updated: project.updated || new Date().toISOString().slice(0, 10),
   };
