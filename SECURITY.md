@@ -8,4 +8,4 @@ Do not open a public issue.
 
 ## Scope
 
-This policy covers the @aikdna/kdna-studio npm package and its repository.
+This policy covers the @aikdna/kdna-studio-core npm package and its repository.

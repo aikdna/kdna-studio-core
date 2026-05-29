@@ -126,7 +126,7 @@ test('buildProvenance returns metadata', () => {
   const project = createProject('test', 'domain', { author: { name: 'Tester', id: 'tester' } });
   project.cards = [];
   const prov = buildProvenance(project, {});
-  assert.equal(prov.studio_core, 'aikdna/kdna-studio');
+  assert.equal(prov.studio_core, 'aikdna/kdna-studio-core');
   assert.ok(prov.build_id);
   assert.ok(prov.content_fingerprint);
 });

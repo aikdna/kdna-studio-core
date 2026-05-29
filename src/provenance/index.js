@@ -20,10 +20,10 @@ function buildProvenance(project, compiledFiles, identity = {}) {
   const contentFingerprint = crypto.createHash('sha256').update(cardHashes.join('\n')).digest('hex');
 
   return {
-    studio_core: 'aikdna/kdna-studio',
+    studio_core: 'aikdna/kdna-studio-core',
     studio_core_version: project.studio_version || require('../../package.json').version,
     created_by: 'kdna-studio-sdk',
-    compiler: '@aikdna/kdna-studio',
+    compiler: '@aikdna/kdna-studio-core',
     compiler_version: project.studio_version || require('../../package.json').version,
     build_id: identity.build_id || `build_${crypto.randomUUID()}`,
     project_id: project.project_id,

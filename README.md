@@ -1,4 +1,4 @@
-# KDNA Studio
+# KDNA Studio Core
 
 **KDNA Studio turns raw human experience into AI-loadable cognitive kernels.**
 
@@ -6,7 +6,7 @@ AI may propose judgment candidates. Humans must confirm judgment. Only human-loc
 
 Open-source Studio-compatible authoring kernel for creating trusted `.kdna` assets — JS/npm package. AI can propose. Humans confirm. Only locked judgment compiles.
 
-**KDNA Studio is the JS authoring kernel.** It is not a UI tool. It is a pure-logic engine for creating KDNA judgment cards, Human Locks, compiler output, and authoring provenance from any JavaScript application.
+**KDNA Studio Core is the JS authoring kernel.** It is not a UI tool and not a CLI package. It is a pure-logic engine for creating KDNA judgment cards, Human Locks, compiler output, and authoring provenance from JavaScript applications and Studio-compatible tools.
 
 A `.kdna` asset is not created by writing JSON files. It is compiled by a
 Studio-compatible authoring pipeline that performs human confirmation,
@@ -16,7 +16,8 @@ optional encryption, and provenance recording.
 | Library | Language | Role |
 |---------|----------|------|
 | `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — install, verify, load, compare, publish |
-| **`@aikdna/kdna-studio`** | JS/npm | **Create** KDNA — author, Human Lock, compile, export with provenance |
+| **`@aikdna/kdna-studio-core`** | JS/npm | **Authoring kernel** — project model, cards, Human Lock, compiler, provenance |
+| `@aikdna/kdna-studio-cli` | JS/npm | **Create via CLI** — `kdna-studio` create, compile, export |
 | `@aikdna/kdna-core` | JS/npm | **Use** KDNA — load, validate, format |
 
 ## What it does
@@ -51,16 +52,15 @@ Evidence Room → Judgment Cards → Human Lock → Quality Gate → Compile →
 ## Install
 
 ```bash
-npm install @aikdna/kdna-studio
-npm install -g @aikdna/kdna-studio
+npm install @aikdna/kdna-studio-core
 ```
 
 ## Studio CLI
 
-The package exposes `kdna-studio`, the canonical command-line authoring entry
-for Studio-compatible projects:
+The command-line authoring entry is a separate package:
 
 ```bash
+npm install -g @aikdna/kdna-studio-cli
 kdna-studio create my_domain --name @yourscope/my_domain
 kdna-studio import my_domain ./notes.md
 kdna-studio card add my_domain axiom \
@@ -79,7 +79,7 @@ kdna publish dist/my_domain.kdna
 ## Quick Start
 
 ```js
-const { createProject, createCard, lockCard, compileDomain } = require('@aikdna/kdna-studio');
+const { createProject, createCard, lockCard, compileDomain } = require('@aikdna/kdna-studio-core');
 
 // 1. Create a project
 const project = createProject('writing_judgment', 'domain', {
@@ -105,7 +105,7 @@ const locked = lockCard(card, {
 });
 
 // 4. Check readiness
-const { checkHumanLockGate, exportProject } = require('@aikdna/kdna-studio');
+const { checkHumanLockGate, exportProject } = require('@aikdna/kdna-studio-core');
 const gate = checkHumanLockGate(project);
 if (!gate.blocked) {
   // 5. Export
