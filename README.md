@@ -8,6 +8,11 @@ Open-source Studio-compatible authoring kernel for creating trusted `.kdna` asse
 
 **KDNA Studio is the JS authoring kernel.** It is not a UI tool. It is a pure-logic engine for creating KDNA judgment cards, Human Locks, compiler output, and authoring provenance from any JavaScript application.
 
+A `.kdna` asset is not created by writing JSON files. It is compiled by a
+Studio-compatible authoring pipeline that performs human confirmation,
+validation, canonicalization, identity generation, digest computation, signing,
+optional encryption, and provenance recording.
+
 | Library | Language | Role |
 |---------|----------|------|
 | `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — install, verify, load, compare, publish |
@@ -22,6 +27,8 @@ Open-source Studio-compatible authoring kernel for creating trusted `.kdna` asse
 - **Human Lock** — AI proposes, human confirms. Only locked cards compile.
 - **Authoring Provenance** — every compiled manifest records Studio-compatible
   compiler metadata, project digest, Human Lock count, and confirmation status.
+- **Asset Build Reports** — every compile emits build, provenance, Human Lock,
+  quality gate, eval, and receipt artifacts for audit.
 - **Feynman Restatement** — verify understanding, not just agreement
 - **Quality Gates** — readiness check: draft → structurally_ready → judgment_ready → publish_ready
 - **Compiler** — locked cards → `KDNA_Core.json` + `KDNA_Patterns.json`

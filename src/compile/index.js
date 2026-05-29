@@ -13,6 +13,71 @@
  */
 const crypto = require('crypto');
 
+function uuidv7() {
+  const ts = BigInt(Date.now());
+  const rand = crypto.randomBytes(10);
+  const bytes = Buffer.alloc(16);
+  bytes.writeUIntBE(Number(ts), 0, 6);
+  bytes[6] = 0x70 | (rand[0] & 0x0f);
+  bytes[7] = rand[1];
+  bytes[8] = 0x80 | (rand[2] & 0x3f);
+  rand.copy(bytes, 9, 3);
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function canonicalEntryBytes(fileName, content) {
+  if (fileName.endsWith('.json')) {
+    try {
+      return stableStringify(JSON.parse(content));
+    } catch (_) {
+      return content;
+    }
+  }
+  return content;
+}
+
+function computeContentDigest(files) {
+  const excluded = new Set(['kdna.json', 'signature.json', '.DS_Store']);
+  const payload = Object.keys(files)
+    .filter(name => !excluded.has(name))
+    .filter(name => !name.startsWith('reports/') && name !== 'build-receipt.json')
+    .sort()
+    .map(name => `${name}\n${canonicalEntryBytes(name, files[name])}`)
+    .join('\n---entry---\n');
+  return `sha256:${crypto.createHash('sha256').update(payload).digest('hex')}`;
+}
+
+function domainIdFromName(name = 'domain') {
+  const base = String(name).includes('/') ? String(name).split('/').pop() : String(name);
+  const normalized = base.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  return /^[a-z]/.test(normalized) ? normalized : `domain_${normalized || 'untitled'}`;
+}
+
+function buildAssetIdentity(project, files, options = {}) {
+  const domainId = project.domain_id || domainIdFromName(project.name);
+  const registryName = project.registry_name || (String(project.name || '').startsWith('@') ? project.name : null);
+  return {
+    asset_uid: options.asset_uid || project.asset_uid || uuidv7(),
+    project_uid: options.project_uid || project.project_uid || project.project_id || uuidv7(),
+    build_id: options.build_id || `build_${uuidv7()}`,
+    domain_id: domainId,
+    registry_name: registryName,
+    version: (project.release && project.release.version) || '0.1.0',
+    judgment_version: (project.release && project.release.judgment_version) || (project.release && project.release.version) || '0.1.0',
+    content_digest: options.content_digest || computeContentDigest(files),
+    compiled_at: options.compiled_at || new Date().toISOString(),
+  };
+}
+
 function makeMeta(project) {
   return {
     version: (project.release && project.release.version) || '0.1.0',
@@ -141,11 +206,12 @@ function compileEvolution(cards, project) {
   };
 }
 
-function compileManifest(project, files) {
+function compileManifest(project, files, identity = null) {
   const kdnaFileCount = Object.keys(files).filter(f => f.startsWith('KDNA_')).length;
   const lockedCards = (project.cards || []).filter(c => c.locked);
   const tests = project.tests || [];
   const version = require('../../package.json').version;
+  const assetIdentity = identity || buildAssetIdentity(project, files);
   const projectDigest = crypto
     .createHash('sha256')
     .update(JSON.stringify({
@@ -154,13 +220,18 @@ function compileManifest(project, files) {
       cards: lockedCards.map(c => ({ id: c.id, type: c.type, fields: c.fields, human_lock: c.human_lock })),
     }))
     .digest('hex');
-  return {
+  const manifest = {
     format: 'kdna',
     format_version: '1.0',
     spec_version: '1.0-rc',
     name: project.name,
-    version: (project.release && project.release.version) || '0.1.0',
-    judgment_version: (project.release && project.release.judgment_version) || (project.release && project.release.version) || '0.1.0',
+    domain_id: assetIdentity.domain_id,
+    asset_uid: assetIdentity.asset_uid,
+    project_uid: assetIdentity.project_uid,
+    build_id: assetIdentity.build_id,
+    version: assetIdentity.version,
+    judgment_version: assetIdentity.judgment_version,
+    content_digest: assetIdentity.content_digest,
     status: (project.release && project.release.status) || 'experimental',
     quality_badge: tests.filter(t => t.result === 'with_kdna_better').length >= 10 ? 'tested' : 'untested',
     access: (project.release && project.release.access) || 'open',
@@ -176,15 +247,135 @@ function compileManifest(project, files) {
       authoring_tool_version: version,
       compiler: '@aikdna/kdna-studio',
       compiler_version: version,
+      asset_uid: assetIdentity.asset_uid,
+      project_uid: assetIdentity.project_uid,
+      build_id: assetIdentity.build_id,
+      domain_id: assetIdentity.domain_id,
+      content_digest: assetIdentity.content_digest,
       studio_project_digest: `sha256:${projectDigest}`,
       human_lock_required: true,
       human_lock_count: lockedCards.length,
       ai_assisted: (project.cards || []).some(c => c.history?.some(h => h.by === 'ai')),
       human_confirmed: lockedCards.length > 0,
-      compiled_at: new Date().toISOString(),
+      compiled_at: assetIdentity.compiled_at,
     },
     created: project.created || new Date().toISOString().slice(0, 10),
     updated: project.updated || new Date().toISOString().slice(0, 10),
+  };
+  if (assetIdentity.registry_name) {
+    manifest.registry_name = assetIdentity.registry_name;
+    manifest.authoring.registry_name = assetIdentity.registry_name;
+  }
+  return manifest;
+}
+
+function buildReports(project, files, identity, provenance, stats) {
+  const cards = project.cards || [];
+  const lockedCards = cards.filter(c => c.locked);
+  const judgmentCards = cards.filter(c => ['axiom', 'ontology', 'misunderstanding', 'self_check', 'boundary', 'risk', 'aesthetic', 'scenario', 'case'].includes(c.type));
+  const tests = project.tests || [];
+  const ratedTests = tests.filter(t => t.result);
+  const qualityBadge = tests.filter(t => t.result === 'with_kdna_better').length >= 10 ? 'tested' : 'untested';
+  const packageVersion = require('../../package.json').version;
+
+  const buildReport = {
+    schema_version: 'studio-build-report-v1',
+    build_id: identity.build_id,
+    asset_uid: identity.asset_uid,
+    project_uid: identity.project_uid,
+    domain_id: identity.domain_id,
+    registry_name: identity.registry_name,
+    compiler: '@aikdna/kdna-studio',
+    compiler_version: packageVersion,
+    compiled_at: identity.compiled_at,
+    content_digest: identity.content_digest,
+    stats,
+    validations: {
+      schema_validation: 'required_before export',
+      cross_file_validation: 'required_before export',
+      id_uniqueness: 'required_before export',
+      language_version_consistency: 'required_before export',
+    },
+    outputs: Object.keys(files).sort(),
+  };
+
+  const humanLockReport = {
+    schema_version: 'human-lock-report-v1',
+    build_id: identity.build_id,
+    human_lock_required: true,
+    human_lock_count: lockedCards.length,
+    judgment_card_count: judgmentCards.length,
+    unlocked_judgment_card_count: judgmentCards.filter(c => !c.locked).length,
+    cards: lockedCards.map(c => ({
+      id: c.id,
+      type: c.type,
+      locked: true,
+      locked_by: c.human_lock?.by || null,
+      locked_at: c.human_lock?.at || null,
+      judgment_fingerprint: c.human_lock?.judgment_fingerprint || null,
+    })),
+  };
+
+  const qualityGateReport = {
+    schema_version: 'quality-gate-report-v1',
+    build_id: identity.build_id,
+    quality_badge: qualityBadge,
+    eval_count: tests.length,
+    rated_eval_count: ratedTests.length,
+    gates: {
+      untested: {
+        passed: true,
+        evidence: ['schema-compatible compile output', 'provenance report', 'human-lock report'],
+      },
+      tested: {
+        passed: qualityBadge === 'tested',
+        required: '>=10 eval cases where KDNA improves judgment with manual verification',
+      },
+      validated: {
+        passed: false,
+        required: 'automated scoring, raw outputs, and registry validation',
+      },
+    },
+  };
+
+  const evalReport = {
+    schema_version: 'eval-report-v1',
+    build_id: identity.build_id,
+    total: tests.length,
+    rated: ratedTests.length,
+    cases: tests.map(t => ({
+      id: t.id || null,
+      title: t.title || t.name || null,
+      result: t.result || null,
+      linked_cards: t.linked_cards || [],
+    })),
+  };
+
+  const buildReceipt = {
+    schema_version: 'studio-build-receipt-v1',
+    asset_uid: identity.asset_uid,
+    project_uid: identity.project_uid,
+    build_id: identity.build_id,
+    domain_id: identity.domain_id,
+    registry_name: identity.registry_name,
+    version: identity.version,
+    judgment_version: identity.judgment_version,
+    content_digest: identity.content_digest,
+    asset_digest: null,
+    compiler: '@aikdna/kdna-studio',
+    compiler_version: packageVersion,
+    signature_status: 'pending_export_sign',
+    encryption_profile: project.release?.access === 'licensed' ? 'kdna-licensed-entry-v1' : null,
+    built_at: identity.compiled_at,
+  };
+
+  return {
+    'reports/build-report.json': JSON.stringify(buildReport, null, 2),
+    'reports/provenance-report.json': JSON.stringify(provenance, null, 2),
+    'reports/human-lock-report.json': JSON.stringify(humanLockReport, null, 2),
+    'reports/quality-gate-report.json': JSON.stringify(qualityGateReport, null, 2),
+    'reports/eval-report.json': JSON.stringify(evalReport, null, 2),
+    'build-receipt.json': JSON.stringify(buildReceipt, null, 2),
   };
 }
 
@@ -204,28 +395,37 @@ function compileDomain(project) {
   if (cases) files['KDNA_Cases.json'] = JSON.stringify(cases, null, 2);
   if (reasoning) files['KDNA_Reasoning.json'] = JSON.stringify(reasoning, null, 2);
   if (evolution) files['KDNA_Evolution.json'] = JSON.stringify(evolution, null, 2);
-  files['kdna.json'] = JSON.stringify(compileManifest(project, files), null, 2);
+  const identity = buildAssetIdentity(project, files);
 
   // ── KDNA Card (governance metadata) ─────────────────────────────
+  const provenance = require('../provenance').buildProvenance(project, files, identity);
   if (project.governance) {
     const { generateKdnaCard } = require('../governance');
-    const prov = require('../provenance').buildProvenance(project, files);
-    const kdnaCard = generateKdnaCard(project, {}, prov);
+    const kdnaCard = generateKdnaCard(project, {}, provenance);
     files['KDNA_CARD.json'] = JSON.stringify(kdnaCard, null, 2);
   }
 
   const excludedCount = cards.filter(c => !c.locked && !['deprecated'].includes(c.status)).length;
+  const stats = {
+    total_cards: cards.length,
+    locked_cards: cards.filter(c => c.locked).length,
+    excluded_cards: excludedCount,
+    deprecated_cards: cards.filter(c => c.status === 'deprecated').length,
+    kdna_files: Object.keys(files).filter(f => f.startsWith('KDNA_')).length,
+    total_files: Object.keys(files).length,
+  };
+  Object.assign(files, buildReports(project, files, identity, provenance, stats));
+  identity.content_digest = computeContentDigest(files);
+  provenance.content_digest = identity.content_digest;
+  provenance.content_fingerprint = identity.content_digest;
+  files['reports/provenance-report.json'] = JSON.stringify(provenance, null, 2);
+  files['kdna.json'] = JSON.stringify(compileManifest(project, files, identity), null, 2);
+  stats.total_files = Object.keys(files).length;
 
   return {
     files,
-    stats: {
-      total_cards: cards.length,
-      locked_cards: cards.filter(c => c.locked).length,
-      excluded_cards: excludedCount,
-      deprecated_cards: cards.filter(c => c.status === 'deprecated').length,
-      kdna_files: Object.keys(files).filter(f => f.startsWith('KDNA_')).length,
-      total_files: Object.keys(files).length,
-    },
+    stats,
+    identity,
   };
 }
 
@@ -308,4 +508,4 @@ function generateReadme(project, options = {}) {
   return lines.join('\n');
 }
 
-module.exports = { compileDomain, compileCore, compilePatterns, compileScenarios, compileCases, compileReasoning, compileEvolution, compileManifest, generateReadme };
+module.exports = { compileDomain, compileCore, compilePatterns, compileScenarios, compileCases, compileReasoning, compileEvolution, compileManifest, generateReadme, buildAssetIdentity, computeContentDigest };

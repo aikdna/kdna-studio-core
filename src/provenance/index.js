@@ -9,7 +9,7 @@
  */
 const crypto = require('crypto');
 
-function buildProvenance(project, compiledFiles) {
+function buildProvenance(project, compiledFiles, identity = {}) {
   const lockedCards = (project.cards || []).filter(c => c.locked);
   const tests = project.tests || [];
 
@@ -25,14 +25,19 @@ function buildProvenance(project, compiledFiles) {
     created_by: 'kdna-studio-sdk',
     compiler: '@aikdna/kdna-studio',
     compiler_version: project.studio_version || require('../../package.json').version,
-    build_id: `build_${crypto.randomUUID()}`,
+    build_id: identity.build_id || `build_${crypto.randomUUID()}`,
     project_id: project.project_id,
+    project_uid: identity.project_uid || project.project_uid || project.project_id || null,
+    asset_uid: identity.asset_uid || null,
+    domain_id: identity.domain_id || null,
+    registry_name: identity.registry_name || project.name || null,
     author_id: project.author?.id || '',
     locked_card_count: lockedCards.length,
     test_case_count: tests.length,
-    built_at: new Date().toISOString(),
-    compiled_at: new Date().toISOString(),
-    content_fingerprint: `sha256:${contentFingerprint}`,
+    built_at: identity.compiled_at || new Date().toISOString(),
+    compiled_at: identity.compiled_at || new Date().toISOString(),
+    content_fingerprint: identity.content_digest || `sha256:${contentFingerprint}`,
+    content_digest: identity.content_digest || `sha256:${contentFingerprint}`,
   };
 }
 
