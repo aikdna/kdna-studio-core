@@ -52,6 +52,28 @@ Evidence Room → Judgment Cards → Human Lock → Quality Gate → Compile →
 
 ```bash
 npm install @aikdna/kdna-studio
+npm install -g @aikdna/kdna-studio
+```
+
+## Studio CLI
+
+The package exposes `kdna-studio`, the canonical command-line authoring entry
+for Studio-compatible projects:
+
+```bash
+kdna-studio create my_domain --name @yourscope/my_domain
+kdna-studio import my_domain ./notes.md
+kdna-studio card add my_domain axiom \
+  --field one_sentence="Judgment principle" \
+  --field full_statement="What the agent should do differently" \
+  --field why="What fails without this judgment" \
+  --field applies_when='["Relevant task"]' \
+  --field does_not_apply_when='["Out of scope"]' \
+  --field failure_risk="What could go wrong"
+kdna-studio card approve my_domain <card-id> --by expert --statement "I confirm this judgment."
+kdna-studio export my_domain --out dist/my_domain.kdna --sign
+kdna verify dist/my_domain.kdna --judgment
+kdna publish dist/my_domain.kdna
 ```
 
 ## Quick Start

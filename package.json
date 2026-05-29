@@ -4,6 +4,9 @@
   "description": "Studio-compatible authoring kernel for Human Lock, compile, and export of trusted .kdna assets.",
   "type": "commonjs",
   "main": "src/index.js",
+  "bin": {
+    "kdna-studio": "bin/kdna-studio.js"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
