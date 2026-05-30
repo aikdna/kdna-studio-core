@@ -179,19 +179,6 @@ function decryptPrivateKey(envelope, passphrase) {
   }
 }
 
-// (original function body replaced above)
-function __unused_decryptPrivateKey_original(envelope, passphrase) {
-  const env = typeof envelope === 'string' ? JSON.parse(envelope) : envelope;
-  if (!env.encrypted) throw new Error('Private key is not encrypted');
-  const key = crypto.pbkdf2Sync(passphrase, Buffer.from(env.salt, 'base64'), env.iterations, 32, 'sha256');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(env.iv, 'base64'));
-  decipher.setAuthTag(Buffer.from(env.tag, 'base64'));
-  return Buffer.concat([
-    decipher.update(Buffer.from(env.ciphertext, 'base64')),
-    decipher.final(),
-  ]).toString('utf8');
-}
-
 function isEncryptedKey(content) {
   try { const o = JSON.parse(content); return o.encrypted === true; }
   catch { return false; }
