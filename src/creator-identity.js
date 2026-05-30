@@ -180,6 +180,76 @@ function isEncryptedKey(content) {
   catch { return false; }
 }
 
+// ── Key Rotation ────────────────────────────────────────────────
+
+/**
+ * Rotate the creator's private key. Generates a new Ed25519 keypair,
+ * signs the rotation event with the old key, and saves both.
+ * The old public key is recorded in creator.json under previous_keys.
+ */
+function rotateIdentity(passphrase = null, identityDir = null) {
+  const identity = loadIdentity(identityDir);
+  if (!identity) throw new Error('No identity found. Run identity init first.');
+
+  const dir = identityDir || defaultIdentityDir();
+  const oldPrivPath = path.join(dir, PRIVATE_KEY_FILE);
+  const oldPubPath = path.join(dir, PUBLIC_KEY_FILE);
+
+  if (!fs.existsSync(oldPrivPath) || !fs.existsSync(oldPubPath)) {
+    throw new Error('Key files not found for rotation.');
+  }
+
+  // Decrypt old key if needed
+  let oldPrivatePem = fs.readFileSync(oldPrivPath, 'utf8');
+  if (isEncryptedKey(oldPrivatePem)) {
+    if (!passphrase) throw new Error('Private key is encrypted. Provide passphrase to rotate.');
+    oldPrivatePem = decryptPrivateKey(oldPrivatePem, passphrase);
+  }
+
+  // Generate new keypair
+  const { publicKey: newPub, privateKey: newPriv } = crypto.generateKeyPairSync('ed25519', {
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  // Sign rotation event with old key
+  const rotationPayload = [
+    identity.creator_id,
+    creatorFingerprint(newPub),
+    new Date().toISOString(),
+  ].join('\n');
+  const rotationSig = `ed25519:${crypto.sign(null, Buffer.from(rotationPayload), oldPrivatePem).toString('hex')}`;
+
+  // Save new keypair
+  const newPrivData = passphrase ? encryptPrivateKey(newPriv, passphrase) : newPriv;
+  fs.writeFileSync(oldPrivPath, newPrivData, { mode: 0o600 });
+  fs.writeFileSync(oldPubPath, newPub, { mode: 0o644 });
+
+  // Update identity record
+  const newCreatorId = creatorFingerprint(newPub);
+  const identityJson = path.join(dir, IDENTITY_JSON_FILE);
+  let idData = {};
+  try { idData = JSON.parse(fs.readFileSync(identityJson, 'utf8')); } catch {}
+
+  const previousKeys = idData.previous_keys || [];
+  previousKeys.push({
+    creator_id: identity.creator_id,
+    public_key: identity.public_key,
+    rotated_at: new Date().toISOString(),
+    rotation_signature: rotationSig,
+  });
+
+  idData.creator_id = newCreatorId;
+  idData.public_key = newPub;
+  idData.rotated_at = new Date().toISOString();
+  idData.encrypted = !!passphrase;
+  idData.previous_keys = previousKeys;
+
+  fs.writeFileSync(identityJson, JSON.stringify(idData, null, 2), { mode: 0o644 });
+
+  return { ...idData, creator_id: newCreatorId };
+}
+
 /**
  * Get the public key PEM for the creator identity.
  */
