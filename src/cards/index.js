@@ -66,13 +66,18 @@ function lockCard(card, lockPayload) {
   if (!lockPayload.checked?.does_not_apply_when) throw new Error('Must confirm does_not_apply_when reviewed');
   if (!lockPayload.checked?.failure_risk) throw new Error('Must confirm failure_risk reviewed');
 
-  // Schema gate: axiom cards MUST have full_statement and why per KDNA SPEC
+  // Schema gate per KDNA SPEC
   if (card.type === 'axiom') {
     if (!card.fields?.full_statement || card.fields.full_statement.length < 20) {
       throw new Error(`Axiom ${card.id} cannot be locked: missing or too-short full_statement. SPEC requires a complete, testable explanation.`);
     }
     if (!card.fields?.why || card.fields.why.length < 20) {
       throw new Error(`Axiom ${card.id} cannot be locked: missing or too-short why. SPEC requires an explanation of failure mode.`);
+    }
+  }
+  if (card.type === 'misunderstanding') {
+    if (!card.fields?.key_distinction || card.fields.key_distinction.length < 20) {
+      throw new Error(`Misunderstanding ${card.id} cannot be locked: missing or too-short key_distinction. SPEC requires a clear conceptual boundary.`);
     }
   }
 

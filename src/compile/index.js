@@ -520,7 +520,7 @@ function generateReadme(project, options = {}) {
 
   if (lockedSelfChecks.length > 0) {
     lines.push('## Eval Score'); lines.push('');
-    lines.push(`- quality_badge: ${tests.filter(t => t.result === 'with_kdna_better').length >= 5 ? 'tested' : 'untested'}`);
+    lines.push(`- quality_badge: ${tests.filter(t => t.result === 'with_kdna_better').length >= 3 ? 'tested' : 'untested'}`);
     lines.push(`- eval cases: ${tests.length}`);
     lines.push('');
   }

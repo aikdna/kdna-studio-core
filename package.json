@@ -24,7 +24,7 @@
     "validate"
   ],
   "dependencies": {
-    "@aikdna/kdna-core": "^0.6.0"
+    "@aikdna/kdna-core": "^0.7.0"
   },
   "engines": {
     "node": ">=18"

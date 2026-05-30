@@ -169,6 +169,23 @@ function decryptPrivateKey(envelope, passphrase) {
   const key = crypto.pbkdf2Sync(passphrase, Buffer.from(env.salt, 'base64'), env.iterations, 32, 'sha256');
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(env.iv, 'base64'));
   decipher.setAuthTag(Buffer.from(env.tag, 'base64'));
+  try {
+    return Buffer.concat([decipher.update(Buffer.from(env.ciphertext, 'base64')), decipher.final()]).toString('utf8');
+  } catch (e) {
+    if (e.code === 'ERR_OSSL_EVP_BAD_DECRYPT' || e.message.includes('bad decrypt')) {
+      throw new Error('Wrong passphrase — cannot decrypt private key.');
+    }
+    throw e;
+  }
+}
+
+// (original function body replaced above)
+function __unused_decryptPrivateKey_original(envelope, passphrase) {
+  const env = typeof envelope === 'string' ? JSON.parse(envelope) : envelope;
+  if (!env.encrypted) throw new Error('Private key is not encrypted');
+  const key = crypto.pbkdf2Sync(passphrase, Buffer.from(env.salt, 'base64'), env.iterations, 32, 'sha256');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(env.iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(env.tag, 'base64'));
   return Buffer.concat([
     decipher.update(Buffer.from(env.ciphertext, 'base64')),
     decipher.final(),
