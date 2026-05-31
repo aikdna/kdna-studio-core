@@ -24,6 +24,9 @@ optional encryption, and provenance recording.
 
 - **Project Model** — `studio.project.json` with full metadata, provenance tracking
 - **Evidence Room** — import raw material (text, markdown, interviews, cases)
+- **Distillation Target** — declare domain category, owner scope, granularity, task scope, include/exclude areas, and load condition before extraction
+- **Evidence Relevance** — classify source material as relevant, weakly relevant, out-of-scope, or split-domain before distillation
+- **Scope Gate** — mark candidates with `scope_fit`, relevance score, and suggested split domain before they can become cards
 - **Judgment Cards** — 8 card types: axiom, ontology, stance, framework, misunderstanding, self_check, banned_term, terminology
 - **Human Lock** — AI proposes, human confirms. Only locked cards compile.
 - **Authoring Provenance** — every compiled manifest records Studio-compatible
@@ -49,6 +52,15 @@ optional encryption, and provenance recording.
 Evidence Room → Judgment Cards → Human Lock → Quality Gate → Compile → Validate → Export
 ```
 
+For distillation-first authoring, the flow starts with an explicit target:
+
+```
+Declare Domain + Scope → Import Evidence → Classify Relevance → Distill Candidates
+  → Scope Gate → Human Review → Promote to Cards → Human Lock → Compile → Export
+```
+
+A single `.kdna` asset should stay scoped to one domain and loading condition. If a task needs several judgment domains, create multiple domain assets and compose them through a KDNA Cluster rather than making one broad file.
+
 ## Install
 
 ```bash
@@ -63,6 +75,17 @@ The command-line authoring entry is a separate package:
 npm install -g @aikdna/kdna-studio-cli
 kdna-studio create my_domain --name @yourscope/my_domain
 kdna-studio import my_domain ./notes.md
+kdna-studio target declare my_domain \
+  --category expression_writing \
+  --scope personal \
+  --granularity core_principles \
+  --task "longform article review" \
+  --include "argument structure,tone,revision" \
+  --exclude "life habits,food preference"
+kdna-studio source classify my_domain
+kdna-studio distill my_domain --candidates candidates.json
+kdna-studio candidate accept my_domain <candidate-id>
+kdna-studio candidate promote my_domain
 kdna-studio card add my_domain axiom \
   --field one_sentence="Judgment principle" \
   --field full_statement="What the agent should do differently" \
@@ -79,15 +102,31 @@ kdna publish dist/my_domain.kdna
 ## Quick Start
 
 ```js
-const { createProject, createCard, lockCard, compileDomain } = require('@aikdna/kdna-studio-core');
+const {
+  project: projectApi,
+  cards: cardApi,
+  distillation
+} = require('@aikdna/kdna-studio-core');
 
 // 1. Create a project
-const project = createProject('writing_judgment', 'domain', {
+const project = projectApi.createProject('writing_judgment', 'domain', {
   author: { name: 'Writing Expert', id: 'writer_001' }
 });
 
+// Optional: declare a distillation target before extracting from evidence.
+const target = distillation.createDistillationTarget({
+  domainName: 'writing_judgment',
+  domainCategory: 'expression_writing',
+  ownerScope: 'personal',
+  granularity: 'core_principles',
+  taskScope: 'longform article diagnosis and revision',
+  includeAreas: ['argument structure', 'reader framing', 'evidence density'],
+  excludeAreas: ['life habits', 'food preference']
+});
+project.distillation_target = target;
+
 // 2. Create judgment cards
-const card = createCard('axiom', {
+const card = cardApi.createCard('axiom', {
   one_sentence: 'Most writing problems are structural, not language-level.',
   full_statement: 'When reviewing content, diagnose structure before language.',
   why: 'Surface polishing on structurally weak content wastes effort.',
@@ -98,18 +137,17 @@ const card = createCard('axiom', {
 project.cards.push(card);
 
 // 3. Human Lock
-const locked = lockCard(card, {
+const locked = cardApi.lockCard(card, {
   by: 'writer_001',
   statement: 'This represents my professional writing judgment.',
   checked: { applies_when: true, does_not_apply_when: true, failure_risk: true }
 });
 
 // 4. Check readiness
-const { checkHumanLockGate, exportProject } = require('@aikdna/kdna-studio-core');
-const gate = checkHumanLockGate(project);
+const gate = projectApi.checkHumanLockGate(project);
 if (!gate.blocked) {
   // 5. Export
-  const json = exportProject(project);
+  const json = projectApi.exportProject(project);
   console.log('Ready to publish');
 }
 ```
