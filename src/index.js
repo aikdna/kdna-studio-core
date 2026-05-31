@@ -30,6 +30,7 @@ const provenance = require('./provenance');
 const quality = require('./quality');
 const testlab = require('./testlab');
 const versioning = require('./versioning');
+const distillation = require('./distillation');
 const feynman = require('./cards/feynman');
 const contradiction = require('./quality/contradiction');
 const validateCards = require('./quality/validate-cards');
@@ -46,6 +47,7 @@ module.exports = {
   governance,
   i18n,
   creator: creatorIdentity,
+  distillation,
 
   // Experimental
   evidence,
