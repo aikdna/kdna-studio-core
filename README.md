@@ -1,10 +1,10 @@
 # KDNA Studio Core
 
-**KDNA Studio turns raw human experience into AI-loadable cognitive kernels.**
+**KDNA Studio Core is the judgment asset refinery.** It turns scattered notes, documents, works, and feedback into loadable .kdna judgment assets — not by compressing content, but by distilling the stable judgment patterns embedded within it.
 
-AI may propose judgment candidates. Humans must confirm judgment. Only human-locked judgment can compile into KDNA.
+AI may propose judgment candidates from content analysis. Humans must confirm judgment. Only human-locked judgment can compile into KDNA.
 
-Open-source Studio-compatible authoring kernel for creating trusted `.kdna` assets — JS/npm package. AI can propose. Humans confirm. Only locked judgment compiles.
+Open-source Studio-compatible authoring kernel for creating trusted `.kdna` assets — JS/npm package. Supports two authoring paths: interview-first (expert self-expression) and distillation-first (pattern extraction from existing content). Both end with Human Judgment Lock.
 
 **KDNA Studio Core is the JS authoring kernel.** It is not a UI tool and not a CLI package. It is a pure-logic engine for creating KDNA judgment cards, Human Locks, compiler output, and authoring provenance from JavaScript applications and Studio-compatible tools.
 
