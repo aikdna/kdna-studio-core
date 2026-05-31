@@ -212,14 +212,57 @@ function candidateStatusSummary(candidates) {
   return { proposed, accepted, rejected, modified, blocked, outOfScope };
 }
 
+// ─── Sensitive Inference Filter ────────────────────────────────────
+
+const SENSITIVE_KEYWORDS = {
+  identity: [
+    'gender identity', 'sexual orientation', 'ethnicity', 'race', 'racial',
+    '性别认同', '性取向', '种族', '民族',
+  ],
+  health: [
+    'medical condition', 'mental health', 'disability', 'diagnosis', 'medication', 'therapy', 'treatment',
+    '疾病', '病史', '诊断', '药物', '治疗', '心理疾病', '精神健康', '残疾', '残障',
+  ],
+  political: [
+    'political affiliation', 'voting', 'activist', 'party member',
+    '政治立场', '党派', '党员', '政治倾向',
+  ],
+  religious: [
+    'religious belief', 'faith', 'church', 'prayer', 'worship', 'spiritual practice',
+    '宗教信仰', '教会', '祈祷', '礼拜', '信教',
+  ],
+  financial: [
+    'income', 'net worth', 'salary', 'debt', 'bank account', 'savings amount',
+    '收入', '工资', '存款', '负债', '资产净值', '银行卡号', '账户余额',
+  ],
+  intimate: [
+    'relationship status', 'marriage', 'divorce', 'family structure',
+    '婚姻状况', '离婚', '家庭结构', '感情状况', '亲密关系',
+  ],
+};
+
+function checkSensitiveContent(text) {
+  const lower = text.toLowerCase();
+  for (const [domain, keywords] of Object.entries(SENSITIVE_KEYWORDS)) {
+    for (const keyword of keywords) {
+      if (lower.includes(keyword.toLowerCase())) {
+        return { flagged: true, reason: `May involve sensitive domain: ${domain}` };
+      }
+    }
+  }
+  return { flagged: false, reason: null };
+}
+
 module.exports = {
   DOMAIN_CATEGORIES,
   OWNER_SCOPES,
   GRANULARITY_LEVELS,
   EVIDENCE_RELEVANCE,
+  SENSITIVE_KEYWORDS,
   createDistillationTarget,
   validateDistillationTarget,
   targetScopeDescription,
   applyScopeGate,
   candidateStatusSummary,
+  checkSensitiveContent,
 };
