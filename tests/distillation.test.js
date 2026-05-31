@@ -226,3 +226,41 @@ test('EVIDENCE_RELEVANCE — all classifications exist', () => {
   assert.equal(r.relevant.label, 'Relevant');
   assert.equal(r.out_of_scope.label, 'Out of Scope');
 });
+
+test('checkSensitiveContent — detects English medical content', () => {
+  const result = distillation.checkSensitiveContent('Based on their medical condition and therapy history');
+  assert.equal(result.flagged, true);
+  assert.ok(result.reason.includes('health'));
+});
+
+test('checkSensitiveContent — detects Chinese medical content', () => {
+  const result = distillation.checkSensitiveContent('根据其心理疾病诊断和药物治疗情况');
+  assert.equal(result.flagged, true);
+});
+
+test('checkSensitiveContent — detects Chinese financial content', () => {
+  const result = distillation.checkSensitiveContent('他的月收入达到五万元，工资水平较高');
+  assert.equal(result.flagged, true);
+});
+
+test('checkSensitiveContent — detects Chinese political content', () => {
+  const result = distillation.checkSensitiveContent('他因为政治立场不同而选择离开');
+  assert.equal(result.flagged, true);
+});
+
+test('checkSensitiveContent — passes normal Chinese content', () => {
+  const result = distillation.checkSensitiveContent('用户偏好简洁有力的写作风格，强调论证结构优先于文字润色');
+  assert.equal(result.flagged, false);
+  assert.equal(result.reason, null);
+});
+
+test('SENSITIVE_KEYWORDS — all 6 domains present with bilingual entries', () => {
+  const kw = distillation.SENSITIVE_KEYWORDS;
+  const domains = Object.keys(kw);
+  assert.equal(domains.length, 6);
+  for (const domain of domains) {
+    assert.ok(kw[domain].length >= 4, `${domain} should have at least 4 keywords`);
+    const hasChinese = kw[domain].some(w => /[\u4e00-\u9fff]/.test(w));
+    assert.ok(hasChinese, `${domain} should have Chinese keywords`);
+  }
+});
