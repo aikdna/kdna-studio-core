@@ -13,6 +13,11 @@ Studio-compatible authoring pipeline that performs human confirmation,
 validation, canonicalization, identity generation, digest computation, signing,
 optional encryption, and provenance recording.
 
+**Hard boundary:** Optional encryption, when supported, MUST be represented as
+protected entries inside the `.kdna` container (RFC-0008). App-private encrypted
+envelopes or transfer wrappers that cannot be opened by KDNA Core are NOT
+conforming KDNA runtime assets.
+
 | Library | Language | Role |
 |---------|----------|------|
 | `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — install, verify, load, compare, publish |
