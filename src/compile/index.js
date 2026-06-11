@@ -1,7 +1,7 @@
 /**
  * Compile locked cards into KDNA domain JSON files — SPEC-compatible output.
  *
- * KDNA Container v2:
+ * KDNA Container:
  *   - Judgment content is encoded as CBOR payload (payload.kdnab)
  *   - Individual KDNA_Core.json etc. are NOT exposed as ZIP entries
  *   - kdna.json manifest contains metadata only, no judgment content
@@ -426,7 +426,7 @@ function compileDomain(project) {
 
   const files = {};
 
-  // ── KDNA Container v2: encode judgment as single CBOR payload ──
+  // Encode judgment as CBOR payload
   const payload = {
     kind: 'kdna.payload',
     payload_version: '2.0',
