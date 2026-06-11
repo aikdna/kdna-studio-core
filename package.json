@@ -24,7 +24,8 @@
     "validate"
   ],
   "dependencies": {
-    "@aikdna/kdna-core": "^0.7.0"
+    "@aikdna/kdna-core": "^0.7.0",
+    "cbor-x": "^1.6.4"
   },
   "engines": {
     "node": ">=18"
