@@ -5,12 +5,11 @@
  *   - Judgment content is encoded as CBOR payload (payload.kdnab)
  *   - Individual KDNA_Core.json etc. are NOT exposed as ZIP entries
  *   - kdna.json manifest contains metadata only, no judgment content
- */
-
-const cbor = require('cbor-x');
  *
  * Only locked cards enter compilation. Draft/Revised excluded silently.
  */
+
+const cbor = require('cbor-x');
 const crypto = require('crypto');
 
 function uuidv7() {
