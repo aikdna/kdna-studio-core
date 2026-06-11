@@ -1,13 +1,13 @@
 /**
  * Compile locked cards into KDNA domain JSON files — SPEC-compatible output.
  *
- * KDNA SPEC v1.0-rc requirements:
- *   - Every file MUST have meta: { version, domain, created, purpose, load_condition }
- *   - Minimum output: KDNA_Core.json + KDNA_Patterns.json
- *   - Maximum 6 KDNA JSON files per domain
- *   - KDNA_Scenarios.json: { meta, scenes[] }
- *   - KDNA_Reasoning.json: { meta, reasoning_chains[] }
- *   - KDNA_Evolution.json: { meta, stages[], capability_layers[], measurements[] }
+ * KDNA Container v2:
+ *   - Judgment content is encoded as CBOR payload (payload.kdnab)
+ *   - Individual KDNA_Core.json etc. are NOT exposed as ZIP entries
+ *   - kdna.json manifest contains metadata only, no judgment content
+ */
+
+const cbor = require('cbor-x');
  *
  * Only locked cards enter compilation. Draft/Revised excluded silently.
  */
@@ -240,8 +240,8 @@ function compileManifest(project, files, identity = null) {
     .digest('hex');
   const manifest = {
     format: 'kdna',
-    format_version: '1.0',
-    spec_version: '1.0-rc',
+    format_version: '2.0',
+    spec_version: '2.0',
     name: project.name,
     domain_id: assetIdentity.domain_id,
     asset_uid: assetIdentity.asset_uid,
@@ -259,6 +259,17 @@ function compileManifest(project, files, identity = null) {
     license: project.license || { type: 'CC-BY-4.0' },
     description: project.release?.description || project.name,
     file_count: kdnaFileCount,
+    container: {
+      type: 'kdna-container-v2',
+      payload: 'payload.kdnab',
+      payload_encoding: 'cbor',
+      payload_schema: 'kdna-payload-v2',
+      payload_digest: `sha256:${crypto.createHash('sha256').update(files['payload.kdnab']).digest('hex')}`,
+    },
+    runtime: {
+      min_runtime_version: '0.3.0',
+      load_contract: 'context-capsule-v1',
+    },
     creator: project.creator_identity ? {
       creator_id: project.creator_identity.creator_id,
       display_name: project.creator_identity.display_name,
@@ -415,12 +426,21 @@ function compileDomain(project) {
   const evolution = compileEvolution(cards, project);
 
   const files = {};
-  files['KDNA_Core.json'] = JSON.stringify(core, null, 2);
-  files['KDNA_Patterns.json'] = JSON.stringify(patterns, null, 2);
-  if (scenarios) files['KDNA_Scenarios.json'] = JSON.stringify(scenarios, null, 2);
-  if (cases) files['KDNA_Cases.json'] = JSON.stringify(cases, null, 2);
-  if (reasoning) files['KDNA_Reasoning.json'] = JSON.stringify(reasoning, null, 2);
-  if (evolution) files['KDNA_Evolution.json'] = JSON.stringify(evolution, null, 2);
+
+  // ── KDNA Container v2: encode judgment as single CBOR payload ──
+  const payload = {
+    kind: 'kdna.payload',
+    payload_version: '2.0',
+    domain: { name: project.name, version: (project.release && project.release.version) || '0.1.0' },
+    judgment: { core, patterns },
+    profiles: {},
+    integrity: {},
+  };
+  if (scenarios) payload.judgment.scenarios = scenarios;
+  if (cases) payload.judgment.cases = cases;
+  if (reasoning) payload.judgment.reasoning = reasoning;
+  if (evolution) payload.judgment.evolution = evolution;
+  files['payload.kdnab'] = cbor.encode(payload);
 
   // ── KDNA Card (governance metadata) ─────────────────────────────
   // Must be added BEFORE digest computation so it is included in content_digest.
