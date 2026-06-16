@@ -417,6 +417,26 @@ function buildReports(project, files, identity, provenance, stats) {
 
 function compileDomain(project, options = {}) {
   const cards = project.cards || [];
+
+  // ── Empty-domain gate (PR-2) ────────────────────────────────────
+  // A KDNA domain with no locked judgment content of any kind is not a
+  // domain — it is a content-shaped empty file. Refuse to compile so the
+  // downstream Registry / Lab / Studio export never advertises an empty
+  // judgment asset as "successfully compiled".
+  const lockedCards = cards.filter(c => c.locked);
+  const hasJudgmentContent = lockedCards.some(c =>
+    ['axiom', 'misunderstanding', 'scenario', 'case', 'self_check', 'boundary', 'risk', 'ontology', 'aesthetic'].includes(c.type)
+  );
+  if (!hasJudgmentContent) {
+    const err = new Error(
+      'refusing to compile empty KDNA domain: no locked judgment content ' +
+      `(axiom / misunderstanding / scenario / case / self_check / boundary / risk / ontology / aesthetic). ` +
+      `Found ${lockedCards.length} locked card(s) and ${cards.length} total card(s).`
+    );
+    err.code = 'EMPTY_DOMAIN';
+    throw err;
+  }
+
   const core = compileCore(cards, project);
   const patterns = compilePatterns(cards, project);
   const scenarios = compileScenarios(cards, project);
@@ -426,21 +446,22 @@ function compileDomain(project, options = {}) {
 
   // ── RFC-0013 §3.1/§3.2 Compile Gates (PR-3) ───────────────────
   // Run the Source Authority Graph gate and the Truth Charter gate
-  // BEFORE packaging. Default behavior: backwards-compatible
-  // (legacy workspaces without SAG/TC pass through). With
-  // options.strictAuthority = true, missing/unstable SAG/TC are
-  // surfaced as gate errors that block compilation downstream.
+  // BEFORE packaging. PR-2: strictAuthority now defaults to true so
+  // missing/unstable SAG/TC are surfaced as gate errors that block
+  // compilation. Pass options.strictAuthority = false to opt out
+  // (legacy workspaces only).
+  const strictAuthority = options.strictAuthority !== false;
   const { runSagGate } = require('./source-authority-gate');
   const { runTcGate } = require('./truth-charter-gate');
-  const sag = runSagGate(options.sourceAuthority, { strict: !!options.strictAuthority });
+  const sag = runSagGate(options.sourceAuthority, { strict: strictAuthority });
   const tc = runTcGate(options.truthCharter, {
-    strict: !!options.strictAuthority,
+    strict: strictAuthority,
     sourceAuthority: options.sourceAuthority || null,
     patterns: patterns || null,
   });
-  const gates = { sag, tc, strict_authority: !!options.strictAuthority };
+  const gates = { sag, tc, strict_authority: strictAuthority };
   // Gate policy: strictAuthority=true + any gate.status === 'fail' => throw.
-  if (options.strictAuthority && (sag.status === 'fail' || tc.status === 'fail')) {
+  if (strictAuthority && (sag.status === 'fail' || tc.status === 'fail')) {
     const allErrors = [...sag.errors, ...tc.errors];
     const err = new Error(
       `Strict-authority compile failed. ${allErrors.length} gate error(s):\n` +
