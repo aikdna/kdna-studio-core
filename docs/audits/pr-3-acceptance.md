@@ -18,14 +18,14 @@ compile-time gates to `kdna-studio-core`'s `compileDomain`:
    (tc_status, locked fields, renamed_terms soft check against
    KDNA_Patterns.json.terminology, cross-file consistency with SAG).
 
-Per the work plan §4.2 PR-3 boundary:
+Per the RFC-0013 PR-3 implementation boundary:
 
 - ✅ Default mode is backwards-compatible: legacy workspaces without SAG/TC
   pass through with both gates reporting `status: 'skipped'`.
 - ✅ Strict-authority mode: any gate `status: 'fail'` causes `compileDomain`
   to throw with `Error.code === 'GATE_FAIL'`.
 - ✅ Output is structured (JSON-serializable) and consumable by a future UI
-  layer (per work plan §4.2 PR-3 "Output contract" requirement).
+  layer (per the RFC-0013 PR-3 output contract requirement).
 
 ## RFC-0013 §9 acceptance criteria covered
 
@@ -108,9 +108,7 @@ The 11 pre-existing failures are about test expectations like
 contract: post-6-11, `compileDomain` emits `payload.kdnab` (CBOR), not the
 six-file source tree. These failures are **out of scope for PR-3**;
 they predate it and would need a separate test-suite migration PR (out of
-PR-3 boundary per work plan §4.2).
-
-PR-3 itself does not introduce any new test failures.
+the RFC-0013 PR-3 implementation boundary).
 
 ### CLI smoke (script-free)
 
@@ -168,7 +166,7 @@ JSON-serializable. Round-tripped in test 10.
 - RFC-0013 §3.1: same file, "Source Authority Graph"
 - RFC-0013 §3.2: same file, "Truth Charter"
 - RFC-0013 §9 #3: same file, "Acceptance Criteria" #3
-- Work plan: `Kdna内部思考/KDNA 协议升级工作计划 2026-06-16.md` §4.2 PR-3
+- RFC-0013 implementation scope: PR-3 SAG/TC compile gates
 - PR-1 (schema baseline): https://github.com/aikdna/kdna/pull/86
 - PR-2 (CLI lint): https://github.com/aikdna/kdna-cli/pull/10
 - PR-2a (SPEC §1.6.3): https://github.com/aikdna/kdna/pull/87
