@@ -415,7 +415,7 @@ function buildReports(project, files, identity, provenance, stats) {
   };
 }
 
-function compileDomain(project) {
+function compileDomain(project, options = {}) {
   const cards = project.cards || [];
   const core = compileCore(cards, project);
   const patterns = compilePatterns(cards, project);
@@ -423,6 +423,33 @@ function compileDomain(project) {
   const cases = compileCases(cards, project);
   const reasoning = compileReasoning(cards, project);
   const evolution = compileEvolution(cards, project);
+
+  // ── RFC-0013 §3.1/§3.2 Compile Gates (PR-3) ───────────────────
+  // Run the Source Authority Graph gate and the Truth Charter gate
+  // BEFORE packaging. Default behavior: backwards-compatible
+  // (legacy workspaces without SAG/TC pass through). With
+  // options.strictAuthority = true, missing/unstable SAG/TC are
+  // surfaced as gate errors that block compilation downstream.
+  const { runSagGate } = require('./source-authority-gate');
+  const { runTcGate } = require('./truth-charter-gate');
+  const sag = runSagGate(options.sourceAuthority, { strict: !!options.strictAuthority });
+  const tc = runTcGate(options.truthCharter, {
+    strict: !!options.strictAuthority,
+    sourceAuthority: options.sourceAuthority || null,
+    patterns: patterns || null,
+  });
+  const gates = { sag, tc, strict_authority: !!options.strictAuthority };
+  // Gate policy: strictAuthority=true + any gate.status === 'fail' => throw.
+  if (options.strictAuthority && (sag.status === 'fail' || tc.status === 'fail')) {
+    const allErrors = [...sag.errors, ...tc.errors];
+    const err = new Error(
+      `Strict-authority compile failed. ${allErrors.length} gate error(s):\n` +
+        allErrors.map((e) => `  - ${e}`).join('\n'),
+    );
+    err.code = 'GATE_FAIL';
+    err.gates = gates;
+    throw err;
+  }
 
   const files = {};
 
@@ -474,6 +501,7 @@ function compileDomain(project) {
     files,
     stats,
     identity,
+    gates,
   };
 }
 
@@ -556,4 +584,4 @@ function generateReadme(project, options = {}) {
   return lines.join('\n');
 }
 
-module.exports = { compileDomain, compileCore, compilePatterns, compileScenarios, compileCases, compileReasoning, compileEvolution, compileManifest, generateReadme, buildAssetIdentity, computeContentDigest };
+module.exports = { compileDomain, compileCore, compilePatterns, compileScenarios, compileCases, compileReasoning, compileEvolution, compileManifest, generateReadme, buildAssetIdentity, computeContentDigest, runSagGate: require('./source-authority-gate').runSagGate, runTcGate: require('./truth-charter-gate').runTcGate };
