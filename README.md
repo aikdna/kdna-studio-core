@@ -205,7 +205,7 @@ KDNA Studio Core is open source. Official KDNA Studio App, hosted collaboration,
 
 ## Related
 
-- [KDNA Protocol](https://github.com/aikdna/kdna) — Specification
+- [KDNA Core](https://github.com/aikdna/kdna) — Official format
 - [kdna-cli](https://github.com/aikdna/kdna-cli) — CLI tools
 - [kdna-core-swift](https://github.com/aikdna/kdna-core-swift) — Swift runtime for macOS/iOS
 - [aikdna.com](https://aikdna.com) — Website
