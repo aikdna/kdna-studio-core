@@ -1,7 +1,7 @@
 {
   "name": "@aikdna/kdna-studio-core",
-  "version": "1.5.1",
-  "description": "Studio-compatible authoring kernel for Human Lock, compile, and export of trusted .kdna assets.",
+  "version": "1.5.2",
+  "description": "Official KDNA Studio Core SDK for authoring, locking, compiling, and exporting .kdna judgment assets through the KDNA toolchain.",
   "type": "commonjs",
   "main": "src/index.js",
   "files": [
