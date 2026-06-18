@@ -1,6 +1,6 @@
 {
   "name": "@aikdna/kdna-studio-core",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Official KDNA Studio Core SDK for authoring, locking, compiling, and exporting .kdna judgment assets through the KDNA toolchain.",
   "type": "commonjs",
   "main": "src/index.js",
@@ -24,7 +24,7 @@
     "validate"
   ],
   "dependencies": {
-    "@aikdna/kdna-core": "^0.10.0",
+    "@aikdna/kdna-core": "^0.11.1",
     "cbor-x": "^1.6.4"
   },
   "engines": {
@@ -36,6 +36,6 @@
     "test:all": "npm run lint && npm test"
   },
   "devDependencies": {
-    "@aikdna/kdna-cli": "^0.19.3"
+    "@aikdna/kdna-cli": "^0.25.0"
   }
 }

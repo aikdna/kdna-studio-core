@@ -472,7 +472,14 @@ function compileDomain(project, options = {}) {
     throw err;
   }
 
-  const files = {};
+  const files = {
+    'KDNA_Core.json': JSON.stringify(core, null, 2),
+    'KDNA_Patterns.json': JSON.stringify(patterns, null, 2),
+  };
+  if (scenarios) files['KDNA_Scenarios.json'] = JSON.stringify(scenarios, null, 2);
+  if (cases) files['KDNA_Cases.json'] = JSON.stringify(cases, null, 2);
+  if (reasoning) files['KDNA_Reasoning.json'] = JSON.stringify(reasoning, null, 2);
+  if (evolution) files['KDNA_Evolution.json'] = JSON.stringify(evolution, null, 2);
 
   // Encode judgment as CBOR payload
   const payload = {

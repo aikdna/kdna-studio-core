@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createProject, validateProject } = require('../src/project');
-const { createCard, lockCard, getLockedCards, transitionCard } = require('../src/cards');
+const { createCard, lockCard, getLockedCards, transitionCard, CARD_TYPES } = require('../src/cards');
 const { compileDomain } = require('../src/compile');
 const { computeReadiness } = require('../src/quality');
 const { buildProvenance } = require('../src/provenance');
@@ -22,6 +22,13 @@ test('validateProject catches missing name', () => {
   const r = validateProject({ type: 'domain', cards: [] });
   assert.equal(r.valid, false);
   assert.ok(r.issues.length > 0);
+});
+
+test('validateProject accepts every Studio card type', () => {
+  const p = createProject('all_types');
+  p.cards = CARD_TYPES.map((type) => createCard(type, {}, `${type}_test`));
+  const r = validateProject(p);
+  assert.equal(r.valid, true, r.issues.join('\n'));
 });
 
 // ─── Cards State Machine ──────────────────────────────────────────────

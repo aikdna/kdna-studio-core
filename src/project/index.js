@@ -10,6 +10,7 @@
 
 const crypto = require('crypto');
 const projectSchema = require('../../schemas/studio.project.schema.json');
+const { CARD_TYPES } = require('../cards');
 const { JUDGMENT_CARD_TYPES, cardJudgmentFingerprint } = require('../judgment-fields');
 
 function createProject(name, type = 'domain', options = {}) {
@@ -152,8 +153,7 @@ function validateProject(project) {
           if (!(req in card)) issues.push('cards[' + i + ']: missing required field "' + req + '"');
         }
         if (card.type !== undefined) {
-          const validTypes = ['axiom', 'ontology', 'misunderstanding', 'boundary', 'self_check', 'risk', 'aesthetic', 'scenario', 'case'];
-          if (!validTypes.includes(card.type)) issues.push('cards[' + i + ']: invalid type "' + card.type + '"');
+          if (!CARD_TYPES.includes(card.type)) issues.push('cards[' + i + ']: invalid type "' + card.type + '"');
         }
         if (card.status !== undefined) {
           const validStates = ['draft', 'revised', 'locked', 'tested', 'published', 'deprecated'];
