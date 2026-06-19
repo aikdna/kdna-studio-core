@@ -13,6 +13,22 @@ Studio-compatible authoring pipeline that performs human confirmation,
 validation, canonicalization, identity generation, digest computation, signing,
 optional encryption, and provenance recording.
 
+Studio Core distinguishes authoring compile output from runtime distribution
+output. Authoring compile output may include source entries such as
+`KDNA_Core.json` and `KDNA_Patterns.json` for audit and review. Runtime export
+must produce the canonical KDNA Core v1 distribution shape:
+
+```text
+mimetype
+kdna.json
+payload.kdnab
+checksums.json
+```
+
+Runtime export must validate with `@aikdna/kdna-core` and must plan through the
+LoadPlan contract in `aikdna/kdna`. Studio products must not create app-private
+`.kdna` shapes that Chat or CLI cannot inspect, validate, or plan-load.
+
 **Hard boundary:** Optional encryption, when supported, MUST be represented as
 protected entries inside the `.kdna` container (RFC-0008). App-private encrypted
 envelopes or transfer wrappers that cannot be opened by KDNA Core are NOT
@@ -41,6 +57,8 @@ conforming KDNA runtime assets.
 - **Feynman Restatement** — verify understanding, not just agreement
 - **Quality Gates** — readiness check: draft → structurally_ready → judgment_ready → publish_ready
 - **Compiler** — locked cards → `KDNA_Core.json` + `KDNA_Patterns.json`
+- **Runtime Export** — compiled judgment → canonical `mimetype` +
+  `kdna.json` + `payload.kdnab` + `checksums.json`
 - **Test Lab** — A/B comparison (No KDNA vs Best Prompt vs KDNA)
 - **Provenance** — content fingerprinting, build tracking, audit trail
 
@@ -110,6 +128,8 @@ kdna publish dist/my_domain.kdna
 const {
   project: projectApi,
   cards: cardApi,
+  compile,
+  exportRuntime,
   distillation
 } = require('@aikdna/kdna-studio-core');
 
@@ -151,11 +171,47 @@ const locked = cardApi.lockCard(card, {
 // 4. Check readiness
 const gate = projectApi.checkHumanLockGate(project);
 if (!gate.blocked) {
-  // 5. Export
-  const json = projectApi.exportProject(project);
-  console.log('Ready to publish');
+  // 5. Compile and runtime-export
+  const compiled = compile.compileDomain(project, { strictAuthority: false });
+  const runtimeAsset = exportRuntime.exportRuntimeAsset(project, { compiled });
+  console.log(Object.keys(runtimeAsset.files));
 }
 ```
+
+## Runtime Export Contract
+
+`compile.compileDomain(project)` is an authoring compile step. It returns source
+and evidence artifacts for review, audit, and reports. It is not itself the
+runtime distribution contract.
+
+Use `exportRuntime.exportRuntimeAsset(project)` to produce a KDNA Core v1
+runtime source directory payload:
+
+```js
+const { exportRuntime } = require('@aikdna/kdna-studio-core');
+
+const runtimeAsset = exportRuntime.exportRuntimeAsset(project);
+// runtimeAsset.files contains only:
+// - mimetype
+// - kdna.json
+// - payload.kdnab
+// - checksums.json
+```
+
+The exported files are tested against `@aikdna/kdna-core.validate`. In the OPEN
+workspace they are also tested against the current `aikdna/kdna` LoadPlan
+implementation when available.
+
+Access values are canonicalized for runtime export:
+
+| Studio / legacy value | Runtime value |
+|---|---|
+| `open` | `public` |
+| `protected` | `licensed` |
+| `runtime` | `remote` |
+
+Top-level source JSON entries such as `KDNA_Core.json`, `KDNA_Patterns.json`,
+and `KDNA_CARD.json` must not be present in runtime export output.
 
 ## Card Types (v1.0)
 

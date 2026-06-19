@@ -21,6 +21,7 @@ const cards = require('./cards');
 const compile = require('./compile');
 const creatorIdentity = require('./creator-identity');
 const evidence = require('./evidence');
+const exportRuntime = require('./export-runtime');
 const governance = require('./governance');
 const i18n = require('./i18n');
 const packaging = require('./packaging');
@@ -45,6 +46,7 @@ module.exports = {
   provenance,
   pipeline,
   governance,
+  exportRuntime,
   i18n,
   creator: creatorIdentity,
   distillation,
