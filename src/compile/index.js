@@ -295,7 +295,8 @@ function compileManifest(project, files, identity = null) {
       domain_id: assetIdentity.domain_id,
       content_digest: assetIdentity.content_digest,
       studio_project_digest: `sha256:${projectDigest}`,
-      human_lock_required: true,
+      human_lock_required: false,
+      human_lock_policy: 'optional_provenance',
       human_lock_count: lockedCards.length,
       ai_assisted: (project.cards || []).some(c => c.history?.some(h => h.by === 'ai')),
       human_confirmed: lockedCards.length > 0,
@@ -345,7 +346,8 @@ function buildReports(project, files, identity, provenance, stats) {
   const humanLockReport = {
     schema_version: 'human-lock-report-v1',
     build_id: identity.build_id,
-    human_lock_required: true,
+    human_lock_required: false,
+    human_lock_policy: 'optional_provenance',
     human_lock_count: lockedCards.length,
     judgment_card_count: judgmentCards.length,
     unlocked_judgment_card_count: judgmentCards.filter(c => !c.locked).length,
@@ -376,7 +378,7 @@ function buildReports(project, files, identity, provenance, stats) {
       },
       validated: {
         passed: false,
-        required: 'automated scoring, raw outputs, and registry validation',
+        required: 'reproducible scoring, raw outputs, and published eval evidence',
       },
     },
   };

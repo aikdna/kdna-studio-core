@@ -176,8 +176,10 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
       },
       source_build_id: compiled.identity?.build_id || sourceManifest.build_id || null,
       studio_project_digest: sourceManifest.authoring?.studio_project_digest || null,
-      human_lock_required: true,
+      human_lock_required: false,
+      human_lock_policy: 'optional_provenance',
       human_lock_count: sourceManifest.authoring?.human_lock_count || compiled.stats?.locked_cards || 0,
+      human_confirmed: (sourceManifest.authoring?.human_lock_count || compiled.stats?.locked_cards || 0) > 0,
     },
   };
 
