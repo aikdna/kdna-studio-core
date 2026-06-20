@@ -3,7 +3,7 @@
  * KDNA Creator Lifecycle Demo
  *
  * Demonstrates the complete creator journey:
- *   1. Create domain → 2. Human Lock → 3. Quality Check → 4. Pack → 5. Verify
+ *   1. Create project → 2. Review provenance → 3. Quality Check → 4. Compile → 5. Export
  *
  * Usage: node examples/creator-lifecycle.js
  */
@@ -30,7 +30,7 @@ console.log(`   Status:  ${project.status}`);
 console.log('');
 
 // ═══ Step 2: Author — Add judgment cards ═══
-console.log('2. AUTHOR — Create judgment cards (AI can propose)');
+console.log('2. AUTHOR — Create judgment cards (human, agent, tool, or hybrid)');
 const axiom = createCard('axiom', {
   one_sentence: 'Most writing problems are structural, not language-level.',
   full_statement: 'When reviewing content, diagnose structure before language. Surface polishing on structurally weak content wastes effort.',
@@ -57,8 +57,8 @@ console.log(`   Cards created: ${project.cards.length}`);
 console.log(`   Types: ${project.cards.map(c => c.type).join(', ')}`);
 console.log('');
 
-// ═══ Step 3: Human Lock ═══
-console.log('3. HUMAN LOCK — Expert confirms judgment (human must confirm)');
+// ═══ Step 3: Review Provenance ═══
+console.log('3. REVIEW — Optional Human Lock provenance for reviewed publishing');
 
 // Check gate BEFORE locking
 const gateBefore = checkHumanLockGate(project);
@@ -131,7 +131,7 @@ try {
   console.log(`   Gate passed:   ${exported.release?.human_lock_gate_passed}`);
 } catch (e) {
   console.log(`   ❌ BLOCKED: ${e.message.split('\n')[0]}`);
-  console.log(`   (This is correct — Human Lock gate prevents export of unverified judgment)`);
+  console.log('   (This is the Studio reviewed-publishing gate, not a Core v1 format-validity rule)');
 }
 console.log('');
 
@@ -140,12 +140,12 @@ console.log('═'.repeat(60));
 console.log('  Lifecycle Complete');
 console.log('');
 console.log('  ✅ Create     — Studio Project initialized');
-console.log('  ✅ Author     — Judgment cards created (AI can assist)');
-console.log('  ✅ Human Lock — Expert confirms judgment (human must confirm)');
+console.log('  ✅ Author     — Judgment cards created');
+console.log('  ✅ Review     — Optional Human Lock provenance recorded');
 console.log('  ✅ Quality    — Readiness check before compile');
 console.log('  ✅ Compile    — Locked cards → KDNA files');
 console.log('  ✅ Export     — Gate enforcement on publish');
 console.log('');
-console.log('  Principle: AI can propose. Human must confirm.');
-console.log('  Only human-locked judgment can become KDNA.');
+console.log('  Principle: .kdna format validity is content-neutral.');
+console.log('  Human Lock is optional provenance for reviewed publishing flows.');
 console.log('═'.repeat(60));
