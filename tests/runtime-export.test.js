@@ -79,6 +79,12 @@ test('runtime export emits only canonical runtime entries', () => {
   assert.equal(exported.manifest.payload.path, 'payload.kdnab');
   assert.equal(exported.manifest.payload.encoding, 'json');
   assert.equal(exported.manifest.payload.encrypted, false);
+  assert.equal(exported.manifest.authoring.conformance.passed, true);
+  assert.equal(exported.manifest.authoring.conformance.spec_version, '1.0');
+  assert.equal(
+    exported.manifest.authoring.conformance.validator,
+    '@aikdna/kdna-studio-core/export-runtime',
+  );
   assert.ok(!('KDNA_Core.json' in exported.files));
   assert.ok(!('KDNA_Patterns.json' in exported.files));
 });

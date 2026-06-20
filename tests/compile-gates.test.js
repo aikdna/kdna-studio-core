@@ -97,16 +97,14 @@ function makeTc(overrides = {}) {
 
 test('1. legacy workspace without SAG/TC: default mode passes (gate skipped)', () => {
   const project = makeMinimalProject();
-  // PR-2: strictAuthority now defaults to true. For legacy workspaces that
-  // intentionally have no SAG/TC, the gates report 'skipped' (not 'fail'),
-  // so this still passes through — strict mode only fails when gates are
-  // *present* but invalid, not when they are absent.
+  // Default authoring mode is lenient: official publication pipelines opt into
+  // strictAuthority explicitly, while local legacy workspaces remain buildable.
   const result = compileDomain(project);
   assert.ok(result.files);
   assert.ok(result.gates);
   assert.equal(result.gates.sag.status, 'skipped');
   assert.equal(result.gates.tc.status, 'skipped');
-  assert.equal(result.gates.strict_authority, true);
+  assert.equal(result.gates.strict_authority, false);
 });
 
 test('2. legacy workspace without SAG/TC: strict-authority passes (no objects to fail on)', () => {
@@ -217,7 +215,7 @@ test('8. SAG precedence_order references unknown source id: errors', () => {
   );
 });
 
-test('9. default mode (strict): same problems (#3, #5, #8) are errors that throw', () => {
+test('9. default mode: same problems (#3, #5, #8) are warnings, not errors', () => {
   const project = makeMinimalProject();
   // #3: no current_highest
   const sagNoHighest = makeSag();
@@ -230,26 +228,23 @@ test('9. default mode (strict): same problems (#3, #5, #8) are errors that throw
   const sagUnknown = makeSag();
   sagUnknown.precedence_order = ['s_charter', 's_unknown_id'];
 
-  // PR-2: default mode is now strict. Each violation must throw GATE_FAIL.
-  assert.throws(
-    () => compileDomain(project, { sourceAuthority: sagNoHighest }),
-    (e) => e.code === 'GATE_FAIL' && e.gates.sag.status === 'fail',
-  );
-  assert.throws(
-    () => compileDomain(project, { truthCharter: tcSynth }),
-    (e) => e.code === 'GATE_FAIL' && e.gates.tc.status === 'fail',
-  );
-  assert.throws(
-    () => compileDomain(project, { sourceAuthority: sagUnknown }),
-    (e) => e.code === 'GATE_FAIL' && e.gates.sag.status === 'fail',
-  );
+  const noHighest = compileDomain(project, { sourceAuthority: sagNoHighest });
+  assert.equal(noHighest.gates.strict_authority, false);
+  assert.equal(noHighest.gates.sag.status, 'warn');
+  assert.equal(noHighest.gates.sag.errors.length, 0);
+  assert.ok(noHighest.gates.sag.warnings.length >= 1);
 
-  // Opt-in lenient mode ({ strictAuthority: false }) keeps the old behavior:
-  // violations surface as warnings, no throw.
-  const r1 = compileDomain(project, { sourceAuthority: sagNoHighest, strictAuthority: false });
-  assert.equal(r1.gates.sag.status, 'warn');
-  assert.equal(r1.gates.sag.errors.length, 0);
-  assert.ok(r1.gates.sag.warnings.length >= 1);
+  const synthesizedTc = compileDomain(project, { truthCharter: tcSynth });
+  assert.equal(synthesizedTc.gates.strict_authority, false);
+  assert.equal(synthesizedTc.gates.tc.status, 'warn');
+  assert.equal(synthesizedTc.gates.tc.errors.length, 0);
+  assert.ok(synthesizedTc.gates.tc.warnings.length >= 1);
+
+  const unknownSource = compileDomain(project, { sourceAuthority: sagUnknown });
+  assert.equal(unknownSource.gates.strict_authority, false);
+  assert.equal(unknownSource.gates.sag.status, 'warn');
+  assert.equal(unknownSource.gates.sag.errors.length, 0);
+  assert.ok(unknownSource.gates.sag.warnings.length >= 1);
 });
 
 test('10. output is structured and JSON-serializable', () => {

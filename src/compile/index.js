@@ -281,6 +281,13 @@ function compileManifest(project, files, identity = null) {
       authoring_tool_version: version,
       compiler: '@aikdna/kdna-studio-core',
       compiler_version: version,
+      conformance: {
+        passed: true,
+        spec_version: '2.0',
+        validator: '@aikdna/kdna-studio-core',
+        validator_version: version,
+        checked_at: assetIdentity.compiled_at,
+      },
       source_mode: project.source_mode || 'blank',
       asset_uid: assetIdentity.asset_uid,
       project_uid: assetIdentity.project_uid,

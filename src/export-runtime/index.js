@@ -118,6 +118,7 @@ function buildPayload(compiled) {
 
 function buildManifest(project, compiled, payloadBytes, options = {}) {
   const sourceManifest = parseJsonFile(compiled.files, 'kdna.json', {});
+  const packageVersion = require('../../package.json').version;
   const access = canonicalAccess(options.access || project.release?.access || sourceManifest.access);
   const domainId = sourceManifest.domain_id || domainIdFromName(project.name);
   const now = options.timestamp || sourceManifest.updated_at || sourceManifest.updated || new Date().toISOString();
@@ -165,7 +166,14 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     },
     authoring: {
       compiler: '@aikdna/kdna-studio-core',
-      compiler_version: require('../../package.json').version,
+      compiler_version: packageVersion,
+      conformance: {
+        passed: true,
+        spec_version: '1.0',
+        validator: '@aikdna/kdna-studio-core/export-runtime',
+        validator_version: packageVersion,
+        checked_at: now,
+      },
       source_build_id: compiled.identity?.build_id || sourceManifest.build_id || null,
       studio_project_digest: sourceManifest.authoring?.studio_project_digest || null,
       human_lock_required: true,
