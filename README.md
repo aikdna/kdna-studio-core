@@ -1,17 +1,18 @@
 # KDNA Studio Core
 
-**KDNA Studio Core is the judgment asset refinery.** It turns scattered notes, documents, works, and feedback into loadable .kdna judgment assets — not by compressing content, but by distilling the stable judgment patterns embedded within it.
+**KDNA Studio Core is the judgment asset refinery.** It turns scattered notes, documents, works, and feedback into loadable `.kdna` judgment assets — not by compressing content, but by distilling stable judgment patterns into a declared domain and loading scope.
 
-AI may propose judgment candidates from content analysis. Humans must confirm judgment. Only human-locked judgment can compile into KDNA.
+Studio Core is part of the official authoring toolchain. It can record human review, Human Lock, signatures, and release evidence as provenance signals, but those signals are not KDNA Core v1 format-validity requirements and they do not make content officially endorsed, certified, or universally safe.
 
-Open-source Studio-compatible authoring kernel for creating trusted `.kdna` assets — JS/npm package. Supports two authoring paths: interview-first (expert self-expression) and distillation-first (pattern extraction from existing content). Both end with Human Judgment Lock.
+Open-source Studio-compatible authoring kernel for creating reviewable `.kdna` assets — JS/npm package. Supports two authoring paths: interview-first (direct expression) and distillation-first (pattern extraction from existing content). Both end with a canonical KDNA Core v1 runtime export.
 
-**KDNA Studio Core is the JS authoring kernel.** It is not a UI tool and not a CLI package. It is a pure-logic engine for creating KDNA judgment cards, Human Locks, compiler output, and authoring provenance from JavaScript applications and Studio-compatible tools.
+**KDNA Studio Core is the JS authoring kernel.** It is not a UI tool and not a CLI package. It is a pure-logic engine for creating KDNA judgment cards, optional provenance records, compiler output, and runtime `.kdna` exports from JavaScript applications and Studio-compatible tools.
 
-A `.kdna` asset is not created by writing JSON files. It is compiled by a
-Studio-compatible authoring pipeline that performs human confirmation,
-validation, canonicalization, identity generation, digest computation, signing,
-optional encryption, and provenance recording.
+A `.kdna` asset is not a public source JSON folder. Studio-compatible tooling
+uses a project workspace for authoring, review, and audit, then exports the
+canonical KDNA Core v1 runtime container. Human confirmation, Human Lock,
+signing, optional encryption, and release evidence are provenance layers, not
+format-validity requirements.
 
 Studio Core distinguishes authoring compile output from runtime distribution
 output. Authoring compile output may include source entries such as
@@ -36,9 +37,9 @@ conforming KDNA runtime assets.
 
 | Library | Language | Role |
 |---------|----------|------|
-| `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — install, verify, load, compare, publish |
-| **`@aikdna/kdna-studio-core`** | JS/npm | **Authoring kernel** — project model, cards, Human Lock, compiler, provenance |
-| `@aikdna/kdna-studio-cli` | JS/npm | **Create via CLI** — `kdna-studio` create, compile, export |
+| `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — inspect, validate, plan-load, pack/unpack, load |
+| **`@aikdna/kdna-studio-core`** | JS/npm | **Authoring kernel** — project model, cards, review/provenance, compiler, runtime export |
+| `@aikdna/kdna-studio-cli` | JS/npm | **Create via CLI** — `kdna-studio` create, review, export |
 | `@aikdna/kdna-core` | JS/npm | **Use** KDNA — load, validate, format |
 
 ## What it does
@@ -49,10 +50,10 @@ conforming KDNA runtime assets.
 - **Evidence Relevance** — classify source material as relevant, weakly relevant, out-of-scope, or split-domain before distillation
 - **Scope Gate** — mark candidates with `scope_fit`, relevance score, and suggested split domain before they can become cards
 - **Judgment Cards** — 8 card types: axiom, ontology, stance, framework, misunderstanding, self_check, banned_term, terminology
-- **Human Lock** — AI proposes, human confirms. Only locked cards compile.
+- **Review and provenance** — AI may propose candidates; projects can record human confirmation, Human Lock, signatures, and release evidence when needed.
 - **Authoring Provenance** — every compiled manifest records Studio-compatible
-  compiler metadata, project digest, Human Lock count, and confirmation status.
-- **Asset Build Reports** — every compile emits build, provenance, Human Lock,
+  compiler metadata, project digest, review counts, and confirmation status.
+- **Asset Build Reports** — every compile emits build, provenance, review,
   quality gate, eval, and receipt artifacts for audit.
 - **Feynman Restatement** — verify understanding, not just agreement
 - **Quality Gates** — readiness check: draft → structurally_ready → judgment_ready → publish_ready
@@ -72,14 +73,14 @@ conforming KDNA runtime assets.
 ## Authoring Flow
 
 ```
-Evidence Room → Judgment Cards → Human Lock → Quality Gate → Compile → Validate → Export
+Evidence Room → Judgment Cards → Review/Provenance → Quality Gate → Compile → Validate → Export
 ```
 
 For distillation-first authoring, the flow starts with an explicit target:
 
 ```
 Declare Domain + Scope → Import Evidence → Classify Relevance → Distill Candidates
-  → Scope Gate → Human Review → Promote to Cards → Human Lock → Compile → Export
+  → Scope Gate → Review → Promote to Cards → Provenance → Compile → Export
 ```
 
 A single `.kdna` asset should stay scoped to one domain and loading condition. If a task needs several judgment domains, create multiple domain assets and compose them through a KDNA Cluster rather than making one broad file.
@@ -117,9 +118,9 @@ kdna-studio card add my_domain axiom \
   --field does_not_apply_when='["Out of scope"]' \
   --field failure_risk="What could go wrong"
 kdna-studio card approve my_domain <card-id> --by expert --statement "I confirm this judgment."
-kdna-studio export my_domain --out dist/my_domain.kdna --sign
-kdna verify dist/my_domain.kdna --judgment
-kdna publish dist/my_domain.kdna
+kdna-studio export my_domain --format v1 --out dist/my_domain.kdna
+kdna validate dist/my_domain.kdna
+kdna plan-load dist/my_domain.kdna
 ```
 
 ## Quick Start
@@ -161,7 +162,7 @@ const card = cardApi.createCard('axiom', {
 });
 project.cards.push(card);
 
-// 3. Human Lock
+// 3. Optional review provenance for this Studio project
 const locked = cardApi.lockCard(card, {
   by: 'writer_001',
   statement: 'This represents my professional writing judgment.',
@@ -233,13 +234,16 @@ draft → revised → locked → tested → published → deprecated
 ```
 
 Rules:
-- Only `locked`/`tested`/`published` cards can be compiled
-- Cards must have Human Lock (`human_lock.by` + `human_lock.statement`) before locking
-- Human Lock must confirm `applies_when`, `does_not_apply_when`, `failure_risk` were reviewed
+- `locked`/`tested`/`published` are Studio project review states, not KDNA Core format-validity states.
+- Studio release exports use reviewed cards as release evidence.
+- A validated `.kdna` file can still be structurally valid without Human Lock; trust, authorship, signatures, and release evidence are separate layers.
 
 ## Human Lock
 
-AI can propose. Human must confirm. Only locked judgment can compile.
+Human Lock is optional provenance metadata. It records that a human reviewed
+specific judgment fields in a Studio project. It is useful for public,
+enterprise, or high-risk assets, but it is not a KDNA Core v1 format-validity
+requirement and does not certify content quality.
 
 ```js
 lockCard(card, {
@@ -257,7 +261,7 @@ lockCard(card, {
 
 Apache-2.0 — see [LICENSE](LICENSE).
 
-KDNA Studio Core is open source. Official KDNA Studio App, hosted collaboration, managed registry, quality review workflows, and enterprise private registry may be commercial services.
+KDNA Studio Core is open source. Official KDNA Studio App, hosted collaboration, managed review workflows, and enterprise private distribution may be commercial services.
 
 ## Related
 

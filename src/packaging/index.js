@@ -2,7 +2,7 @@
  * Runtime CLI adapter for dev-source diagnostics and asset verification.
  *
  * All subprocess calls use execFileSync (not execSync with string interpolation)
- * to prevent command injection. Trusted compile/export is implemented by
+ * to prevent command injection. Canonical compile/export is implemented by
  * Studio Core itself and exposed through @aikdna/kdna-studio-cli. kdna-cli is
  * only called here for dev-source diagnostics and runtime verification.
  */

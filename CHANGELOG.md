@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.6 (2026-06-20)
+- Align README package matrix with the current local `.kdna` CLI path: inspect, validate, plan-load, pack/unpack, load.
+- Depend on `@aikdna/kdna-cli@^0.26.5` for corrected public CLI wording.
+
+## 1.5.5 (2026-06-20)
+- Clarify that Human Lock, signatures, and release evidence are optional provenance layers, not KDNA Core v1 format-validity requirements.
+- Align README and npm package description with the public `.kdna` file model.
+
 ## 1.4.2 (2026-05-30)
 - canonicalizeJson: strips authoring.content_digest to prevent self-referencing
 - computeContentDigest: excludes reports/ and build-receipt

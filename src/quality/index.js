@@ -170,7 +170,7 @@ function buildResult(grade, blocking, warnings, project, detail = {}) {
     next_step: grade === 'draft_grade' ? 'Lock at least 3 axioms with boundaries and 50% Feynman.' :
       grade === 'human_controlled' ? 'Add 5+ rated evals and 3+ self-checks.' :
       grade === 'tested_grade' ? 'Add 10+ evals, complete Feynman on all axioms/misunderstandings, resolve all blocking issues.' :
-      'Ready for Studio compile/export. Publish the resulting .kdna with kdna publish <file.kdna>.',
+      'Ready for Studio compile/export. Validate the resulting .kdna with kdna validate, plan with kdna plan-load, then load only when loadable.',
   };
 }
 

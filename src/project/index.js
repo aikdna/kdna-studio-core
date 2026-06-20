@@ -244,7 +244,7 @@ function checkHumanLockGate(project) {
       issues.push({
         cardId,
         type: card.type,
-        reason: `judgment-class card "${cardId}" (${card.type}) is not locked. Human Lock required before export.`
+        reason: `judgment-class card "${cardId}" (${card.type}) is not approved for Studio export. Review/provenance approval is required by this Studio workflow.`
       });
       continue;
     }
@@ -305,7 +305,7 @@ function checkHumanLockGate(project) {
     issues.push({
       cardId: '(project)',
       type: 'project',
-      reason: 'No judgment-class cards are locked. At least one axiom, boundary, or risk card must be Human Locked before export.'
+      reason: 'No judgment-class cards are approved. At least one axiom, boundary, or risk card must be reviewed before Studio export.'
     });
   }
 

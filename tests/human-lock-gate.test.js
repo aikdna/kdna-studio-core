@@ -14,12 +14,12 @@ test('checkHumanLockGate: empty project has no issues (no judgment cards)', () =
   assert.equal(gate.issues.length, 0);
 });
 
-test('checkHumanLockGate: blocks when axiom is not locked', () => {
+test('checkHumanLockGate: blocks when axiom is not approved for Studio export', () => {
   const p = createProject('test');
   p.cards.push(createCard('axiom', { one_sentence: 'Test axiom', full_statement: 'Full.', why: 'Reason.' }));
   const gate = checkHumanLockGate(p);
   assert.equal(gate.blocked, true);
-  assert.ok(gate.issues.some(i => i.reason.includes('not locked')));
+  assert.ok(gate.issues.some(i => i.reason.includes('not approved for Studio export')));
 });
 
 test('checkHumanLockGate: blocks when locked axiom has no human_lock record', () => {
