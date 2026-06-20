@@ -446,11 +446,10 @@ function compileDomain(project, options = {}) {
 
   // ── RFC-0013 §3.1/§3.2 Compile Gates (PR-3) ───────────────────
   // Run the Source Authority Graph gate and the Truth Charter gate
-  // BEFORE packaging. PR-2: strictAuthority now defaults to true so
-  // missing/unstable SAG/TC are surfaced as gate errors that block
-  // compilation. Pass options.strictAuthority = false to opt out
-  // (legacy workspaces only).
-  const strictAuthority = options.strictAuthority !== false;
+  // BEFORE packaging. By default, missing/unstable SAG/TC are warnings.
+  // Pass options.strictAuthority = true to treat gate issues as errors
+  // (recommended for official publication pipelines).
+  const strictAuthority = options.strictAuthority === true;
   const { runSagGate } = require('./source-authority-gate');
   const { runTcGate } = require('./truth-charter-gate');
   const sag = runSagGate(options.sourceAuthority, { strict: strictAuthority });

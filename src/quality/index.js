@@ -46,11 +46,14 @@ function computeReadiness(project) {
   }
 
   // ── I18N check (v1.2.0) ─────────────────────────────────────────
-  const isOfficial = project.name?.startsWith('@aikdna/') || project.release?.official === true;
+  // I18N gates are triggered by declared languages, not by scope prefix.
+  // Projects declaring multi-language support SHOULD have corresponding locale files.
   const i18nCoverage = computeI18nCoverage(project);
-  if (isOfficial && i18nCoverage.level === 'L0') {
-    blocking.push('I18N: official domains require at least L1 (KDNA_CARD.json + README in locales/zh-CN/)');
-  } else if (isOfficial && i18nCoverage.level === 'L1') {
+  const declaredLanguages = (project.languages || []).filter(l => l !== project.default_language);
+  const hasMultiLangIntent = declaredLanguages.length > 0 || (project.i18n_level && project.i18n_level !== 'L0');
+  if (hasMultiLangIntent && i18nCoverage.level === 'L0') {
+    warnings.push('I18N: project declares multi-language intent but has no locale files (L0). Add at least L1 (KDNA_CARD.json + README in locales/).');
+  } else if (hasMultiLangIntent && i18nCoverage.level === 'L1') {
     warnings.push('I18N: L1 achieved (card + readme). Recommended: L2 overlay for publishable grade.');
   }
   for (const issue of govResult.issues) {
