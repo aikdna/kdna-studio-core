@@ -25,12 +25,7 @@ checksums.json
 
 Runtime export must validate with `@aikdna/kdna-core` and must plan through the
 LoadPlan contract in `aikdna/kdna`. Studio products must not create app-private
-`.kdna` shapes that Chat or CLI cannot inspect, validate, or plan-load.
-
-**Hard boundary:** Optional encryption, when supported, MUST be represented as
-protected entries inside the `.kdna` container (RFC-0008). App-private encrypted
-envelopes or transfer wrappers that cannot be opened by KDNA Core are NOT
-conforming KDNA runtime assets.
+`.kdna` shapes that KDNA Core or CLI cannot inspect, validate, or plan-load.
 
 | Library | Language | Role |
 |---------|----------|------|
@@ -47,13 +42,13 @@ conforming KDNA runtime assets.
 - **Evidence Relevance** — classify source material as relevant, weakly relevant, out-of-scope, or split-domain before distillation
 - **Scope Gate** — mark candidates with `scope_fit`, relevance score, and suggested split domain before they can become cards
 - **Judgment Cards** — 8 card types: axiom, ontology, stance, framework, misunderstanding, self_check, banned_term, terminology
-- **Review and provenance** — AI may propose candidates; projects can record review, Human Lock, signatures, and release evidence when needed.
+- **Review and provenance** — AI may propose candidates; projects can record review and release evidence when needed.
 - **Authoring Provenance** — every compiled manifest records Studio-compatible
   compiler metadata, project digest, review counts, and confirmation status.
 - **Asset Build Reports** — every compile emits build, provenance, review,
-  quality gate, eval, and receipt artifacts for audit.
+  readiness, evaluation, and receipt artifacts for audit.
 - **Feynman Restatement** — verify understanding, not just agreement
-- **Quality Gates** — readiness check: draft → structurally_ready → judgment_ready → publish_ready
+- **Readiness Gates** — readiness check: draft → structurally_ready → judgment_ready → publish_ready
 - **Compiler** — locked cards → `KDNA_Core.json` + `KDNA_Patterns.json`
 - **Runtime Export** — compiled judgment → canonical `mimetype` +
   `kdna.json` + `payload.kdnab` + `checksums.json`
