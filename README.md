@@ -1,18 +1,15 @@
 # KDNA Studio Core
 
-**KDNA Studio Core is the judgment asset refinery.** It turns scattered notes, documents, works, and feedback into loadable `.kdna` judgment assets — not by compressing content, but by distilling stable judgment patterns into a declared domain and loading scope.
-
-Studio Core is part of the official authoring toolchain. It can record human review, Human Lock, signatures, and release evidence as provenance signals, but those signals are not KDNA Core v1 format-validity requirements and they do not make content officially endorsed, certified, or universally safe.
+**KDNA Studio Core is the JS authoring kernel for `.kdna` files.** It turns scattered notes, documents, works, and feedback into loadable judgment assets by distilling stable judgment patterns into a declared domain and loading scope.
 
 Open-source Studio-compatible authoring kernel for creating reviewable `.kdna` assets — JS/npm package. Supports two authoring paths: interview-first (direct expression) and distillation-first (pattern extraction from existing content). Both end with a canonical KDNA Core v1 runtime export.
 
 **KDNA Studio Core is the JS authoring kernel.** It is not a UI tool and not a CLI package. It is a pure-logic engine for creating KDNA judgment cards, optional provenance records, compiler output, and runtime `.kdna` exports from JavaScript applications and Studio-compatible tools.
 
-A `.kdna` asset is not a public source JSON folder. Studio-compatible tooling
-uses a project workspace for authoring, review, and audit, then exports the
-canonical KDNA Core v1 runtime container. Human confirmation, Human Lock,
-signing, optional encryption, and release evidence are provenance layers, not
-format-validity requirements.
+Studio-compatible tooling uses a project workspace for authoring, review, and
+audit, then exports the canonical KDNA Core v1 runtime container. The public
+asset is the packaged `.kdna` file; project JSON is an authoring/editing view,
+not the default distribution form.
 
 Studio Core distinguishes authoring compile output from runtime distribution
 output. Authoring compile output may include source entries such as
@@ -50,7 +47,7 @@ conforming KDNA runtime assets.
 - **Evidence Relevance** — classify source material as relevant, weakly relevant, out-of-scope, or split-domain before distillation
 - **Scope Gate** — mark candidates with `scope_fit`, relevance score, and suggested split domain before they can become cards
 - **Judgment Cards** — 8 card types: axiom, ontology, stance, framework, misunderstanding, self_check, banned_term, terminology
-- **Review and provenance** — AI may propose candidates; projects can record human confirmation, Human Lock, signatures, and release evidence when needed.
+- **Review and provenance** — AI may propose candidates; projects can record review, Human Lock, signatures, and release evidence when needed.
 - **Authoring Provenance** — every compiled manifest records Studio-compatible
   compiler metadata, project digest, review counts, and confirmation status.
 - **Asset Build Reports** — every compile emits build, provenance, review,
