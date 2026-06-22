@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.12 (2026-06-22)
+- Deps: bump @aikdna/kdna-core to ^0.13.0
+
 ## 1.5.11 (2026-06-22)
 - Fixed: compilePatterns() now extracts locked pattern cards and maps them to payload patterns field.
 - Fixed: buildPayload() merges pattern cards into v1 payload alongside misunderstandings.
