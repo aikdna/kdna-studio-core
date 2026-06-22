@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.9 (2026-06-22)
+- compileCore now extracts locked stance cards; stance added to valid judgment content types; buildPayload includes stances field.
+
 ## 1.5.6 (2026-06-20)
 - Align README package matrix with the current local `.kdna` CLI path: inspect, validate, plan-load, pack/unpack, load.
 - Depend on `@aikdna/kdna-cli@^0.26.5` for corrected public CLI wording.

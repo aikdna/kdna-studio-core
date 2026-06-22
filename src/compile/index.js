@@ -112,13 +112,14 @@ function compileCore(cards, project) {
   const lockedOntology = cards.filter(c => c.type === 'ontology' && c.locked).map(c => ({ id: c.id, ...c.fields }));
   const lockedBoundaries = cards.filter(c => c.type === 'boundary' && c.locked);
   const lockedRisks = cards.filter(c => c.type === 'risk' && c.locked).map(c => ({ id: c.id, ...c.fields }));
+  const lockedStances = cards.filter(c => c.type === 'stance' && c.locked).map(c => ({ id: c.id, ...c.fields }));
 
   return {
     meta: makeMeta(project),
     axioms: lockedAxioms,
     ontology: lockedOntology,
     frameworks: [],
-    stances: [],
+    stances: lockedStances,
     core_structure: [],
     boundaries: lockedBoundaries.map(c => ({
       id: c.id,
@@ -143,6 +144,15 @@ function compilePatterns(cards, project) {
   }));
   const lockedSelfChecks = cards.filter(c => c.type === 'self_check' && c.locked).map(c => c.fields?.question || '');
   const lockedAesthetics = cards.filter(c => c.type === 'aesthetic' && c.locked).map(c => ({ id: c.id, ...c.fields }));
+  const lockedPatterns = cards.filter(c => c.type === 'pattern' && c.locked).map(c => ({
+    type: c.fields?.type || 'pattern',
+    id: c.id,
+    name: c.fields?.name || '',
+    one_sentence: c.fields?.one_sentence || '',
+    what_it_looks_like: c.fields?.what_it_looks_like || '',
+    how_to_fix: c.fields?.how_to_fix || '',
+    failure_risk: c.fields?.failure_risk || '',
+  }));
 
   return {
     meta: makeMeta(project),
@@ -151,6 +161,7 @@ function compilePatterns(cards, project) {
       banned_terms: [],
     },
     misunderstandings: lockedMisunderstandings,
+    patterns: lockedPatterns,
     self_check: lockedSelfChecks,
     aesthetics: lockedAesthetics,
   };
@@ -434,7 +445,7 @@ function compileDomain(project, options = {}) {
   // judgment asset as "successfully compiled".
   const lockedCards = cards.filter(c => c.locked);
   const hasJudgmentContent = lockedCards.some(c =>
-    ['axiom', 'misunderstanding', 'scenario', 'case', 'self_check', 'boundary', 'risk', 'ontology', 'aesthetic'].includes(c.type)
+    ['axiom', 'misunderstanding', 'scenario', 'case', 'self_check', 'boundary', 'risk', 'ontology', 'aesthetic', 'stance', 'pattern'].includes(c.type)
   );
   if (!hasJudgmentContent) {
     const err = new Error(

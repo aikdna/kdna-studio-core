@@ -95,11 +95,15 @@ function buildPayload(compiled) {
         `What judgment should be loaded for ${core.meta?.domain || 'this domain'}?`,
       axioms: Array.isArray(core.axioms) ? core.axioms : [],
       boundaries: Array.isArray(core.boundaries) ? core.boundaries : [],
+      stances: Array.isArray(core.stances) ? core.stances : [],
       risk_model: {
         risks: Array.isArray(core.risks) ? core.risks : [],
       },
     },
-    patterns: Array.isArray(patterns.misunderstandings) ? patterns.misunderstandings : [],
+    patterns: [
+      ...(Array.isArray(patterns.misunderstandings) ? patterns.misunderstandings : []),
+      ...(Array.isArray(patterns.patterns) ? patterns.patterns : []),
+    ],
     scenarios: Array.isArray(scenarios.scenes) ? scenarios.scenes : [],
     cases: Array.isArray(cases.cases) ? cases.cases : [],
     reasoning: {
