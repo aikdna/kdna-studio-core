@@ -107,12 +107,12 @@ function validateGovernance(project) {
   };
 }
 
-function generateKdnaCard(project, compiledStats, provenance) {
+function generateKdnaCard(project, compiledStats, provenance, gates) {
   const gov = project.governance || {};
   const cards = project.cards || [];
   const lockedCards = cards.filter(c => c.locked);
 
-  return {
+  const card = {
     name: project.name,
     version: (project.release && project.release.version) || '0.1.0',
     risk_level: gov.risk_level || computeRiskLevel(project),
@@ -135,6 +135,116 @@ function generateKdnaCard(project, compiledStats, provenance) {
     provenance: provenance || {},
     license: (project.release && project.release.license) || 'CC-BY-4.0',
   };
+
+  // ── RFC-0014 Card v2 fields ──────────────────────────────────────
+  if (gates) {
+    const sag = gates.sag || {};
+    const tc = gates.tc || {};
+    const sagObj = sag.source_authority || null;
+    const tcObj = tc.truth_charter || null;
+    const strict = gates.strict_authority === true;
+
+    // 3.4 authority_status
+    if (!sagObj) {
+      card.authority_status = 'none';
+    } else {
+      const sources = Array.isArray(sagObj.sources) ? sagObj.sources : [];
+      const currentHighest = sources.filter(s =>
+        s && typeof s === 'object' && s.type === 'human_locked_charter'
+      );
+      const authorConfirm = sources.filter(s =>
+        s && typeof s === 'object' && s.type === 'author_confirmation'
+      );
+      const hasMigrated = sources.some(s =>
+        s && typeof s === 'object' && s.migration_source === true
+      );
+
+      if (hasMigrated && currentHighest.length > 0) {
+        card.authority_status = 'synthesized_then_human_locked';
+      } else if (currentHighest.length > 0) {
+        card.authority_status = 'human_locked';
+      } else if (authorConfirm.length > 0) {
+        card.authority_status = 'author_confirmation_only';
+      } else {
+        card.authority_status = 'declared_only';
+      }
+    }
+
+    // 3.5 truth_charter_status
+    if (tcObj && typeof tcObj.tc_status === 'string') {
+      const validStatuses = ['draft', 'synthesized', 'locked', 'deprecated'];
+      card.truth_charter_status = validStatuses.includes(tcObj.tc_status)
+        ? tcObj.tc_status
+        : 'draft';
+    }
+
+    // 3.6 migration_status
+    if (!sagObj) {
+      card.migration_status = 'human_authored';
+    } else {
+      const sources = Array.isArray(sagObj.sources) ? sagObj.sources : [];
+      const migrated = sources.filter(s => s && typeof s === 'object' && s.migration_source === true);
+      const authored = sources.filter(s => s && typeof s === 'object' && !s.migration_source && s.type);
+      if (migrated.length > 0 && authored.length > 0) {
+        card.migration_status = 'mixed';
+      } else if (migrated.length > 0) {
+        card.migration_status = 'synthesized_then_human_locked';
+      } else {
+        card.migration_status = 'human_authored';
+      }
+    }
+
+    // 3.7 source_disclosure_level
+    card.source_disclosure_level = gov.source_disclosure_level || 'summary';
+
+    // 3.1 sag_summary
+    if (sagObj) {
+      const sources = Array.isArray(sagObj.sources) ? sagObj.sources : [];
+      const currentHighestCount = sources.filter(s =>
+        s && typeof s === 'object' && s.type === 'human_locked_charter'
+      ).length;
+      card.sag_summary = {
+        sag_id: sagObj.id || `sag_${project.name}_${new Date().toISOString().slice(0, 10)}`,
+        version_intent: sagObj.version_intent || card.version,
+        source_count: sources.length,
+        current_highest_count: currentHighestCount,
+        has_conflict_policies: !!(sagObj.conflict_policies && Object.keys(sagObj.conflict_policies).length > 0),
+        sensitivity: {
+          pii: !!(sagObj.sensitivity && sagObj.sensitivity.sources_contain_pii),
+          author_consent_on_file: !!(sagObj.sensitivity && sagObj.sensitivity.author_consent_on_file),
+        },
+      };
+    }
+
+    // 3.2 tc_summary
+    if (tcObj) {
+      card.tc_summary = {
+        tc_id: tcObj.id || `tc_${project.name}_${card.version}_${new Date().toISOString().slice(0, 10)}`,
+        highest_question: tcObj.highest_question || '',
+        in_scope_count: Array.isArray(tcObj.in_scope) ? tcObj.in_scope.length : 0,
+        out_of_scope_count: Array.isArray(tcObj.out_of_scope) ? tcObj.out_of_scope.length : 0,
+        renamed_terms_count: Array.isArray(tcObj.renamed_terms) ? tcObj.renamed_terms.length : 0,
+        highest_axiom_protected_chars: typeof tcObj.highest_axiom_protected === 'string'
+          ? tcObj.highest_axiom_protected.length : 0,
+      };
+    }
+
+    // 3.3 module_summary — from project-level module_manifest
+    const manifest = project.module_manifest || null;
+    if (manifest) {
+      const modules = Array.isArray(manifest.modules) ? manifest.modules : [];
+      card.module_summary = {
+        module_count: modules.length,
+        internal_module_count: modules.filter(m => m && m.type === 'internal_module').length,
+        sub_domain_count: modules.filter(m => m && m.type === 'sub_domain').length,
+        reference_count: modules.filter(m => m && m.type === 'reference').length,
+        decomposition_rationale_present: typeof manifest.decomposition_rationale === 'string'
+          && manifest.decomposition_rationale.trim().length >= 30,
+      };
+    }
+  }
+
+  return card;
 }
 
 module.exports = { computeRiskLevel, requiresExpertReview, validateGovernance, generateKdnaCard, HIGH_RISK_KEYWORDS };

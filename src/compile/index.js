@@ -472,10 +472,12 @@ function compileDomain(project, options = {}) {
   const strictAuthority = options.strictAuthority === true;
   const { runSagGate } = require('./source-authority-gate');
   const { runTcGate } = require('./truth-charter-gate');
-  const sag = runSagGate(options.sourceAuthority, { strict: strictAuthority });
-  const tc = runTcGate(options.truthCharter, {
+  const sourceAuthority = options.sourceAuthority || project.source_authority || null;
+  const truthCharter = options.truthCharter || project.truth_charter || null;
+  const sag = runSagGate(sourceAuthority, { strict: strictAuthority });
+  const tc = runTcGate(truthCharter, {
     strict: strictAuthority,
-    sourceAuthority: options.sourceAuthority || null,
+    sourceAuthority: sourceAuthority,
     patterns: patterns || null,
   });
   const gates = { sag, tc, strict_authority: strictAuthority };
@@ -520,7 +522,7 @@ function compileDomain(project, options = {}) {
   const identity = buildAssetIdentity(project, files);
   const provenance = require('../provenance').buildProvenance(project, files, identity);
   const { generateKdnaCard } = require('../governance');
-  const kdnaCard = generateKdnaCard(project, {}, provenance);
+  const kdnaCard = generateKdnaCard(project, {}, provenance, gates);
   files['KDNA_CARD.json'] = JSON.stringify(kdnaCard, null, 2);
 
   const excludedCount = cards.filter(c => !c.locked && !['deprecated'].includes(c.status)).length;
