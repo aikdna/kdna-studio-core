@@ -242,21 +242,41 @@ function validateProductRuntime(manifest) {
  * Minify a Product Runtime Manifest by stripping optional sections when empty.
  */
 function compactProductRuntime(manifest) {
-  const copy = { ...manifest, schedule: { ...manifest.schedule }, selection: { ...manifest.selection, domain_pool: [...(manifest.selection.domain_pool || [])] }, generation: { ...manifest.generation }, delivery: { ...manifest.delivery } };
+  const copy = {
+    ...manifest,
+    schedule: { ...manifest.schedule },
+    selection: { ...manifest.selection, domain_pool: [...(manifest.selection.domain_pool || [])] },
+    generation: { ...manifest.generation },
+    delivery: { ...manifest.delivery },
+  };
+
   if (!copy.description) delete copy.description;
   if (!copy.schedule.cron) delete copy.schedule.cron;
-  if (!copy.schedule.interval_seconds && copy.schedule.type !== 'interval') delete copy.schedule.interval_seconds;
+  if (!copy.schedule.interval_seconds && copy.schedule.type !== 'interval') {
+    delete copy.schedule.interval_seconds;
+  }
   if (!copy.schedule.event_trigger) delete copy.schedule.event_trigger;
   if (!copy.selection.rotation) delete copy.selection.rotation;
-  if (!copy.selection.context_signals || copy.selection.context_signals.length === 0) delete copy.selection.context_signals;
+  if (!copy.selection.context_signals || copy.selection.context_signals.length === 0) {
+    delete copy.selection.context_signals;
+  }
   if (!copy.selection.user_state_path) delete copy.selection.user_state_path;
   if (!copy.generation.template) delete copy.generation.template;
-  if (!copy.generation.quality_gates || copy.generation.quality_gates.length === 0) delete copy.generation.quality_gates;
+  if (!copy.generation.quality_gates || copy.generation.quality_gates.length === 0) {
+    delete copy.generation.quality_gates;
+  }
   if (!copy.delivery.template) delete copy.delivery.template;
-  if (!copy.delivery.metadata || Object.keys(copy.delivery.metadata).length === 0) delete copy.delivery.metadata;
-  if (!copy.observation || (!copy.observation.sources && !copy.observation.signal_mapping)) delete copy.observation;
-  if (!copy.adaptation || (copy.adaptation.enabled !== true && !copy.adaptation.adaptation_rules)) delete copy.adaptation;
+  if (!copy.delivery.metadata || Object.keys(copy.delivery.metadata).length === 0) {
+    delete copy.delivery.metadata;
+  }
+  if (!copy.observation || (!copy.observation.sources && !copy.observation.signal_mapping)) {
+    delete copy.observation;
+  }
+  if (!copy.adaptation || (copy.adaptation.enabled !== true && !copy.adaptation.adaptation_rules)) {
+    delete copy.adaptation;
+  }
   if (!copy.trace) delete copy.trace;
+
   return copy;
 }
 
