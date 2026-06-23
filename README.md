@@ -2,19 +2,19 @@
 
 **KDNA Studio Core is the JS authoring kernel for `.kdna` files.** It turns scattered notes, documents, works, and feedback into loadable judgment assets by distilling stable judgment patterns into a declared domain and loading scope.
 
-Open-source Studio-compatible authoring kernel for creating reviewable `.kdna` assets — JS/npm package. Supports two authoring paths: interview-first (direct expression) and distillation-first (pattern extraction from existing content). Both end with a canonical KDNA Core v1 runtime export.
+Open-source Studio-compatible authoring kernel for creating reviewable `.kdna` assets — JS/npm package. Supports two authoring paths: interview-first (direct expression) and distillation-first (pattern extraction from existing content). Both end with a canonical Core GA runtime export.
 
 **KDNA Studio Core is the JS authoring kernel.** It is not a UI tool and not a CLI package. It is a pure-logic engine for creating KDNA judgment cards, optional provenance records, compiler output, and runtime `.kdna` exports from JavaScript applications and Studio-compatible tools.
 
 Studio-compatible tooling uses a project workspace for authoring, review, and
-audit, then exports the canonical KDNA Core v1 runtime container. The public
+audit, then exports the canonical Core GA runtime container. The public
 asset is the packaged `.kdna` file; project JSON is an authoring/editing view,
 not the default distribution form.
 
 Studio Core distinguishes authoring compile output from runtime distribution
 output. Authoring compile output may include source entries such as
 `KDNA_Core.json` and `KDNA_Patterns.json` for audit and review. Runtime export
-must produce the canonical KDNA Core v1 distribution shape:
+must produce the canonical Core GA distribution shape:
 
 ```text
 mimetype
@@ -206,7 +206,7 @@ Access values are canonicalized for runtime export:
 Top-level source JSON entries such as `KDNA_Core.json`, `KDNA_Patterns.json`,
 and `KDNA_CARD.json` must not be present in runtime export output.
 
-## Card Types (v1.0)
+## Card Types (current)
 
 | Type | Compiles to | Description |
 |------|------------|-------------|
@@ -234,7 +234,7 @@ Rules:
 
 Human Lock is optional provenance metadata. It records that a human reviewed
 specific judgment fields in a Studio project. It is useful for public,
-enterprise, or high-risk assets, but it is not a KDNA Core v1 format-validity
+enterprise, or high-risk assets, but it is not a Core GA format-validity
 requirement and does not certify content quality.
 
 ```js
