@@ -142,9 +142,8 @@ function generateKdnaCard(project, compiledStats, provenance, gates) {
     const tc = gates.tc || {};
     const sagObj = sag.source_authority || null;
     const tcObj = tc.truth_charter || null;
-    const strict = gates.strict_authority === true;
 
-    // 3.4 authority_status
+    // 3.4 authority_status — based on SAG source types
     if (!sagObj) {
       card.authority_status = 'none';
     } else {
@@ -155,14 +154,14 @@ function generateKdnaCard(project, compiledStats, provenance, gates) {
       const authorConfirm = sources.filter(s =>
         s && typeof s === 'object' && s.type === 'author_confirmation'
       );
-      const hasMigrated = sources.some(s =>
-        s && typeof s === 'object' && s.migration_source === true
-      );
+      // PR-4b synthesis is detected via tc_status, not per-source flags
+      const wasSynthesized = tcObj && tcObj.tc_status_before_lock === 'synthesized';
+      const migrated = project.migration && project.migration.synthesized === true;
 
-      if (hasMigrated && currentHighest.length > 0) {
-        card.authority_status = 'synthesized_then_human_locked';
-      } else if (currentHighest.length > 0) {
-        card.authority_status = 'human_locked';
+      if (currentHighest.length > 0) {
+        card.authority_status = (wasSynthesized || migrated)
+          ? 'synthesized_then_human_locked'
+          : 'human_locked';
       } else if (authorConfirm.length > 0) {
         card.authority_status = 'author_confirmation_only';
       } else {
@@ -178,20 +177,16 @@ function generateKdnaCard(project, compiledStats, provenance, gates) {
         : 'draft';
     }
 
-    // 3.6 migration_status
-    if (!sagObj) {
+    // 3.6 migration_status — derived from tc_status + project-level provenance
+    const migrationOverride = (project.migration && project.migration.status) || null;
+    if (migrationOverride) {
+      card.migration_status = migrationOverride;
+    } else if (!sagObj && !tcObj) {
       card.migration_status = 'human_authored';
+    } else if (tcObj && tcObj.tc_status === 'synthesized') {
+      card.migration_status = 'synthesized';
     } else {
-      const sources = Array.isArray(sagObj.sources) ? sagObj.sources : [];
-      const migrated = sources.filter(s => s && typeof s === 'object' && s.migration_source === true);
-      const authored = sources.filter(s => s && typeof s === 'object' && !s.migration_source && s.type);
-      if (migrated.length > 0 && authored.length > 0) {
-        card.migration_status = 'mixed';
-      } else if (migrated.length > 0) {
-        card.migration_status = 'synthesized_then_human_locked';
-      } else {
-        card.migration_status = 'human_authored';
-      }
+      card.migration_status = 'human_authored';
     }
 
     // 3.7 source_disclosure_level
