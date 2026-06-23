@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0 (2026-06-23)
+- Feat: RFC-0014 Card v2 fields — generateKdnaCard now produces 7 summary fields (authority_status, truth_charter_status, migration_status, source_disclosure_level, sag_summary, tc_summary, module_summary) when SAG/TC/IMM data is available.
+- Feat: Product Runtime module (RFC-0011) — builder, validator, and compactor for Schedule→Select→Generate→Deliver→Observe→Adapt contract.
+
 ## 1.5.12 (2026-06-22)
 - Deps: bump @aikdna/kdna-core to ^0.13.0
 
