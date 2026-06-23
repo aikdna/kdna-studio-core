@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0 (2026-06-23)
+- Feat: RFC-0014 Card v2 fields.
+- Feat: Product Runtime module (RFC-0011).
+
 ## 1.5.12 (2026-06-22)
 - Deps: bump @aikdna/kdna-core to ^0.13.0
 
