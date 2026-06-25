@@ -231,6 +231,163 @@ describe('Full Compile', () => {
     assert.equal(evo.measurement[0].what, 'locked_axioms');
     assert.equal(evo.measurement[0].threshold, '1');
   });
+
+  // ─── Fix 2 (2026-06-25 audit): preserve source reasoning identity ───
+  test('Fix 2: Reasoning preserves source identity when source.reasoning is provided', () => {
+    const project = createProject('test');
+    project.cards = [
+      makeLockedCard('axiom', {
+        one_sentence: 'Parent axiom for the reasoning chain.',
+        full_statement: 'A complete testable explanation of this judgment principle with sufficient detail for the agent to apply it correctly.',
+        why: 'Without this, the chain has no anchor.',
+        applies_when: ['x'],
+        does_not_apply_when: ['y'],
+        failure_risk: 'r',
+      }, 'AX-001'),
+      makeLockedCard('reasoning', {
+        axiom: 'AX-001',
+        one_sentence: 'Source-authored principle statement.',
+        principle: 'Price objections are certainty deficits.',
+        chain: ['Diagnose uncertainty type', 'Address the specific gap', 'Reframe value'],
+        concrete_action: 'Ask which dimension of certainty is missing before responding to price.',
+      }, 'RC-001'),
+    ];
+    const result = compileDomain(project, {
+      source: {
+        reasoning: {
+          reasoning_chains: [{
+            id: 'RC-001',
+            axiom: 'AX-001',
+            principle: 'Price objections are certainty deficits.',
+            chain: ['Diagnose uncertainty type', 'Address the specific gap', 'Reframe value'],
+            concrete_action: 'Ask which dimension of certainty is missing before responding to price.',
+          }],
+        },
+      },
+    });
+    const reasoning = JSON.parse(result.files['KDNA_Reasoning.json']);
+    assert.equal(reasoning.reasoning_chains.length, 1);
+    const chain = reasoning.reasoning_chains[0];
+    assert.equal(chain.id, 'RC-001', 'source id preserved');
+    assert.equal(chain.axiom, 'AX-001', 'source axiom link preserved');
+    assert.equal(chain.so_what, 'Ask which dimension of certainty is missing before responding to price.', 'concrete_action maps to so_what');
+    assert.equal(chain.one_sentence, 'Source-authored principle statement.', 'one_sentence preserved');
+    assert.deepEqual(chain.logic, ['Diagnose uncertainty type', 'Address the specific gap', 'Reframe value'], 'chain array maps to logic');
+    assert.equal(chain.principle, 'Price objections are certainty deficits.', 'principle preserved as additional field');
+    assert.equal(chain.concrete_action, 'Ask which dimension of certainty is missing before responding to price.', 'concrete_action preserved as additional field');
+  });
+
+  // ─── Fix 2: backward compat — no source data → axiom synthesis still works
+  test('Fix 2: Reasoning falls back to axiom synthesis when no source provided', () => {
+    const project = createProject('test');
+    project.cards = [
+      makeLockedCard('axiom', {
+        one_sentence: 'Legacy axiom.',
+        full_statement: 'A complete testable explanation of this judgment principle with sufficient detail.',
+        why: 'Without this axiom, agents would default to incorrect behavior in this domain.',
+        applies_when: ['x'],
+        does_not_apply_when: ['y'],
+        failure_risk: 'r',
+      }, 'AX-001'),
+    ];
+    const result = compileDomain(project);
+    const reasoning = JSON.parse(result.files['KDNA_Reasoning.json']);
+    assert.equal(reasoning.reasoning_chains.length, 1);
+    assert.equal(reasoning.reasoning_chains[0].id, 'chain_AX-001', 'axiom synthesis path unchanged');
+    assert.equal(reasoning.reasoning_chains[0].so_what, 'Without this axiom, agents would default to incorrect behavior in this domain.');
+  });
+
+  // ─── Fix 3 (2026-06-25 audit): preserve source evolution stages ───
+  test('Fix 3: Evolution prepends source-authored stages when source.evolution is provided', () => {
+    const project = createProject('test');
+    project.cards = [
+      makeLockedCard('axiom', { one_sentence: 'Evolution test.', full_statement: 'FS.', why: 'B.', applies_when: ['x'], does_not_apply_when: ['y'], failure_risk: 'r' }, 'AX-001'),
+    ];
+    const result = compileDomain(project, {
+      source: {
+        evolution: {
+          stages: [
+            { id: 'stage_draft', name: 'Draft', level: 0, description: 'Initial authoring.' },
+            { id: 'stage_experimental', name: 'Experimental', level: 1, description: 'Tested on real tasks.' },
+            { id: 'stage_canonical', name: 'Canonical', level: 3, description: 'Reference implementation.' },
+          ],
+        },
+      },
+    });
+    const evo = JSON.parse(result.files['KDNA_Evolution.json']);
+    const sourceStages = evo.stages.filter(s => s.source_authored === true);
+    const auditStages = evo.stages.filter(s => s.source_authored === false);
+    assert.equal(sourceStages.length, 3, 'all 3 source stages preserved');
+    const draftStage = sourceStages.find(s => s.id === 'stage_draft');
+    assert.ok(draftStage, 'stage_draft is in the source-authored list');
+    assert.equal(draftStage.name, 'Draft');
+    assert.equal(draftStage.level, 0, 'level 0 preserved (not coerced to empty string)');
+    assert.equal(auditStages.length, 1, 'audit-log stage still emitted (AX-001 lock)');
+  });
+
+  // ─── Fix 3: backward compat — no source data → audit-log only
+  test('Fix 3: Evolution falls back to audit-log-only when no source provided', () => {
+    const project = createProject('test');
+    project.cards = [
+      makeLockedCard('axiom', { one_sentence: 'Evolution test.', full_statement: 'FS.', why: 'B.', applies_when: ['x'], does_not_apply_when: ['y'], failure_risk: 'r' }, 'AX-001'),
+    ];
+    const result = compileDomain(project);
+    const evo = JSON.parse(result.files['KDNA_Evolution.json']);
+    const sourceStages = evo.stages.filter(s => s.source_authored === true);
+    assert.equal(sourceStages.length, 0, 'no source stages when source not provided');
+  });
+
+  // ─── Fix 1 (2026-06-25 audit): term/banned_term cards compile to patterns ───
+  test('Fix 1: term cards compile into terminology.standard_terms (was dropped)', () => {
+    const project = createProject('test');
+    project.cards = [
+      makeLockedCard('axiom', {
+        one_sentence: 'Parent axiom for the term.',
+        full_statement: 'A complete testable explanation of this judgment principle with sufficient detail.',
+        why: 'Without this, the term has no anchor.',
+        applies_when: ['x'],
+        does_not_apply_when: ['y'],
+        failure_risk: 'r',
+      }, 'AX-001'),
+      makeLockedCard('term', {
+        term: 'failure mode',
+        definition: 'A predictable, repeating class of agent error in a specific situation.',
+      }, 'term_001'),
+    ];
+    const result = compileDomain(project);
+    assert.ok('KDNA_Patterns.json' in result.files, 'Patterns file emitted');
+    const patterns = JSON.parse(result.files['KDNA_Patterns.json']);
+    assert.ok(patterns.terminology, 'patterns.terminology section exists');
+    assert.equal(patterns.terminology.standard_terms.length, 1, '1 standard_term compiled');
+    assert.equal(patterns.terminology.standard_terms[0].term, 'failure mode');
+    assert.equal(patterns.terminology.standard_terms[0].definition, 'A predictable, repeating class of agent error in a specific situation.');
+  });
+
+  test('Fix 1: banned_term cards compile into terminology.banned_terms (was dropped)', () => {
+    const project = createProject('test');
+    project.cards = [
+      makeLockedCard('axiom', {
+        one_sentence: 'Parent axiom for the banned term.',
+        full_statement: 'A complete testable explanation of this judgment principle with sufficient detail.',
+        why: 'Without this, the banned term has no anchor.',
+        applies_when: ['x'],
+        does_not_apply_when: ['y'],
+        failure_risk: 'r',
+      }, 'AX-001'),
+      makeLockedCard('banned_term', {
+        term: 'just do it',
+        why: 'Bypasses judgment; produces action without diagnosis.',
+        replace_with: 'Identify the constraint, then choose the minimum action that resolves it.',
+      }, 'ban_001'),
+    ];
+    const result = compileDomain(project);
+    const patterns = JSON.parse(result.files['KDNA_Patterns.json']);
+    assert.ok(patterns.terminology, 'patterns.terminology section exists');
+    assert.equal(patterns.terminology.banned_terms.length, 1, '1 banned_term compiled');
+    assert.equal(patterns.terminology.banned_terms[0].term, 'just do it');
+    assert.equal(patterns.terminology.banned_terms[0].why, 'Bypasses judgment; produces action without diagnosis.');
+    assert.equal(patterns.terminology.banned_terms[0].replace_with, 'Identify the constraint, then choose the minimum action that resolves it.');
+  });
 });
 
 // ─── README Generation ──────────────────────────────────────────────
