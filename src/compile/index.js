@@ -154,11 +154,29 @@ function compilePatterns(cards, project) {
     failure_risk: c.fields?.failure_risk || '',
   }));
 
+  // FIX 1 (2026-06-25 audit, kdna-assets #15 follow-up):
+  // Source's `terminology.standard_terms` and `terminology.banned_terms`
+  // were previously dropped at compilePatterns — the field was hardcoded
+  // to `[]`. The content does reach the LLM prompt via compose.js (in
+  // kdna-studio-core/src/compose.js:178-187), but did not enter the
+  // structured payload. Now we merge the locked `term` and `banned_term`
+  // cards into the structured terminology, so the source's
+  // banned_terms identity is preserved end-to-end.
+  const lockedStandardTerms = cards.filter(c => c.type === 'term' && c.locked).map(c => ({
+    term: c.fields?.term || c.id,
+    definition: c.fields?.definition || '',
+  }));
+  const lockedBannedTerms = cards.filter(c => c.type === 'banned_term' && c.locked).map(c => ({
+    term: c.fields?.term || c.id,
+    why: c.fields?.why || '',
+    replace_with: c.fields?.replace_with || '',
+  }));
+
   return {
     meta: makeMeta(project),
     terminology: {
-      standard_terms: [],
-      banned_terms: [],
+      standard_terms: lockedStandardTerms,
+      banned_terms: lockedBannedTerms,
     },
     misunderstandings: lockedMisunderstandings,
     patterns: lockedPatterns,
@@ -185,7 +203,48 @@ function compileCases(cards, project) {
   };
 }
 
-function compileReasoning(cards, project) {
+function compileReasoning(cards, project, sourceReasoning = null) {
+  // FIX 2 (2026-06-25 audit, kdna-assets #15 follow-up):
+  // The previous implementation synthesized 1 chain per axiom and
+  // ignored the source's KDNA_Reasoning.json content. That dropped
+  // the source's identity (the RC-001 id, the axiom link, the
+  // principle, the chain steps, the concrete_action) at the
+  // compile step. The runtime then read the compiled file to
+  // produce `payload.failure_modes`; the source's chains
+  // therefore never reached the structured payload.
+  //
+  // The fix: when source reasoning chains are available, use them
+  // (preserving the source's identity). Fall back to axiom
+  // synthesis only for assets that have axioms but no explicit
+  // reasoning chains (backward compat for legacy assets that
+  // were published under the old behavior).
+  const lockedReasoningChains = cards.filter(c => c.type === 'reasoning' && c.locked);
+  if (lockedReasoningChains.length > 0) {
+    return {
+      meta: makeMeta(project),
+      reasoning_chains: lockedReasoningChains.map(c => ({
+        id: c.id,
+        axiom: c.fields?.axiom,
+        one_sentence: c.fields?.one_sentence || '',
+        // Source's KDNA_Reasoning.json typically has 'principle' (the
+        // "what the chain says") and 'concrete_action' (the "so what
+        // to do"). Map to the build's expected fields. Preserve
+        // additional fields as-is so the source's chain structure
+        // round-trips through the compile step.
+        so_what: c.fields?.concrete_action
+                || c.fields?.so_what
+                || '',
+        logic: Array.isArray(c.fields?.chain) ? c.fields.chain
+                : (c.fields?.logic || []),
+        principle: c.fields?.principle,
+        concrete_action: c.fields?.concrete_action,
+      })),
+    };
+  }
+
+  // Fallback: synthesize 1 chain per axiom. Preserved for backward
+  // compat with assets that have axioms but no explicit reasoning
+  // cards (legacy 1.0.0 path).
   const lockedAxioms = cards.filter(c => c.type === 'axiom' && c.locked);
   if (lockedAxioms.length === 0) return null;
   return {
@@ -199,11 +258,34 @@ function compileReasoning(cards, project) {
   };
 }
 
-function compileEvolution(cards, project) {
+function compileEvolution(cards, project, sourceEvolution = null) {
   const lockedCards = cards.filter(c => c.locked);
   if (lockedCards.length === 0) return null;
 
-  const stages = [];
+  // FIX 3 (2026-06-25 audit, kdna-assets #15 follow-up):
+  // The previous implementation completely ignored the source's
+  // KDNA_Evolution.json.stages. The compile output was generated
+  // solely from card.audit_log (one stage per locked card's lock
+  // event). The source's authored evolution stages (e.g. 'draft',
+  // 'experimental', 'stable', 'canonical') never reached the
+  // structured payload.
+  //
+  // The fix: when source evolution stages are available, prepend
+  // them to the audit-log-derived stages (preserving the source's
+  // authored identity). The audit-log stages are then layered on
+  // top (so they still show what was actually locked and when).
+  const sourceStages = Array.isArray(sourceEvolution?.stages)
+    ? sourceEvolution.stages.map(s => ({
+        id: s.id || `stage_source_${s.name || 'unnamed'}`,
+        name: s.name || '',
+        level: s.level != null ? s.level : '',
+        description: s.description || '',
+        // Mark these as source-authored for downstream consumers.
+        source_authored: true,
+      }))
+    : [];
+
+  const stages = [...sourceStages];
   const seenAxioms = new Set();
   for (const card of lockedCards) {
     if (seenAxioms.has(card.id)) continue;
@@ -215,6 +297,7 @@ function compileEvolution(cards, project) {
           name: card.fields?.one_sentence || card.fields?.question || card.id,
           description: `Card ${card.id} was locked by ${entry.by} at ${entry.at}. Type: ${card.type}.`,
           indicators: [`${card.type} card locked`, 'Human judgment confirmed'],
+          source_authored: false,
         });
       }
     }
@@ -461,8 +544,8 @@ function compileDomain(project, options = {}) {
   const patterns = compilePatterns(cards, project);
   const scenarios = compileScenarios(cards, project);
   const cases = compileCases(cards, project);
-  const reasoning = compileReasoning(cards, project);
-  const evolution = compileEvolution(cards, project);
+  const reasoning = compileReasoning(cards, project, options.source?.reasoning || null);
+  const evolution = compileEvolution(cards, project, options.source?.evolution || null);
 
   // ── RFC-0013 §3.1/§3.2 Compile Gates (PR-3) ───────────────────
   // Run the Source Authority Graph gate and the Truth Charter gate
