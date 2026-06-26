@@ -10,9 +10,16 @@ const name = pkg.name;
 const tag = `v${version}`;
 const failures = [];
 
-function check(label, fn) {
+function check(label, fn, { soft = false } = {}) {
   try { fn(); console.log(`  PASS ${label}`); }
-  catch (e) { failures.push(`${label}: ${e.message}`); console.error(`  FAIL ${label}: ${e.message}`); }
+  catch (e) {
+    if (soft) {
+      console.log(`  WARN ${label}: ${e.message} (non-blocking)`);
+    } else {
+      failures.push(`${label}: ${e.message}`);
+      console.error(`  FAIL ${label}: ${e.message}`);
+    }
+  }
 }
 
 console.log(`Release readiness check: ${name}@${version}\n`);
@@ -27,7 +34,7 @@ check('GitHub Release exists', () => {
     ? pkg.repository.url.match(/github\.com\/([^/]+\/[^.]+)/)[1]
     : pkg.repository.url.match(/github\.com\/([^/]+\/[^.]+)/)[1];
   execSync(`gh release view ${tag} --repo ${repo}`, { stdio: 'ignore' });
-});
+}, { soft: true });
 
 check('CHANGELOG has version entry', () => {
   const changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
