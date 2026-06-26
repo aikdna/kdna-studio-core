@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0 (2026-06-27)
+- B2: encrypt payload via scrypt profile when password is provided
+  - `exportRuntimeAsset` encrypts `payload.kdnab` with `encryptProtectedEntryScrypt`
+  - Forces `access: licensed` + `entitlement.profile: password` for encrypted exports
+  - Manifest declares `encryption.profile: kdna-password-protected-v1-scrypt`
+  - Payload `encrypted` flag + load_contract `requires_decryption` dynamic
+- Deps: bump @aikdna/kdna-core to ^0.15.0 (B2 scrypt profile)
+
 ## 1.6.0 (2026-06-23)
 - Feat: RFC-0014 Card v2 fields.
 - Feat: Product Runtime module (RFC-0011).
