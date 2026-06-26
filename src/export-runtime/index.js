@@ -149,7 +149,7 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     payload: {
       path: 'payload.kdnab',
       encoding: 'json',
-      encrypted: false,
+      encrypted: !!options.encryptedPayload,
       digest: `sha256:${sha256Hex(payloadBytes)}`,
     },
     access,
@@ -163,9 +163,9 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
       default_profile: 'compact',
       profiles: {
         index: { requires_decryption: false, max_tokens_hint: 200 },
-        compact: { requires_decryption: false, max_tokens_hint: 500 },
+        compact: { requires_decryption: Boolean(options.encryptedPayload), max_tokens_hint: 500 },
         scenario: { requires_decryption: false, selection: 'triggered_sections_only' },
-        full: { requires_decryption: false, intended_for: ['audit', 'reference'] },
+        full: { requires_decryption: Boolean(options.encryptedPayload), intended_for: ['audit', 'reference'] },
       },
     },
     authoring: {
@@ -190,6 +190,9 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
   if (access === 'licensed') {
     manifest.entitlement = options.entitlement || { profile: 'local_receipt', offline: true, revocable: true };
   }
+  if (options.encryptionMeta) {
+    manifest.encryption = options.encryptionMeta;
+  }
   if (access === 'remote') {
     manifest.runtime = options.runtime || { endpoint: null };
   }
@@ -199,8 +202,47 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
 function exportRuntimeAsset(project, options = {}) {
   const compiled = options.compiled || compileDomain(project, options.compile || {});
   const payload = buildPayload(compiled);
-  const payloadBytes = json(payload);
-  const manifest = buildManifest(project, compiled, payloadBytes, options);
+  let payloadBytes = json(payload);
+  let encryptionMeta = null;
+
+  // B2: Password-protected export — encrypt payload before manifest/checksums
+  if (options.password) {
+    const core = require('@aikdna/kdna-core');
+    // AAD must match the fields in the final manifest (kdna.json).
+    // buildManifest sets: asset_id = options.asset_id || 'kdna:studio:...'
+    // version  = semverValue(sourceManifest.version || project.release?.version, ...)
+    // encryptedEntryAad picks the first non-empty of (name, asset_id, ''),
+    // and the decrypt-side manifest has no `name` field. So: set name=asset_id
+    // and version to the exact values the manifest will carry.
+    const sourceManifest = parseJsonFile(compiled.files, 'kdna.json', {});
+    const domainId = sourceManifest.domain_id || domainIdFromName(project.name);
+    const finalAssetId = options.asset_id || `kdna:studio:${domainId}`;
+    const finalVersion = semverValue(sourceManifest.version || project.release?.version, '0.1.0');
+    const envelope = core.encryptProtectedEntryScrypt(payloadBytes, {
+      entryName: 'payload.kdnab',
+      manifest: {
+        name: finalAssetId,
+        asset_id: finalAssetId,
+        version: finalVersion,
+      },
+      password: options.password,
+    });
+    payloadBytes = json(envelope);
+    encryptionMeta = {
+      profile: 'kdna-password-protected-v1-scrypt',
+      encrypted_entries: ['payload.kdnab'],
+    };
+    // Password-protected assets are implicitly licensed access.
+    // Force override: a password-protected asset cannot be public.
+    options.access = 'licensed';
+    options.entitlement = options.entitlement || { profile: 'password', revocable: false, offline: true };
+  }
+
+  const manifest = buildManifest(project, compiled, payloadBytes, {
+    ...options,
+    encryptedPayload: !!encryptionMeta,
+    encryptionMeta,
+  });
   const files = {
     mimetype: MIMETYPE_V1,
     'kdna.json': json(manifest),
