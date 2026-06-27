@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.2 (2026-06-28)
+
+Audit follow-ups (2026-06-28 round-trip verification). This release is
+required to keep the round-trip path intact for the eight card types
+that compile/index.js was tracking but export-runtime/index.js was
+silently dropping. Without 1.7.2, a `kdna-studio migrate --format v1`
+that includes reasoning / framework / term / banned_term / aesthetic
+/ ontology cards still loses them on the way into `payload.kdnab`
+even when every card is Human Locked.
+
+- **buildPayload now threads every compile output into the v1 payload.** Prior version only knew the original 6 judgment types and additionally mis-mapped `reasoning.failure_modes` to `reasoning.reasoning_chains`, putting the wrong object shape into a field whose schema is `misunderstanding`. Adds `core.ontology`, `core.frameworks`, `core.aesthetics`; threads `term` and `banned_term` from `patterns.terminology` into the `patterns` array; emits `reasoning_chains` separately from `failure_modes`; renames the field to `self_check` (singular) to match the source KDNA_Patterns and the payload-profile-v1 schema. Backward compatible: legacy readers can read the legacy field name from the same source.
+- **compileCore.frameworks is no longer hardcoded `[]`.** A locked framework card is now collected alongside ontology / stances and surfaces in the v1 payload.
+- **lockCard schema gate covers boundary / risk / aesthetic.** The prior gate only enforced for axiom and misunderstanding, which let boundary / risk / aesthetic lock with empty fields and produce fingerprints that did not reflect their actual content. Thresholds are conservative (presence, not length) so the gate does not reject reasonable short values like `name: "r1"`.
+- **JUDGMENT_FIELDS now includes `name`, `description`, `mitigation`.** The fingerprint is computed across all of these so a Human Lock signature cannot be reused against a card whose only non-axiom fields were silently changed.
+- **`compile` / `hasJudgmentContent` use a single shared `JUDGMENT_CARD_TYPES_FOR_COMPILE` set** covering axiom / ontology / misunderstanding / self_check / boundary / risk / aesthetic / scenario / case / stance / pattern / reasoning / framework / term / banned_term / evolution_stage. The two filters previously diverged; domains that contained only `reasoning` or `framework` cards used to fail with "refusing to compile empty domain" even when every card was Human Locked.
+- **`buildManifest.load_contract.profiles` is now complete.** Prior version omitted `max_tokens_hint` for scenario and `selection` for full. Mirrors the studio-cli `buildV1Manifest` and the load-profiles spec.
+- `tests/empty-domain-gate.test.js` updated to exercise the empty-domain guard with a genuinely non-judgment card type, since `term` is now judgment-bearing.
+
 ## 1.7.1 (2026-06-27)
 - Fix (PC-3): `exportRuntimeAsset` no longer injects the legacy
   placeholder ("Load when the task matches applies_when on domain

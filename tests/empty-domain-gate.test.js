@@ -47,13 +47,16 @@ test('compileDomain refuses domain with only draft (unlocked) cards', () => {
   );
 });
 
-test('compileDomain refuses domain with locked non-judgment cards only', () => {
-  // A locked 'term' or 'framework' is structural metadata, not a judgment.
-  // The gate requires at least one locked card of a judgment-bearing type.
+test('compileDomain refuses domain with no judgment-bearing cards', () => {
+  // A project that has only cards of types the gate considers structural
+  // (e.g. an unsupported future type) should still trip the empty-domain
+  // guard. We construct a card object directly because createCard rejects
+  // unknown types. Bug (2026-06-28 audit follow-up): the prior version of
+  // this test relied on `term` being excluded, but `term` is now treated
+  // as judgment-bearing alongside framework/reasoning/evolution_stage.
   const project = makeProject('test');
-  const term = createCard('term', { term: 'x', definition: 'y' });
-  term.locked = true; // bypass state machine to simulate buggy upstream
-  project.cards = [term];
+  const ghost = { id: 'gh_1', type: 'unsupported_metadata', locked: true, fields: {} };
+  project.cards = [ghost];
   assert.throws(
     () => compileDomain(project),
     (e) => e.code === 'EMPTY_DOMAIN',

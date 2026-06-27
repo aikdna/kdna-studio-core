@@ -66,7 +66,11 @@ function lockCard(card, lockPayload) {
   if (!lockPayload.checked?.does_not_apply_when) throw new Error('Must confirm does_not_apply_when reviewed');
   if (!lockPayload.checked?.failure_risk) throw new Error('Must confirm failure_risk reviewed');
 
-  // Schema gate per KDNA SPEC
+  // Schema gate per KDNA SPEC — must run for ALL judgment card types so the
+  // Human Lock signature actually covers every type's required fields.
+  // Bug: prior version only enforced gates for axiom / misunderstanding,
+  // which let boundary / risk / aesthetic lock with empty fields and produce
+  // fingerprints that do not reflect their actual content.
   if (card.type === 'axiom') {
     if (!card.fields?.full_statement || card.fields.full_statement.length < 20) {
       throw new Error(`Axiom ${card.id} cannot be locked: missing or too-short full_statement. SPEC requires a complete, testable explanation.`);
@@ -78,6 +82,36 @@ function lockCard(card, lockPayload) {
   if (card.type === 'misunderstanding') {
     if (!card.fields?.key_distinction || card.fields.key_distinction.length < 20) {
       throw new Error(`Misunderstanding ${card.id} cannot be locked: missing or too-short key_distinction. SPEC requires a clear conceptual boundary.`);
+    }
+  }
+  if (card.type === 'boundary') {
+    if (!card.fields?.scope || String(card.fields.scope).trim().length < 1) {
+      throw new Error(`Boundary ${card.id} cannot be locked: missing scope. SPEC requires a clear scope statement.`);
+    }
+    if (!card.fields?.out_of_scope || String(card.fields.out_of_scope).trim().length < 1) {
+      throw new Error(`Boundary ${card.id} cannot be locked: missing out_of_scope. SPEC requires an explicit exclusion statement.`);
+    }
+  }
+  if (card.type === 'risk') {
+    if (!card.fields?.name || String(card.fields.name).trim().length < 1) {
+      throw new Error(`Risk ${card.id} cannot be locked: missing name. SPEC requires a named risk.`);
+    }
+    if (!card.fields?.description || String(card.fields.description).length < 20) {
+      throw new Error(`Risk ${card.id} cannot be locked: missing or too-short description. SPEC requires a complete description.`);
+    }
+    if (!card.fields?.mitigation || String(card.fields.mitigation).trim().length < 1) {
+      throw new Error(`Risk ${card.id} cannot be locked: missing mitigation. SPEC requires a mitigation strategy.`);
+    }
+  }
+  if (card.type === 'aesthetic') {
+    // Aesthetic is the broadest of the four — every aesthetic card must
+    // declare a name and at least one substantive description / one_sentence.
+    if (!card.fields?.name || String(card.fields.name).trim().length < 1) {
+      throw new Error(`Aesthetic ${card.id} cannot be locked: missing name. SPEC requires a named aesthetic principle.`);
+    }
+    const desc = card.fields?.description || card.fields?.one_sentence || card.fields?.essence;
+    if (!desc || String(desc).trim().length < 1) {
+      throw new Error(`Aesthetic ${card.id} cannot be locked: missing description/one_sentence/essence. SPEC requires a substantive description.`);
     }
   }
 

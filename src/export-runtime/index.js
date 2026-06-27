@@ -100,27 +100,61 @@ function buildPayload(compiled) {
     core.meta.load_condition !== LEGACY_DEFAULT_LOAD_CONDITION
       ? core.meta.load_condition
       : null;
+
+  // Bug (2026-06-28 audit follow-up): prior buildPayload omitted every
+  // type that compile added after the original 6-type launch — aesthetics,
+  // frameworks, term / banned_term, ontology — and additionally mis-mapped
+  // `reasoning.failure_modes` to `reasoning.reasoning_chains`, which put
+  // the wrong object shape into a field whose schema is `misunderstanding`.
+  // Cards of those types round-tripped out of the asset as if they had
+  // never existed. The fix threads every compile output into the
+  // judgment-profile-v1 payload it should have carried all along.
   return {
     profile: 'judgment-profile-v1',
     core: {
       highest_question:
         authorSet || firstAxiom?.one_sentence || '(unset — author should set load_condition in project meta)',
       axioms: Array.isArray(core.axioms) ? core.axioms : [],
+      ontology: Array.isArray(core.ontology) ? core.ontology : [],
+      frameworks: Array.isArray(core.frameworks) ? core.frameworks : [],
       boundaries: Array.isArray(core.boundaries) ? core.boundaries : [],
       stances: Array.isArray(core.stances) ? core.stances : [],
       risk_model: {
         risks: Array.isArray(core.risks) ? core.risks : [],
       },
+      aesthetics: Array.isArray(core.aesthetics) ? core.aesthetics
+        : (Array.isArray(patterns.aesthetics) ? patterns.aesthetics : []),
     },
     patterns: [
       ...(Array.isArray(patterns.misunderstandings) ? patterns.misunderstandings : []),
       ...(Array.isArray(patterns.patterns) ? patterns.patterns : []),
+      ...(Array.isArray(patterns.terminology?.standard_terms) ? patterns.terminology.standard_terms.map((t) => ({ ...t, type: 'term' })) : []),
+      ...(Array.isArray(patterns.terminology?.banned_terms) ? patterns.terminology.banned_terms.map((t) => ({ ...t, type: 'banned_term' })) : []),
     ],
     scenarios: Array.isArray(scenarios.scenes) ? scenarios.scenes : [],
     cases: Array.isArray(cases.cases) ? cases.cases : [],
     reasoning: {
-      self_checks: Array.isArray(patterns.self_check) ? patterns.self_check : [],
-      failure_modes: Array.isArray(reasoning.reasoning_chains) ? reasoning.reasoning_chains : [],
+      // Field name is singular (`self_check`) to match the source KDNA_Patterns
+      // and the payload-profile-v1 schema. (Earlier revision of buildPayload
+      // emitted `self_checks` here, which the canonical schema rejects.)
+      self_check: Array.isArray(patterns.self_check) ? patterns.self_check : [],
+      // failure_modes is the structured `misunderstanding` summary, not
+      // the reasoning chain. Build it from the locked misunderstanding
+      // cards the same way the legacy CLI did. (Prior versions of this
+      // file read `reasoning.failure_modes` from compile's KDNA_Reasoning,
+      // which never produced that field — so failure_modes was always
+      // an empty array and any test/consumer that expected real entries
+      // got nothing.)
+      failure_modes: Array.isArray(patterns.misunderstandings)
+        ? patterns.misunderstandings.map((m) => ({
+            id: m.id,
+            mode: m.wrong,
+            correct: m.correct,
+            key_distinction: m.key_distinction,
+            why: m.why,
+          }))
+        : [],
+      reasoning_chains: Array.isArray(reasoning.reasoning_chains) ? reasoning.reasoning_chains : [],
     },
     evolution: {
       stages: Array.isArray(evolution.stages) ? evolution.stages : [],
@@ -172,12 +206,37 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     keywords: sourceManifest.keywords || [],
     lineage: canonicalLineage(project.lineage || sourceManifest.lineage),
     load_contract: {
+      // Must stay in sync with the spec (specs/load-profiles.md) and with
+      // the studio-cli buildV1Manifest in bin/kdna-studio.js. Two builders
+      // previously diverged: the studio-core path emitted incomplete
+      // profile entries (scenario had no max_tokens_hint, full had no
+      // selection), which broke loaders that read the contract.
       default_profile: 'compact',
       profiles: {
-        index: { requires_decryption: false, max_tokens_hint: 200 },
-        compact: { requires_decryption: Boolean(options.encryptedPayload), max_tokens_hint: 500 },
-        scenario: { requires_decryption: false, selection: 'triggered_sections_only' },
-        full: { requires_decryption: Boolean(options.encryptedPayload), intended_for: ['audit', 'reference'] },
+        index: {
+          requires_decryption: false,
+          max_tokens_hint: 500,
+          selection: 'manifest metadata',
+          intended_for: ['discovery'],
+        },
+        compact: {
+          requires_decryption: Boolean(options.encryptedPayload),
+          max_tokens_hint: 2000,
+          selection: 'core judgment summary',
+          intended_for: ['agent prompt'],
+        },
+        scenario: {
+          requires_decryption: false,
+          max_tokens_hint: 3000,
+          selection: 'scenario cards',
+          intended_for: ['situational loading'],
+        },
+        full: {
+          requires_decryption: Boolean(options.encryptedPayload),
+          max_tokens_hint: 12000,
+          selection: 'full manifest and payload',
+          intended_for: ['audit', 'migration'],
+        },
       },
     },
     authoring: {

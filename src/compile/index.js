@@ -12,6 +12,19 @@
 const cbor = require('cbor-x');
 const crypto = require('crypto');
 
+// Every type the Human Lock gate and compile pipeline treat as substantive
+// judgment content. MUST stay in sync with cards/index.js#CARD_TYPES and
+// with the `judgmentCards` / `hasJudgmentContent` filters below. A domain
+// whose only cards belong to types outside this set used to compile to an
+// empty payload and trip the "refusing to compile empty domain" gate even
+// when every card was properly Human Locked.
+const JUDGMENT_CARD_TYPES_FOR_COMPILE = new Set([
+  'axiom', 'ontology', 'misunderstanding', 'self_check',
+  'boundary', 'risk', 'aesthetic', 'scenario', 'case',
+  'stance', 'pattern', 'reasoning', 'framework',
+  'term', 'banned_term', 'evolution_stage',
+]);
+
 function uuidv7() {
   const ts = BigInt(Date.now());
   const rand = crypto.randomBytes(10);
@@ -117,6 +130,7 @@ function compileCore(cards, project) {
     .filter(c => c.type === 'axiom' && c.locked)
     .map(c => ({ id: c.id, ...c.fields, status: c.status, human_lock: c.human_lock }));
   const lockedOntology = cards.filter(c => c.type === 'ontology' && c.locked).map(c => ({ id: c.id, ...c.fields }));
+  const lockedFrameworks = cards.filter(c => c.type === 'framework' && c.locked).map(c => ({ id: c.id, ...c.fields }));
   const lockedBoundaries = cards.filter(c => c.type === 'boundary' && c.locked);
   const lockedRisks = cards.filter(c => c.type === 'risk' && c.locked).map(c => ({ id: c.id, ...c.fields }));
   const lockedStances = cards.filter(c => c.type === 'stance' && c.locked).map(c => ({ id: c.id, ...c.fields }));
@@ -125,7 +139,10 @@ function compileCore(cards, project) {
     meta: makeMeta(project),
     axioms: lockedAxioms,
     ontology: lockedOntology,
-    frameworks: [],
+    // Bug: this used to be hardcoded `[]`, dropping every framework card
+    // at compile. Locked framework cards are now collected the same way
+    // as ontology / stances and surface in the v1 payload.
+    frameworks: lockedFrameworks,
     stances: lockedStances,
     core_structure: [],
     boundaries: lockedBoundaries.map(c => ({
@@ -417,7 +434,13 @@ function compileManifest(project, files, identity = null) {
 function buildReports(project, files, identity, provenance, stats) {
   const cards = project.cards || [];
   const lockedCards = cards.filter(c => c.locked);
-  const judgmentCards = cards.filter(c => ['axiom', 'ontology', 'misunderstanding', 'self_check', 'boundary', 'risk', 'aesthetic', 'scenario', 'case'].includes(c.type));
+  // Judgment card types — every type the Human Lock gate accepts as
+  // substantive judgment content. Must stay in sync with the gate list
+  // below and with cards/index.js#CARD_TYPES. Bug: prior version omitted
+  // reasoning / framework / term / banned_term / evolution_stage, so a
+  // domain that contained only those types compiled to an empty judgment
+  // payload even when every card was Human Locked.
+  const judgmentCards = cards.filter(c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type));
   const tests = project.tests || [];
   const ratedTests = tests.filter(t => t.result);
   const qualityBadge = tests.filter(t => t.result === 'with_kdna_better').length >= 10 ? 'tested' : 'untested';
@@ -534,9 +557,7 @@ function compileDomain(project, options = {}) {
   // downstream Registry / Lab / Studio export never advertises an empty
   // judgment asset as "successfully compiled".
   const lockedCards = cards.filter(c => c.locked);
-  const hasJudgmentContent = lockedCards.some(c =>
-    ['axiom', 'misunderstanding', 'scenario', 'case', 'self_check', 'boundary', 'risk', 'ontology', 'aesthetic', 'stance', 'pattern'].includes(c.type)
-  );
+  const hasJudgmentContent = lockedCards.some(c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type));
   if (!hasJudgmentContent) {
     const err = new Error(
       'refusing to compile empty KDNA domain: no locked judgment content ' +
