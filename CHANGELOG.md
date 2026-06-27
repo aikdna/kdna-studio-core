@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.7.1 (2026-06-27)
+- Fix (PC-3): `exportRuntimeAsset` no longer injects the legacy
+  placeholder ("Load when the task matches applies_when on domain
+  axioms.") into `core.highest_question` as if it were a real
+  question. The placeholder is detected as "unset" and the
+  fallback chain runs: author's real `load_condition` (if they
+  overrode the default) → first axiom's `one_sentence` (a domain
+  with axioms has a question) → explicit
+  `(unset — author should set load_condition in project meta)`.
+  Consumers of the published asset can now distinguish "no question
+  set" from "domain about axiom loading". No code path changed for
+  assets that have a real `load_condition` set; only the
+  misleading default is gone. `compile/index.js` `makeMeta` default
+  is unchanged (schema requires non-empty), but now has a
+  comment pointing to the export-runtime detection.
+- CI: `package-lock.json` regenerated to resolve `@aikdna/kdna-core`
+  from registry at 0.15.2 (the latest with PC-2 boundary render
+  fix). The pre-1.7.1 lockfile was resolving kdna-studio-cli's
+  transitive `@aikdna/kdna-core` at 0.12.6, which broke the new
+  boundary test in `tests/runtime-export.test.js` on CI.
+
 ## 1.7.0 (2026-06-27)
 - B2: encrypt payload via scrypt profile when password is provided
   - `exportRuntimeAsset` encrypts `payload.kdnab` with `encryptProtectedEntryScrypt`
