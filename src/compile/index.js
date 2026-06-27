@@ -101,6 +101,13 @@ function makeMeta(project) {
     domain: project.name,
     created: project.created || new Date().toISOString().slice(0, 10),
     purpose: project.release?.description || `Domain judgment for ${project.name}`,
+    // Default load_condition. Schema requires this field to be a
+    // non-empty string (validated by kdna dev validate). The default
+    // is the legacy placeholder; export-runtime detects it and skips
+    // injecting it into core.highest_question, falling through to
+    // firstAxiom.one_sentence or the explicit "(unset)" marker (PC-3,
+    // 2026-06-27). To silence the warning, set this in your project
+    // meta to a real question.
     load_condition: 'Load when the task matches applies_when on domain axioms.',
   };
 }

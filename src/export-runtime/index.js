@@ -86,13 +86,25 @@ function buildPayload(compiled) {
   const evolution = parseJsonFile(compiled.files, 'KDNA_Evolution.json', { changelog: [], version_notes: [] });
 
   const firstAxiom = Array.isArray(core.axioms) ? core.axioms[0] : null;
+  // PC-3 (2026-06-27): the legacy default load_condition
+  // ("Load when the task matches applies_when on domain axioms.")
+  // is the project-bootstrap placeholder, not a real question. Treat
+  // it as "unset" so the published asset surfaces either the author's
+  // real load_condition (if they overrode the default), the first
+  // axiom's one_sentence as a derived question, or an explicit
+  // "(unset)" marker.
+  const LEGACY_DEFAULT_LOAD_CONDITION =
+    'Load when the task matches applies_when on domain axioms.';
+  const authorSet =
+    core.meta?.load_condition &&
+    core.meta.load_condition !== LEGACY_DEFAULT_LOAD_CONDITION
+      ? core.meta.load_condition
+      : null;
   return {
     profile: 'judgment-profile-v1',
     core: {
       highest_question:
-        core.meta?.load_condition ||
-        firstAxiom?.one_sentence ||
-        `What judgment should be loaded for ${core.meta?.domain || 'this domain'}?`,
+        authorSet || firstAxiom?.one_sentence || '(unset — author should set load_condition in project meta)',
       axioms: Array.isArray(core.axioms) ? core.axioms : [],
       boundaries: Array.isArray(core.boundaries) ? core.boundaries : [],
       stances: Array.isArray(core.stances) ? core.stances : [],
