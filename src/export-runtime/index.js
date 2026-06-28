@@ -73,11 +73,23 @@ function buildChecksums(files) {
 }
 
 function parseJsonFile(files, name, fallback = null) {
+  // Bug (#30): prior version assumed `files` was a non-null object.
+  // A caller that passed a partially-constructed `compiled` (e.g. a
+  // stub in a test, or a `compileDomain` call that returned a
+  // missing `files` map) would hit "Cannot read properties of
+  // undefined" instead of the intended fallback.
+  if (!files || typeof files !== 'object') return fallback;
   if (!files[name]) return fallback;
   return JSON.parse(files[name]);
 }
 
 function buildPayload(compiled) {
+  // Source-KDNA_* meta fields (version / domain / created / purpose /
+  // load_condition) are compile-time metadata. They live on the
+  // kdna.json manifest at export time and are not part of the runtime
+  // payload contract, which has its own top-level `meta` (built from
+  // project.release). Documenting that explicitly here so a future
+  // reader of #29 does not re-add an undocumented `core.meta` passthrough.
   const core = parseJsonFile(compiled.files, 'KDNA_Core.json', {});
   const patterns = parseJsonFile(compiled.files, 'KDNA_Patterns.json', {});
   const scenarios = parseJsonFile(compiled.files, 'KDNA_Scenarios.json', { scenes: [] });
@@ -116,6 +128,12 @@ function buildPayload(compiled) {
         authorSet || firstAxiom?.one_sentence || '(unset — author should set load_condition in project meta)',
       axioms: Array.isArray(core.axioms) ? core.axioms : [],
       ontology: Array.isArray(core.ontology) ? core.ontology : [],
+      // Bug (#27): prior version produced core_structure as an empty
+      // hard-coded array at compile time and never read it into the
+      // payload. Forward the source's core_structure if it has any
+      // entries; fall back to [] so legacy callers that authored no
+      // core_structure keep the prior behaviour.
+      core_structure: Array.isArray(core.core_structure) ? core.core_structure : [],
       frameworks: Array.isArray(core.frameworks) ? core.frameworks : [],
       boundaries: Array.isArray(core.boundaries) ? core.boundaries : [],
       stances: Array.isArray(core.stances) ? core.stances : [],
@@ -271,7 +289,28 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
 }
 
 function exportRuntimeAsset(project, options = {}) {
-  const compiled = options.compiled || compileDomain(project, options.compile || {});
+  // Bug #15 / #28: prior version never threaded the project's source
+  // content through to compileDomain, so compileEvolution received
+  // `sourceEvolution = null` and emit evolution.changelog /
+  // version_notes as []. Likewise compileReasoning had no
+  // sourceReasoning and compilePatterns had no sourcePatterns. The
+  // v1.7.2 release added the source-* handling inside the compile
+  // functions, but the v1 export path was the one that actually has
+  // access to the source — it has to forward it.
+  const compileOptions = {
+    ...(options.compile || {}),
+    source: options.source || project.source || {
+      // When the caller does not provide a source explicitly, fall
+      // back to project.source_manifest, which `cmdCreate --from-kdna`
+      // populates from the original kdna.json. This restores the
+      // legacy `from-kdna` round-trip without requiring every caller
+      // to plumb the source through.
+      patterns: project.source_patterns || null,
+      reasoning: project.source_reasoning || null,
+      evolution: project.source_evolution || null,
+    },
+  };
+  const compiled = options.compiled || compileDomain(project, compileOptions);
   const payload = buildPayload(compiled);
   let payloadBytes = json(payload);
   let encryptionMeta = null;

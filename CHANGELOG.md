@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.7.4 (2026-06-28)
+
+Phase 11 audit follow-up. Closes 5 issues filed against the
+kdna-studio-core repo (#15, #27, #28, #29, #30).
+
+- **#15 / #28** `exportRuntimeAsset` now threads the project's
+  source content (patterns / reasoning / evolution) through to
+  `compileDomain` via `options.source`. Prior version passed no
+  source, so `compileEvolution.sourceEvolution` was always `null`
+  and `evolution.changelog` / `version_notes` were always `[]`. The
+  v1 export path now round-trips the source's changelog and
+  version_notes when the project was created via `create --from-kdna`
+  (which now stores `source_patterns` / `source_reasoning` /
+  `source_evolution` on the project).
+- **#27** `buildPayload` now forwards `core.core_structure` to the
+  payload. The compile side already produced the field; the export
+  side silently dropped it.
+- **#29** Documented the intent of `buildPayload`: source-KDNA_*
+  meta fields (version / domain / created / purpose / load_condition)
+  are compile-time metadata, not part of the runtime payload
+  contract. The payload's own top-level `meta` is built from
+  `project.release` instead.
+- **#30** `parseJsonFile` now guards against a non-object `files`
+  argument. A caller that passes a partially-constructed `compiled`
+  gets the configured fallback rather than a TypeError.
+
 ## 1.7.3 (2026-06-28)
 
 Phase 10 audit follow-up. Closes 4 issues filed against the
