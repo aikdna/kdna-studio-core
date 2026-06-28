@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.7.6 (2026-06-28)
+
+Phase 12 audit follow-up. Closes the residual half of #145.
+
+- **#145** (residual) `buildPayload` now copies
+  `failure_risk` / `applies_when` / `does_not_apply_when` from each
+  misunderstanding card into the published `failure_modes` entry.
+  Prior version dropped these three fields even though
+  `compilePatterns` wrote them on the producer side, so a
+  misunderstanding card round-trip through `migrate --format v1`
+  lost them. End-to-end verified: a Studio project with
+  `failure_risk='risk!'`, `applies_when=['a1','a2']`,
+  `does_not_apply_when=['d1']` now round-trips all three fields
+  through `migrate` → `kdna load`.
+
+## 1.7.5 (2026-06-28)
+
+Phase 12 audit follow-up. Closes #66 (cross-repo).
+
+- **#66** `addEvidence` now writes to BOTH `project.evidence` and
+  `project.evidence_materials`. Prior version wrote only to
+  `project.evidence`, which made every consumer that read
+  `evidence_materials` (cmdFilter, cmdSourceClassify, cmdDistill)
+  see an empty list. The dual-write keeps the legacy `project.evidence`
+  field working (still used by the studio UI's evidence_room
+  display) and makes the canonical `evidence_materials` field stay
+  in sync.
+
 ## 1.7.4 (2026-06-28)
 
 Phase 11 audit follow-up. Closes 5 issues filed against the

@@ -21,10 +21,25 @@ function createEvidenceEntry(type, title, content, source = 'manual') {
 }
 
 function addEvidence(project, evidence) {
+  // Bug (#66): the prior version wrote to `project.evidence`, but every
+  // consumer (cmdFilter, cmdSourceClassify, cmdDistill) reads from
+  // `project.evidence_materials`. The mismatch meant imported evidence
+  // was effectively invisible: filter always returned empty, source
+  // classify always reported "no evidence", and AI distillation never
+  // had any source material to extract from.
+  //
+  // The fix writes to BOTH fields so legacy callers (the studio UI
+  // reads `project.evidence` for the evidence_room display) keep
+  // working and the canonical `evidence_materials` field stays in
+  // sync. New code should read `project.evidence_materials`; the
+  // `project.evidence` write is preserved for backward compatibility
+  // only and is documented as such.
   project.evidence = project.evidence || [];
   project.evidence.push(evidence);
+  project.evidence_materials = project.evidence_materials || [];
+  project.evidence_materials.push(evidence);
   if (project.stages?.evidence_room) {
-    project.stages.evidence_room.evidence_count = project.evidence.length;
+    project.stages.evidence_room.evidence_count = project.evidence_materials.length;
     project.stages.evidence_room.status = 'in_progress';
   }
   return project;

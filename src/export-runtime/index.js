@@ -163,6 +163,15 @@ function buildPayload(compiled) {
       // which never produced that field — so failure_modes was always
       // an empty array and any test/consumer that expected real entries
       // got nothing.)
+      //
+      // Bug (#145 follow-up): the prior map only copied id / mode /
+      // correct / key_distinction / why. The three field names that
+      // v1 round-trip actually cares about — failure_risk,
+      // applies_when, does_not_apply_when — were dropped here even
+      // though `compilePatterns` writes them on the producer side
+      // (compile/index.js). The fix forwards all three so a
+      // misunderstanding card round-trips end-to-end with every
+      // judgment field intact.
       failure_modes: Array.isArray(patterns.misunderstandings)
         ? patterns.misunderstandings.map((m) => ({
             id: m.id,
@@ -170,6 +179,9 @@ function buildPayload(compiled) {
             correct: m.correct,
             key_distinction: m.key_distinction,
             why: m.why,
+            failure_risk: m.failure_risk,
+            applies_when: m.applies_when,
+            does_not_apply_when: m.does_not_apply_when,
           }))
         : [],
       reasoning_chains: Array.isArray(reasoning.reasoning_chains) ? reasoning.reasoning_chains : [],
