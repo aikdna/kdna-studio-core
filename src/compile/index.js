@@ -300,6 +300,13 @@ function compileReasoning(cards, project, sourceReasoning = null) {
       one_sentence: ax.fields?.one_sentence || '',
       logic: [ax.fields?.full_statement || ''],
       so_what: ax.fields?.why || 'Agent judgment changes when this axiom is loaded.',
+      // Bug (#4 UX follow-up): the prior version did not mark
+      // synthesised reasoning_chains. Importers (cardsFromV1Payload)
+      // therefore imported every synthesised chain as if it were a
+      // user-authored reasoning card, doubling the count on
+      // round-trip. The fix tags these chains `source_authored: false`
+      // so importers can skip them.
+      source_authored: false,
     })),
   };
 }

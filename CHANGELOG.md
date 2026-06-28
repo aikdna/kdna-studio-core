@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.7 (2026-06-28)
+
+UX pass — fix the #4 entry-point inconsistency.
+
+- `compileReasoning` now tags axiom-synthesised reasoning chains
+  with `source_authored: false`. Importer (`cardsFromV1Payload`
+  in `@aikdna/kdna-studio-cli`) skips these on round-trip so a
+  project with 1 axiom + 1 misunderstanding + 1 self_check stays
+  at 3 cards after `migrate --format v1` + `create --from-kdna`,
+  not 4 or 5.
+
 ## 1.7.6 (2026-06-28)
 
 Phase 12 audit follow-up. Closes the residual half of #145.
