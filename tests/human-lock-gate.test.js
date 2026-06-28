@@ -81,13 +81,24 @@ test('checkHumanLockGate: risk card requires lock', () => {
   assert.ok(gate.issues.some(i => i.type === 'risk'));
 });
 
-test('checkHumanLockGate: non-judgment cards (self_check, case) do not block', () => {
-  const p = createProject('test');
-  p.cards.push(createCard('self_check', { question: 'Is this correct?' }));
-  p.cards.push(createCard('case', { title: 'Example case' }));
-  p.cards.push(createCard('scenario', { name: 'Test scenario' }));
-  const gate = checkHumanLockGate(p);
-  assert.equal(gate.blocked, false);
+test('checkHumanLockGate: all 16 judgment card types block when not locked', () => {
+  // Bug #23 follow-up: prior version only treated 4 types (axiom /
+  // boundary / risk / aesthetic) as judgment-bearing. The audit
+  // expanded the set to all 16 CARD_TYPES, so the gate now blocks
+  // self_check / case / scenario too. This test exercises one
+  // representative of each of the other 12 to lock that in.
+  const types = [
+    'axiom', 'boundary', 'risk', 'aesthetic',
+    'ontology', 'misunderstanding', 'self_check', 'scenario', 'case',
+    'stance', 'pattern', 'reasoning', 'framework',
+    'term', 'banned_term', 'evolution_stage',
+  ];
+  for (const t of types) {
+    const p = createProject(`test-${t}`);
+    p.cards.push(createCard(t, {}));
+    const gate = checkHumanLockGate(p);
+    assert.equal(gate.blocked, true, `expected type "${t}" to block the gate`);
+  }
 });
 
 // ─── exportProject Human Lock enforcement ────────────────────────────

@@ -266,6 +266,28 @@ function compileReasoning(cards, project, sourceReasoning = null) {
     };
   }
 
+  // Fallback order (bug #25): if no `reasoning` cards were authored,
+  // try the source's KDNA_Reasoning.json.reasoning_chains before
+  // synthesising from axioms. The `sourceReasoning` parameter was
+  // previously dead code — the function never read it, so the source's
+  // authored chains were dropped at compile even when no Studio
+  // reasoning card existed.
+  if (Array.isArray(sourceReasoning?.reasoning_chains) && sourceReasoning.reasoning_chains.length > 0) {
+    return {
+      meta: makeMeta(project),
+      reasoning_chains: sourceReasoning.reasoning_chains.map((c) => ({
+        id: c.id || `chain_source_${Math.random().toString(36).slice(2, 8)}`,
+        axiom: c.axiom,
+        one_sentence: c.one_sentence || c.conclusion || '',
+        so_what: c.concrete_action || c.so_what || '',
+        logic: Array.isArray(c.chain) ? c.chain : (c.logic || []),
+        principle: c.principle || c.name,
+        concrete_action: c.concrete_action,
+        source_authored: true,
+      })),
+    };
+  }
+
   // Fallback: synthesize 1 chain per axiom. Preserved for backward
   // compat with assets that have axioms but no explicit reasoning
   // cards (legacy 1.0.0 path).
@@ -330,14 +352,31 @@ function compileEvolution(cards, project, sourceEvolution = null) {
   return {
     meta: makeMeta(project),
     stages: stages.sort((a, b) => a.id.localeCompare(b.id)),
+    // Bug (#24): prior version hard-coded the evolution_layers /
+    // measurement arrays and discarded the source KDNA_Evolution's own
+    // evolution_layers / measurement / changelog / version_notes. The
+    // synthesised entries are still emitted as a baseline; the source
+    // entries (when present) are preserved alongside, marked
+    // `source_authored: true` so downstream consumers can tell them
+    // apart from the synthesised ones.
     evolution_layers: [
-      { id: 'layer_1', name: 'Foundation', capability: 'Core axioms and patterns established.', from_stage: stages[0]?.id || 'none', to_stage: stages[stages.length - 1]?.id || 'none' },
+      { id: 'layer_1', name: 'Foundation', capability: 'Core axioms and patterns established.', from_stage: stages[0]?.id || 'none', to_stage: stages[stages.length - 1]?.id || 'none', source_authored: false },
+      ...(Array.isArray(sourceEvolution?.evolution_layers)
+        ? sourceEvolution.evolution_layers.map((l) => ({ ...l, source_authored: true }))
+        : []),
     ],
     measurement: [
-      { id: 'meas_axioms', what: 'locked_axioms', how: 'Count of locked axiom cards', threshold: `${lockedCards.filter(c => c.type === 'axiom').length}` },
-      { id: 'meas_misunderstandings', what: 'locked_misunderstandings', how: 'Count of locked misunderstanding cards', threshold: `${lockedCards.filter(c => c.type === 'misunderstanding').length}` },
-      { id: 'meas_self_checks', what: 'self_checks', how: 'Count of locked self-check cards', threshold: `${lockedCards.filter(c => c.type === 'self_check').length}` },
+      { id: 'meas_axioms', what: 'locked_axioms', how: 'Count of locked axiom cards', threshold: `${lockedCards.filter(c => c.type === 'axiom').length}`, source_authored: false },
+      { id: 'meas_misunderstandings', what: 'locked_misunderstandings', how: 'Count of locked misunderstanding cards', threshold: `${lockedCards.filter(c => c.type === 'misunderstanding').length}`, source_authored: false },
+      { id: 'meas_self_checks', what: 'self_checks', how: 'Count of locked self-check cards', threshold: `${lockedCards.filter(c => c.type === 'self_check').length}`, source_authored: false },
+      ...(Array.isArray(sourceEvolution?.measurement)
+        ? sourceEvolution.measurement.map((m) => ({ ...m, source_authored: true }))
+        : []),
     ],
+    // New: forward the source's changelog + version_notes so the
+    // published asset carries the author's own history.
+    changelog: Array.isArray(sourceEvolution?.changelog) ? sourceEvolution.changelog : [],
+    version_notes: Array.isArray(sourceEvolution?.version_notes) ? sourceEvolution.version_notes : [],
   };
 }
 
@@ -559,9 +598,14 @@ function compileDomain(project, options = {}) {
   const lockedCards = cards.filter(c => c.locked);
   const hasJudgmentContent = lockedCards.some(c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type));
   if (!hasJudgmentContent) {
+    // Bug (#26): the error message used to hard-code 9 card types
+    // (axiom / misunderstanding / scenario / case / self_check /
+    // boundary / risk / ontology / aesthetic) and was missing the 7
+    // types added since the 1.0 launch. Derive the list from the
+    // single source of truth so the message can never drift again.
     const err = new Error(
       'refusing to compile empty KDNA domain: no locked judgment content ' +
-      `(axiom / misunderstanding / scenario / case / self_check / boundary / risk / ontology / aesthetic). ` +
+      `(${Array.from(JUDGMENT_CARD_TYPES_FOR_COMPILE).join(' / ')}). ` +
       `Found ${lockedCards.length} locked card(s) and ${cards.length} total card(s).`
     );
     err.code = 'EMPTY_DOMAIN';

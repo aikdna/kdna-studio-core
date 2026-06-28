@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.7.3 (2026-06-28)
+
+Phase 10 audit follow-up. Closes 4 issues filed against the
+kdna-studio-core repo (#23, #24, #25, #26).
+
+- **#23 Human Lock gate now covers all 16 judgment card types.**
+  `JUDGMENT_CARD_TYPES` was expanded from 4 types to all 16 entries
+  in `CARD_TYPES`. The 12 previously-uncovered types (ontology,
+  misunderstanding, self_check, scenario, case, stance, pattern,
+  reasoning, framework, term, banned_term, evolution_stage) now
+  trigger the gate on export the same way axioms do.
+- **#24 `compileEvolution` preserves the source's evolution_layers
+  / measurement / changelog / version_notes.** Prior version
+  hard-coded the synthesised arrays and dropped the source's own
+  entries; now they pass through marked `source_authored: true`.
+- **#25 `compileReasoning` honours `sourceReasoning.reasoning_chains`
+  as a fallback.** The parameter was previously dead code — a
+  function never read it. The new code path activates when no
+  `reasoning` Studio card was authored but the source's
+  KDNA_Reasoning.json carries chains, so the source's identity
+  reaches the structured payload.
+- **#26 The "refusing to compile empty domain" error message
+  derives the type list from `JUDGMENT_CARD_TYPES_FOR_COMPILE`
+  instead of hard-coding 9 stale names.**
+
+Test update: `tests/human-lock-gate.test.js` was rewritten to
+exercise all 16 types as judgment-bearing.
+
 ## 1.7.2 (2026-06-28)
 
 Audit follow-ups (2026-06-28 round-trip verification). This release is

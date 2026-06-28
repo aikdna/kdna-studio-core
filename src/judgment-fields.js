@@ -3,7 +3,20 @@
  * Used by both cards/index.js and project/index.js to avoid circular deps.
  */
 
-const JUDGMENT_CARD_TYPES = new Set(['axiom', 'boundary', 'risk', 'aesthetic']);
+// All card types the Human Lock gate treats as substantive judgment
+// content. Expanding this set was bug #23: prior version only covered
+// 4 of 16 types (axiom / boundary / risk / aesthetic), so the other
+// 12 could be exported un-locked.
+//
+// Anything in this set is held to the same lock + checked-fields
+// requirements before export. Anything outside it (today: none — every
+// CARD_TYPES entry is judgment-bearing) would be allowed through.
+const JUDGMENT_CARD_TYPES = new Set([
+  'axiom', 'boundary', 'risk', 'aesthetic',
+  'ontology', 'misunderstanding', 'self_check', 'scenario', 'case',
+  'stance', 'pattern', 'reasoning', 'framework',
+  'term', 'banned_term', 'evolution_stage',
+]);
 
 // All judgment-field names that may appear on any judgment card type.
 // The fingerprint is computed across all of these so that a Human Lock
