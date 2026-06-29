@@ -129,11 +129,11 @@ function compileCore(cards, project) {
   const lockedAxioms = cards
     .filter(c => c.type === 'axiom' && c.locked)
     .map(c => ({ id: c.id, ...c.fields, status: c.status, human_lock: c.human_lock }));
-  const lockedOntology = cards.filter(c => c.type === 'ontology' && c.locked).map(c => ({ id: c.id, ...c.fields }));
-  const lockedFrameworks = cards.filter(c => c.type === 'framework' && c.locked).map(c => ({ id: c.id, ...c.fields }));
+  const lockedOntology = cards.filter(c => c.type === 'ontology' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
+  const lockedFrameworks = cards.filter(c => c.type === 'framework' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
   const lockedBoundaries = cards.filter(c => c.type === 'boundary' && c.locked);
-  const lockedRisks = cards.filter(c => c.type === 'risk' && c.locked).map(c => ({ id: c.id, ...c.fields }));
-  const lockedStances = cards.filter(c => c.type === 'stance' && c.locked).map(c => ({ id: c.id, ...c.fields }));
+  const lockedRisks = cards.filter(c => c.type === 'risk' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
+  const lockedStances = cards.filter(c => c.type === 'stance' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
 
   return {
     meta: makeMeta(project),
@@ -150,6 +150,7 @@ function compileCore(cards, project) {
       scope: c.fields?.scope || '',
       out_of_scope: c.fields?.out_of_scope || '',
       acceptable_exceptions: c.fields?.acceptable_exceptions || [],
+      human_lock: c.human_lock,
     })),
     risks: lockedRisks,
   };
