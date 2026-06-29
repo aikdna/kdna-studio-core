@@ -24,8 +24,8 @@
     "validate"
   ],
   "dependencies": {
-    "@aikdna/kdna-cli": "^0.26.10",
-    "@aikdna/kdna-core": "^0.15.5",
+    "@aikdna/kdna-cli": "^0.28.30",
+    "@aikdna/kdna-core": "^0.15.9",
     "cbor-x": "^1.6.4"
   },
   "engines": {
