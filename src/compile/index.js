@@ -25,6 +25,12 @@ const JUDGMENT_CARD_TYPES_FOR_COMPILE = new Set([
   'term', 'banned_term', 'evolution_stage',
 ]);
 
+function stringList(value) {
+  if (Array.isArray(value)) return value.filter((item) => item !== undefined && item !== null && item !== '');
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return [];
+}
+
 function uuidv7() {
   const ts = BigInt(Date.now());
   const rand = crypto.randomBytes(10);
@@ -128,7 +134,14 @@ function makeMeta(project) {
 function compileCore(cards, project) {
   const lockedAxioms = cards
     .filter(c => c.type === 'axiom' && c.locked)
-    .map(c => ({ id: c.id, ...c.fields, status: c.status, human_lock: c.human_lock }));
+    .map(c => ({
+      id: c.id,
+      ...c.fields,
+      applies_when: stringList(c.fields?.applies_when),
+      does_not_apply_when: stringList(c.fields?.does_not_apply_when),
+      status: c.status,
+      human_lock: c.human_lock,
+    }));
   const lockedOntology = cards.filter(c => c.type === 'ontology' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
   const lockedFrameworks = cards.filter(c => c.type === 'framework' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
   const lockedBoundaries = cards.filter(c => c.type === 'boundary' && c.locked);
@@ -149,7 +162,7 @@ function compileCore(cards, project) {
       id: c.id,
       scope: c.fields?.scope || '',
       out_of_scope: c.fields?.out_of_scope || '',
-      acceptable_exceptions: c.fields?.acceptable_exceptions || [],
+      acceptable_exceptions: stringList(c.fields?.acceptable_exceptions),
       human_lock: c.human_lock,
     })),
     risks: lockedRisks,
@@ -164,8 +177,8 @@ function compilePatterns(cards, project) {
     key_distinction: c.fields?.key_distinction || '',
     why: c.fields?.why || `What bad judgment results from believing "${(c.fields?.wrong || '').slice(0, 40)}"`,
     failure_risk: c.fields?.failure_risk || 'No specific failure risk declared',
-    applies_when: c.fields?.applies_when || [],
-    does_not_apply_when: c.fields?.does_not_apply_when || [],
+    applies_when: stringList(c.fields?.applies_when),
+    does_not_apply_when: stringList(c.fields?.does_not_apply_when),
   }));
   const lockedSelfChecks = cards.filter(c => c.type === 'self_check' && c.locked).map(c => c.fields?.question || '');
   const lockedAesthetics = cards.filter(c => c.type === 'aesthetic' && c.locked).map(c => ({ id: c.id, ...c.fields }));
