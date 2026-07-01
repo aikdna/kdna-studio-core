@@ -325,6 +325,26 @@ describe('Full Compile', () => {
     assert.equal(auditStages.length, 1, 'audit-log stage still emitted (AX-001 lock)');
   });
 
+  test('Fix 3: Evolution preserves locked evolution_stage cards without source.evolution', () => {
+    const project = createProject('test');
+    project.cards = [
+      makeLockedCard('axiom', { one_sentence: 'Evolution test.', full_statement: 'FS.', why: 'B.', applies_when: ['x'], does_not_apply_when: ['y'], failure_risk: 'r' }, 'AX-001'),
+      makeLockedCard('evolution_stage', {
+        name: 'Source Imported',
+        level: 2,
+        description: 'A source-authored stage imported as a Studio card.',
+      }, 'stage_source_imported'),
+    ];
+    const result = compileDomain(project);
+    const evo = JSON.parse(result.files['KDNA_Evolution.json']);
+    const sourceStage = evo.stages.find(s => s.id === 'stage_source_imported');
+    assert.ok(sourceStage, 'locked evolution_stage card is preserved');
+    assert.equal(sourceStage.source_authored, true, 'locked evolution_stage remains source-authored');
+    assert.equal(sourceStage.name, 'Source Imported');
+    assert.equal(sourceStage.level, 2, 'numeric level preserved');
+    assert.equal(sourceStage.description, 'A source-authored stage imported as a Studio card.');
+  });
+
   // ─── Fix 3: backward compat — no source data → audit-log only
   test('Fix 3: Evolution falls back to audit-log-only when no source provided', () => {
     const project = createProject('test');
