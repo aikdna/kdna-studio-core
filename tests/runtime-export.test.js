@@ -89,6 +89,21 @@ test('runtime export emits only canonical runtime entries', () => {
   assert.ok(!('KDNA_Patterns.json' in exported.files));
 });
 
+test('runtime export normalizes string routing fields into arrays', () => {
+  const project = createRuntimeProject();
+  project.cards[0].fields.applies_when = 'Exporting a runtime .kdna asset';
+  project.cards[0].fields.does_not_apply_when = 'Editing an internal Studio project';
+
+  const exported = exportRuntimeAsset(project, {
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000324',
+    timestamp: '2026-06-19T00:00:00.000Z',
+  });
+
+  const [axiom] = exported.payload.core.axioms;
+  assert.deepEqual(axiom.applies_when, ['Exporting a runtime .kdna asset']);
+  assert.deepEqual(axiom.does_not_apply_when, ['Editing an internal Studio project']);
+});
+
 test('runtime export validates with KDNA Core v1 and plans ready when planLoad is available', () => {
   const project = createRuntimeProject();
   const exported = exportRuntimeAsset(project, {

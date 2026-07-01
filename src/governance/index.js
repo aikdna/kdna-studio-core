@@ -16,6 +16,12 @@ const HIGH_RISK_KEYWORDS = {
   decision: ['hiring', 'firing', 'termination', 'employment decision', 'performance review'],
 };
 
+function stringList(value) {
+  if (Array.isArray(value)) return value.filter((item) => item !== undefined && item !== null && item !== '');
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return [];
+}
+
 function computeRiskLevel(project) {
   const cards = project.cards || [];
 
@@ -28,7 +34,7 @@ function computeRiskLevel(project) {
     const fields = card.fields || {};
     const cardText = [fields.one_sentence, fields.full_statement, fields.wrong, fields.correct, fields.question,
       fields.essence, fields.scope, fields.out_of_scope,
-      ...(fields.applies_when || []), ...(fields.does_not_apply_when || [])]
+      ...stringList(fields.applies_when), ...stringList(fields.does_not_apply_when)]
       .filter(Boolean).join(' ').toLowerCase();
 
     for (const [category, keywords] of Object.entries(HIGH_RISK_KEYWORDS)) {
