@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Preserve locked `evolution_stage` cards in `KDNA_Evolution.json` as
+  `source_authored: true` stages. This prevents
+  `create --from-folder` → `migrate --format v1` → `create --from-kdna`
+  from silently dropping source-authored evolution stages.
+
 ## 1.7.8 (2026-07-01)
 
 Normalize runtime routing fields — stringList helper ensures applies_when / does_not_apply_when / acceptable_exceptions always emit as arrays from Studio card fields (#34).

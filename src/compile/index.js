@@ -341,16 +341,36 @@ function compileEvolution(cards, project, sourceEvolution = null) {
   // them to the audit-log-derived stages (preserving the source's
   // authored identity). The audit-log stages are then layered on
   // top (so they still show what was actually locked and when).
-  const sourceStages = Array.isArray(sourceEvolution?.stages)
-    ? sourceEvolution.stages.map(s => ({
-        id: s.id || `stage_source_${s.name || 'unnamed'}`,
-        name: s.name || '',
-        level: s.level != null ? s.level : '',
-        description: s.description || '',
-        // Mark these as source-authored for downstream consumers.
-        source_authored: true,
-      }))
-    : [];
+  const sourceStages = [];
+  const seenSourceStageIds = new Set();
+  const pushSourceStage = (stage, fallbackId = null) => {
+    const source = stage && typeof stage === 'object' ? stage : {};
+    const id = source.id || fallbackId || `stage_source_${source.name || 'unnamed'}`;
+    if (seenSourceStageIds.has(id)) return;
+    seenSourceStageIds.add(id);
+    sourceStages.push({
+      ...source,
+      id,
+      name: source.name || source.title || id,
+      level: source.level != null ? source.level : '',
+      description: source.description || '',
+      // Mark these as source-authored for downstream consumers.
+      source_authored: true,
+    });
+  };
+
+  if (Array.isArray(sourceEvolution?.stages)) {
+    for (const stage of sourceEvolution.stages) pushSourceStage(stage);
+  }
+
+  for (const card of lockedCards) {
+    if (card.type === 'evolution_stage') {
+      // Source-folder and from-kdna imports materialise KDNA_Evolution
+      // stages as locked cards. Preserve those cards in the next runtime
+      // payload; otherwise create -> migrate -> create silently loses them.
+      pushSourceStage(card.fields, card.id);
+    }
+  }
 
   const stages = [...sourceStages];
   const seenAxioms = new Set();
