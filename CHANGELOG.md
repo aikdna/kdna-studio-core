@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.7.9 (2026-07-01)
 
 - Preserve locked `evolution_stage` cards in `KDNA_Evolution.json` as
   `source_authored: true` stages. This prevents
