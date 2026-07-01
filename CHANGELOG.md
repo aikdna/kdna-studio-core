@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.8 (2026-07-01)
+
+Normalize runtime routing fields — stringList helper ensures applies_when / does_not_apply_when / acceptable_exceptions always emit as arrays from Studio card fields (#34).
+
+
 ## 1.7.7 (2026-06-28)
 
 UX pass — fix the #4 entry-point inconsistency.
