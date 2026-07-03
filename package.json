@@ -16,6 +16,10 @@
     "type": "git",
     "url": "git+https://github.com/aikdna/kdna-studio-core.git"
   },
+  "bugs": {
+    "url": "https://github.com/aikdna/kdna-studio-core/issues"
+  },
+  "homepage": "https://github.com/aikdna/kdna-studio-core#readme",
   "keywords": [
     "kdna",
     "domain-judgment",
