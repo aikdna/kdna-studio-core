@@ -7,6 +7,8 @@
   "files": [
     "src/",
     "schemas/",
+    "LICENSE",
+    "NOTICE",
     "README.md"
   ],
   "license": "Apache-2.0",
@@ -14,6 +16,10 @@
     "type": "git",
     "url": "git+https://github.com/aikdna/kdna-studio-core.git"
   },
+  "bugs": {
+    "url": "https://github.com/aikdna/kdna-studio-core/issues"
+  },
+  "homepage": "https://github.com/aikdna/kdna-studio-core#readme",
   "keywords": [
     "kdna",
     "domain-judgment",
