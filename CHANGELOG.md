@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.10 (2026-07-03)
+
+- Add NOTICE file for Apache 2.0 attribution
+- Expand SECURITY.md with private vulnerability reporting, supported versions, and governance link
+- Add bugs/homepage metadata to package.json
+- Include LICENSE and NOTICE in published tarball
+
+
 ## 1.7.9 (2026-07-01)
 
 - Preserve locked `evolution_stage` cards in `KDNA_Evolution.json` as
