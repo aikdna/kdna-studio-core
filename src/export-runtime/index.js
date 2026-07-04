@@ -7,13 +7,35 @@ function json(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+function isLowerSlugChar(char) {
+  const code = char.charCodeAt(0);
+  return (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || char === '_';
+}
+
+function isLowerAsciiLetter(char) {
+  const code = char.charCodeAt(0);
+  return code >= 97 && code <= 122;
+}
+
+function normalizeDomainIdBase(base) {
+  let normalized = '';
+  let previousUnderscore = false;
+  for (const char of String(base).toLowerCase()) {
+    if (isLowerSlugChar(char)) {
+      normalized += char;
+      previousUnderscore = char === '_';
+    } else if (normalized && !previousUnderscore) {
+      normalized += '_';
+      previousUnderscore = true;
+    }
+  }
+  return normalized.endsWith('_') ? normalized.slice(0, -1) : normalized;
+}
+
 function domainIdFromName(name = 'domain') {
   const base = String(name).includes('/') ? String(name).split('/').pop() : String(name);
-  const normalized = base
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  return /^[a-z]/.test(normalized) ? normalized : `domain_${normalized || 'untitled'}`;
+  const normalized = normalizeDomainIdBase(base);
+  return isLowerAsciiLetter(normalized[0] || '') ? normalized : `domain_${normalized || 'untitled'}`;
 }
 
 function canonicalAccess(value) {
