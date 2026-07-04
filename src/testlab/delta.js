@@ -14,10 +14,16 @@
 
 function parseCompareOutput(diffText) {
   const axes = {};
-  const matches = diffText.matchAll(/^(\d)\.\s*(\w+(?:\s+\w+)*):\s*(.+)$/gim);
-  for (const m of matches) {
-    const name = m[2].toLowerCase().replace(/\s+/g, '_');
-    const value = m[3].trim();
+  const text = String(diffText || '');
+  const lines = splitLines(text);
+  for (const line of lines) {
+    const dotIndex = line.indexOf('.');
+    const colonIndex = line.indexOf(':');
+    if (dotIndex !== 1 || colonIndex <= dotIndex + 1 || !isDigit(line[0])) continue;
+    const rawName = line.slice(dotIndex + 1, colonIndex).trim();
+    const value = line.slice(colonIndex + 1).trim();
+    if (!rawName || !value) continue;
+    const name = wordsFromWhitespace(rawName.toLowerCase()).join('_');
     if (value.toUpperCase() !== 'SAME') {
       axes[name] = value;
     }
@@ -25,10 +31,13 @@ function parseCompareOutput(diffText) {
 
   // Legacy format: "<axis>: <value>"
   if (Object.keys(axes).length === 0) {
-    const legacyMatch = diffText.matchAll(/^(\w+):\s*(.+)$/gim);
-    for (const m of legacyMatch) {
-      const name = m[1].toLowerCase();
-      const value = m[2].trim();
+    for (const line of lines) {
+      const colonIndex = line.indexOf(':');
+      if (colonIndex <= 0) continue;
+      const rawName = line.slice(0, colonIndex).trim();
+      const value = line.slice(colonIndex + 1).trim();
+      if (!isWordName(rawName) || !value) continue;
+      const name = rawName.toLowerCase();
       if (name === 'verdict') continue;
       if (value.toUpperCase() !== 'SAME') {
         axes[name] = value;
@@ -36,10 +45,60 @@ function parseCompareOutput(diffText) {
     }
   }
 
-  const verdictMatch = diffText.match(/VERDICT:\s*(.+)/i);
-  const verdict = verdictMatch ? verdictMatch[1].trim().toLowerCase() : 'trajectory_unchanged';
+  const verdict = parseVerdict(lines);
 
   return { axes, verdict };
+}
+
+function splitLines(text) {
+  return text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+}
+
+function isDigit(char) {
+  if (!char) return false;
+  const code = char.charCodeAt(0);
+  return code >= 48 && code <= 57;
+}
+
+function isWordName(value) {
+  if (!value) return false;
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    const isUpper = code >= 65 && code <= 90;
+    const isLower = code >= 97 && code <= 122;
+    const isNumber = code >= 48 && code <= 57;
+    if (!isUpper && !isLower && !isNumber && char !== '_') return false;
+  }
+  return true;
+}
+
+function wordsFromWhitespace(value) {
+  const words = [];
+  let current = '';
+  for (const char of value) {
+    if (char.trim() === '') {
+      if (current) {
+        words.push(current);
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+  if (current) words.push(current);
+  return words;
+}
+
+function parseVerdict(lines) {
+  for (const line of lines) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex <= 0) continue;
+    const name = line.slice(0, colonIndex).trim();
+    if (name.toLowerCase() !== 'verdict') continue;
+    const value = line.slice(colonIndex + 1).trim();
+    if (value) return value.toLowerCase();
+  }
+  return 'trajectory_unchanged';
 }
 
 function scoreDelta(axes) {
