@@ -30,7 +30,7 @@
     "validate"
   ],
   "dependencies": {
-    "@aikdna/kdna-cli": "^0.28.30",
+    "@aikdna/kdna-cli": "^0.28.35",
     "@aikdna/kdna-core": "^0.15.9",
     "cbor-x": "^1.6.4"
   },
