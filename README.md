@@ -75,7 +75,11 @@ Declare Domain + Scope → Import Evidence → Classify Relevance → Distill Ca
   → Scope Gate → Review → Promote to Cards → Provenance → Compile → Export
 ```
 
-A single `.kdna` asset should stay scoped to one domain and loading condition. If a task needs several judgment domains, create multiple domain assets and compose them through a KDNA Cluster rather than making one broad file.
+A single `.kdna` asset should stay scoped to one domain and loading condition.
+If a task needs several judgment domains, create multiple domain assets and
+compose them through an explicit consumption policy rather than making one
+broad file. Route cards and consumer indexes are separate, disabled-by-default
+sidecars; they do not belong in the runtime asset export.
 
 ## Install
 
