@@ -106,6 +106,8 @@ function compareAdapter(domainName, input, options = {}) {
   };
 }
 
+const comparison = require('./comparison');
+
 module.exports = {
   createTestCase,
   recordHumanRating,
@@ -113,4 +115,5 @@ module.exports = {
   generateTestSummary,
   exportEvals,
   compareAdapter,
+  ...comparison,
 };
