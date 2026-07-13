@@ -36,6 +36,7 @@ const feynman = require('./cards/feynman');
 const contradiction = require('./quality/contradiction');
 const validateCards = require('./quality/validate-cards');
 const delta = require('./testlab/delta');
+const granularity = require('./granularity');
 
 module.exports = {
   // Stable
@@ -59,6 +60,7 @@ module.exports = {
   contradiction,
   validateCards,
   versioning,
+  granularity,
 
   // Internal
   packaging,

@@ -152,4 +152,6 @@ function markBreakingChange(diff) {
   };
 }
 
-module.exports = { diffProjects, recommendVersionBump, generateChangelog, bumpVersion, markBreakingChange };
+const lifecycle = require('./lifecycle');
+
+module.exports = { diffProjects, recommendVersionBump, generateChangelog, bumpVersion, markBreakingChange, lifecycle };

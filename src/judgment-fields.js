@@ -32,6 +32,9 @@ const JUDGMENT_FIELDS = new Set([
   'out_of_scope', 'applies_when', 'does_not_apply_when', 'failure_risk',
   'acceptable_exceptions', 'trigger_signal', 'when_to_use', 'steps',
   'name', 'description', 'mitigation',
+  // Phase 3: explicit target and consequence fields
+  'target_user', 'target_decision', 'decision_consequence',
+  'evidence_prerequisite', 'insufficient_evidence_action',
 ]);
 
 const crypto = require('crypto');

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.11 (2026-07-13)
+
+- Emit the single current KDNA runtime contract: CBOR payloads and CBOR
+  password envelopes with `payload.encoding: "cbor"`.
+- Replace the versioned runtime MIME constant with the unversioned public
+  `MIMETYPE` export.
+- Align runtime conformance metadata and dependencies with KDNA Core 0.15.12
+  and KDNA CLI 0.30.0.
+- Update public documentation to distinguish authoring compile artifacts from
+  the canonical runtime export.
+
 ## 1.7.10 (2026-07-03)
 
 - Add NOTICE file for Apache 2.0 attribution

@@ -176,4 +176,6 @@ function buildResult(grade, blocking, warnings, project, detail = {}) {
 
 function getBlockingIssues(project) { return computeReadiness(project).blocking; }
 
-module.exports = { computeReadiness, getBlockingIssues };
+const { checkMinimumCaseSet, formatCaseChecklist } = require('./minimum-cases');
+
+module.exports = { computeReadiness, getBlockingIssues, checkMinimumCaseSet, formatCaseChecklist };
