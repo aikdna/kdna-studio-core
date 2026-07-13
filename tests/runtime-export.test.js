@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const cbor = require('cbor-x');
 
 const { createProject } = require('../src/project');
 const { createCard, lockCard, transitionCard } = require('../src/cards');
@@ -52,15 +53,6 @@ function writeFiles(dir, files) {
   }
 }
 
-function tryLocalPlanLoad() {
-  const localPath = path.resolve(__dirname, '..', '..', 'kdna', 'packages', 'kdna-core', 'src', 'v1');
-  try {
-    return require(localPath).planLoad;
-  } catch {
-    return null;
-  }
-}
-
 test('runtime export emits only canonical runtime entries', () => {
   const project = createRuntimeProject();
   const exported = exportRuntimeAsset(project, {
@@ -77,16 +69,17 @@ test('runtime export emits only canonical runtime entries', () => {
   assert.equal(exported.files.mimetype, 'application/vnd.kdna.asset');
   assert.equal(exported.manifest.access, 'public');
   assert.equal(exported.manifest.payload.path, 'payload.kdnab');
-  assert.equal(exported.manifest.payload.encoding, 'json');
+  assert.equal(exported.manifest.payload.encoding, 'cbor');
   assert.equal(exported.manifest.payload.encrypted, false);
   assert.equal(exported.manifest.authoring.conformance.passed, true);
-  assert.equal(exported.manifest.authoring.conformance.spec_version, '1.0');
+  assert.equal(exported.manifest.authoring.conformance.kdna_version, '1.0');
   assert.equal(
     exported.manifest.authoring.conformance.validator,
     '@aikdna/kdna-studio-core/export-runtime',
   );
   assert.ok(!('KDNA_Core.json' in exported.files));
   assert.ok(!('KDNA_Patterns.json' in exported.files));
+  assert.equal(cbor.decode(exported.files['payload.kdnab']).profile, 'judgment-profile-v1');
 });
 
 test('runtime export normalizes string routing fields into arrays', () => {
@@ -104,7 +97,7 @@ test('runtime export normalizes string routing fields into arrays', () => {
   assert.deepEqual(axiom.does_not_apply_when, ['Editing an internal Studio project']);
 });
 
-test('runtime export validates with KDNA Core v1 and plans ready when planLoad is available', () => {
+test('runtime export validates with KDNA Core and plans ready when planLoad is available', () => {
   const project = createRuntimeProject();
   const exported = exportRuntimeAsset(project, {
     asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000322',
@@ -117,14 +110,11 @@ test('runtime export validates with KDNA Core v1 and plans ready when planLoad i
     const validation = kdnaCore.validate(dir);
     assert.equal(validation.overall_valid, true, validation.problems.join('\n'));
 
-    const planLoad = tryLocalPlanLoad();
-    if (typeof planLoad === 'function') {
-      const plan = planLoad(dir);
-      assert.equal(plan.access, 'public');
-      assert.equal(plan.state, 'ready');
-      assert.equal(plan.required_action, 'load');
-      assert.equal(plan.can_load_now, true);
-    }
+    const plan = kdnaCore.planLoad(dir);
+    assert.equal(plan.access, 'public');
+    assert.equal(plan.state, 'ready');
+    assert.equal(plan.required_action, 'load');
+    assert.equal(plan.can_load_now, true);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -146,14 +136,41 @@ test('runtime export maps protected legacy access to licensed receipt profile', 
     const validation = kdnaCore.validate(dir);
     assert.equal(validation.overall_valid, true, validation.problems.join('\n'));
 
-    const planLoad = tryLocalPlanLoad();
-    if (typeof planLoad === 'function') {
-      const plan = planLoad(dir);
-      assert.equal(plan.access, 'licensed');
-      assert.equal(plan.entitlement_profile, 'local_receipt');
-      assert.equal(plan.state, 'needs_license');
-      assert.equal(plan.required_action, 'install_receipt');
-    }
+    const plan = kdnaCore.planLoad(dir);
+    assert.equal(plan.access, 'licensed');
+    assert.equal(plan.entitlement_profile, 'local_receipt');
+    assert.equal(plan.state, 'needs_license');
+    assert.equal(plan.required_action, 'install_receipt');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('password export uses a CBOR envelope and loads only with the password', () => {
+  const project = createRuntimeProject();
+  const password = 'studio-runtime-password';
+  const exported = exportRuntimeAsset(project, {
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000325',
+    timestamp: '2026-07-13T00:00:00.000Z',
+    password,
+  });
+
+  assert.equal(exported.manifest.payload.encoding, 'cbor');
+  assert.equal(exported.manifest.payload.encrypted, true);
+  assert.equal(exported.manifest.access, 'licensed');
+  assert.equal(typeof cbor.decode(exported.files['payload.kdnab']), 'object');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-encrypted-'));
+  try {
+    writeFiles(dir, exported.files);
+    assert.equal(kdnaCore.validate(dir).overall_valid, true);
+    assert.equal(kdnaCore.planLoad(dir).state, 'needs_password');
+    assert.throws(
+      () => kdnaCore.load(dir, { password: 'wrong-password' }),
+      /decrypt|integrity|KDNA_DECRYPT_FAILED/i,
+    );
+    const capsule = kdnaCore.load(dir, { password, profile: 'compact', as: 'json' });
+    assert.equal(capsule.type, 'kdna.context.capsule');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

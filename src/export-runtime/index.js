@@ -1,7 +1,8 @@
 const crypto = require('crypto');
+const cbor = require('cbor-x');
 const { compileDomain } = require('../compile');
 
-const MIMETYPE_V1 = 'application/vnd.kdna.asset';
+const MIMETYPE = 'application/vnd.kdna.asset';
 
 function json(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
@@ -246,7 +247,7 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     },
     payload: {
       path: 'payload.kdnab',
-      encoding: 'json',
+      encoding: 'cbor',
       encrypted: !!options.encryptedPayload,
       digest: `sha256:${sha256Hex(payloadBytes)}`,
     },
@@ -296,7 +297,7 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
       compiler_version: packageVersion,
       conformance: {
         passed: true,
-        spec_version: '1.0',
+        kdna_version: '1.0',
         validator: '@aikdna/kdna-studio-core/export-runtime',
         validator_version: packageVersion,
         checked_at: now,
@@ -329,7 +330,7 @@ function exportRuntimeAsset(project, options = {}) {
   // version_notes as []. Likewise compileReasoning had no
   // sourceReasoning and compilePatterns had no sourcePatterns. The
   // v1.7.2 release added the source-* handling inside the compile
-  // functions, but the v1 export path was the one that actually has
+  // functions, but the runtime export path was the one that actually has
   // access to the source — it has to forward it.
   const compileOptions = {
     ...(options.compile || {}),
@@ -346,7 +347,7 @@ function exportRuntimeAsset(project, options = {}) {
   };
   const compiled = options.compiled || compileDomain(project, compileOptions);
   const payload = buildPayload(compiled);
-  let payloadBytes = json(payload);
+  let payloadBytes = cbor.encode(payload);
   let encryptionMeta = null;
 
   // B2: Password-protected export — encrypt payload before manifest/checksums
@@ -371,7 +372,7 @@ function exportRuntimeAsset(project, options = {}) {
       },
       password: options.password,
     });
-    payloadBytes = json(envelope);
+    payloadBytes = cbor.encode(envelope);
     encryptionMeta = {
       profile: 'kdna-password-protected-v1-scrypt',
       encrypted_entries: ['payload.kdnab'],
@@ -388,7 +389,7 @@ function exportRuntimeAsset(project, options = {}) {
     encryptionMeta,
   });
   const files = {
-    mimetype: MIMETYPE_V1,
+    mimetype: MIMETYPE,
     'kdna.json': json(manifest),
     'payload.kdnab': payloadBytes,
   };
@@ -402,7 +403,7 @@ function exportRuntimeAsset(project, options = {}) {
 }
 
 module.exports = {
-  MIMETYPE_V1,
+  MIMETYPE,
   exportRuntimeAsset,
   buildPayload,
   buildManifest,
