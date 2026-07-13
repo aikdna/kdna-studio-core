@@ -158,7 +158,10 @@ test('password export uses a CBOR envelope and loads only with the password', ()
   assert.equal(exported.manifest.payload.encoding, 'cbor');
   assert.equal(exported.manifest.payload.encrypted, true);
   assert.equal(exported.manifest.access, 'licensed');
-  assert.equal(typeof cbor.decode(exported.files['payload.kdnab']), 'object');
+  const envelope = cbor.decode(exported.files['payload.kdnab']);
+  assert.equal(typeof envelope, 'object');
+  assert.equal(envelope.profile, kdnaCore.PASSWORD_PROTECTED_PROFILE);
+  assert.equal(exported.manifest.encryption.profile, kdnaCore.PASSWORD_PROTECTED_PROFILE);
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-encrypted-'));
   try {

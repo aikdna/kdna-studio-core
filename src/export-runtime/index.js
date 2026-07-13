@@ -363,7 +363,7 @@ function exportRuntimeAsset(project, options = {}) {
     const domainId = sourceManifest.domain_id || domainIdFromName(project.name);
     const finalAssetId = options.asset_id || `kdna:studio:${domainId}`;
     const finalVersion = semverValue(sourceManifest.version || project.release?.version, '0.1.0');
-    const envelope = core.encryptProtectedEntryScrypt(payloadBytes, {
+    const envelope = core.encryptProtectedEntry(payloadBytes, {
       entryName: 'payload.kdnab',
       manifest: {
         name: finalAssetId,
@@ -374,7 +374,7 @@ function exportRuntimeAsset(project, options = {}) {
     });
     payloadBytes = cbor.encode(envelope);
     encryptionMeta = {
-      profile: 'kdna-password-protected-v1-scrypt',
+      profile: core.PASSWORD_PROTECTED_PROFILE,
       encrypted_entries: ['payload.kdnab'],
     };
     // Password-protected assets are implicitly licensed access.
