@@ -412,7 +412,7 @@ function compileEvolution(cards, project, sourceEvolution = null) {
           id: `stage_${card.id}`,
           name: card.fields?.one_sentence || card.fields?.question || card.id,
           description: `Card ${card.id} was locked by ${entry.by} at ${entry.at}. Type: ${card.type}.`,
-          indicators: [`${card.type} card locked`, 'Human judgment confirmed'],
+          indicators: [`${card.type} card locked`, 'Human Lock provenance recorded'],
           source_authored: false,
         });
       }
@@ -791,11 +791,14 @@ function compileDomain(project, options = {}) {
 
 function generateReadme(project, options = {}) {
   const cards = project.cards || [];
-  const locked = cards.filter(c => c.locked);
-  const lockedAxioms = locked.filter(c => c.type === 'axiom');
-  const lockedMisunderstandings = locked.filter(c => c.type === 'misunderstanding');
-  const lockedSelfChecks = locked.filter(c => c.type === 'self_check');
-  const lockedBoundaries = locked.filter(c => c.type === 'boundary');
+  const judgmentCards = cards.filter(
+    c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== 'deprecated',
+  );
+  const humanLocked = judgmentCards.filter(hasHumanLock);
+  const axioms = judgmentCards.filter(c => c.type === 'axiom');
+  const misunderstandings = judgmentCards.filter(c => c.type === 'misunderstanding');
+  const selfChecks = judgmentCards.filter(c => c.type === 'self_check');
+  const boundaries = judgmentCards.filter(c => c.type === 'boundary');
   const tests = project.tests || [];
 
   const lines = [];
@@ -805,51 +808,52 @@ function generateReadme(project, options = {}) {
 
   lines.push('## Where it comes from');
   lines.push('');
-  lines.push(options.origin || `Domain expertise encoded into ${locked.length} judgment cards through structured interview and human lock.`);
+  lines.push(options.origin || `${judgmentCards.length} non-deprecated judgment cards authored with KDNA Studio. Review provenance is reported separately.`);
   lines.push('');
 
   lines.push('## Where it applies');
   lines.push('');
-  const appliesWhen = [...new Set(lockedAxioms.flatMap(ax => ax.fields?.applies_when || []))];
+  const appliesWhen = [...new Set(axioms.flatMap(ax => ax.fields?.applies_when || []))];
   appliesWhen.length ? appliesWhen.forEach(w => lines.push(`- ${w}`)) : lines.push('- As declared in each axiom\'s applies_when field.');
   lines.push('');
 
   lines.push('## How it is verified');
   lines.push('');
   lines.push(`- ${tests.length} eval cases (${tests.filter(t => t.result).length} rated)`);
-  lines.push(`- ${lockedAxioms.length} locked axioms with applies_when / does_not_apply_when / failure_risk`);
-  lines.push(`- ${lockedSelfChecks.length} self-check questions`);
-  lines.push(`- ${lockedMisunderstandings.length} misunderstanding patterns`);
+  lines.push(`- ${axioms.length} authored axioms with applies_when / does_not_apply_when / failure_risk`);
+  lines.push(`- ${selfChecks.length} self-check questions`);
+  lines.push(`- ${misunderstandings.length} misunderstanding patterns`);
+  lines.push(`- ${humanLocked.length} cards with explicit Human Lock provenance`);
   lines.push('');
 
   lines.push('## When it does NOT apply');
   lines.push('');
-  const notApply = [...new Set(lockedAxioms.flatMap(ax => ax.fields?.does_not_apply_when || []))];
+  const notApply = [...new Set(axioms.flatMap(ax => ax.fields?.does_not_apply_when || []))];
   notApply.forEach(w => lines.push(`- ${w}`));
-  for (const oos of lockedBoundaries.flatMap(b => [b.fields?.out_of_scope || '']).filter(Boolean)) {
+  for (const oos of boundaries.flatMap(b => [b.fields?.out_of_scope || '']).filter(Boolean)) {
     if (!notApply.includes(oos)) lines.push(`- ${oos}`);
   }
   lines.push('');
 
-  if (lockedAxioms.length > 0) {
+  if (axioms.length > 0) {
     lines.push('## Top Axioms'); lines.push('');
-    lockedAxioms.forEach(ax => {
+    axioms.forEach(ax => {
       lines.push(`- **${ax.fields?.one_sentence || ax.id}**`);
       if (ax.fields?.failure_risk) lines.push(`  - Failure risk: ${ax.fields.failure_risk}`);
     });
     lines.push('');
   }
 
-  if (lockedMisunderstandings.length > 0) {
+  if (misunderstandings.length > 0) {
     lines.push('## Top Misunderstandings'); lines.push('');
-    lockedMisunderstandings.forEach(ms => {
+    misunderstandings.forEach(ms => {
       lines.push(`- WRONG: ${ms.fields?.wrong}`);
       lines.push(`  CORRECT: ${ms.fields?.correct}`);
     });
     lines.push('');
   }
 
-  if (lockedSelfChecks.length > 0) {
+  if (selfChecks.length > 0) {
     lines.push('## Eval Score'); lines.push('');
     lines.push(`- quality_badge: ${tests.filter(t => t.result === 'with_kdna_better').length >= 3 ? 'tested' : 'untested'}`);
     lines.push(`- eval cases: ${tests.length}`);
@@ -857,12 +861,7 @@ function generateReadme(project, options = {}) {
   }
 
   lines.push('## Files'); lines.push('');
-  const kdnaFileCount = 2
-    + (cards.filter(c => c.type === 'scenario' && c.locked).length > 0 ? 1 : 0)
-    + (cards.filter(c => c.type === 'case' && c.locked).length > 0 ? 1 : 0)
-    + (lockedAxioms.length > 0 ? 1 : 0)
-    + (locked.length > 0 ? 1 : 0);
-  lines.push(`${kdnaFileCount} KDNA JSON files + evals/ + demo/`);
+  lines.push('One packaged `.kdna` asset containing a manifest, CBOR judgment payload, checksums, and optional evidence reports.');
   lines.push('');
 
   return lines.join('\n');

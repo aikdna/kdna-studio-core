@@ -183,16 +183,16 @@ function generateKdnaCard(project, compiledStats, provenance, gates) {
         : 'draft';
     }
 
-    // 3.6 migration_status — derived from tc_status + project-level provenance
+    // 3.6 migration_status — only explicit provenance may declare who
+    // authored or migrated an asset. Missing SAG/TC data is not evidence of
+    // human authorship, and must remain neutral.
     const migrationOverride = (project.migration && project.migration.status) || null;
     if (migrationOverride) {
       card.migration_status = migrationOverride;
-    } else if (!sagObj && !tcObj) {
-      card.migration_status = 'human_authored';
     } else if (tcObj && tcObj.tc_status === 'synthesized') {
       card.migration_status = 'synthesized';
     } else {
-      card.migration_status = 'human_authored';
+      card.migration_status = 'not_declared';
     }
 
     // 3.7 source_disclosure_level

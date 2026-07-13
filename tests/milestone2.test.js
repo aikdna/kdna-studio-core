@@ -453,6 +453,25 @@ describe('README Generation', () => {
     assert.ok(readme.includes('15 years'));
     assert.ok(readme.includes('quality_badge: tested'));
   });
+
+  test('unreviewed cards are documented without fabricated Human Lock provenance', () => {
+    const project = createProject('ai-authored-reference');
+    project.cards = [createCard('axiom', {
+      one_sentence: 'Open creation does not require Human Lock.',
+      full_statement: 'A structurally valid KDNA asset can be authored without claiming a human review event.',
+      why: 'Creation rights and optional review provenance answer different questions.',
+      applies_when: ['when documenting an unreviewed asset'],
+      does_not_apply_when: ['when a real Human Lock record exists'],
+      failure_risk: 'The README could invent human review provenance.',
+    })];
+
+    const readme = generateReadme(project);
+    assert.match(readme, /1 non-deprecated judgment cards authored with KDNA Studio/);
+    assert.match(readme, /1 authored axioms/);
+    assert.match(readme, /0 cards with explicit Human Lock provenance/);
+    assert.doesNotMatch(readme, /through structured interview and human lock/i);
+    assert.match(readme, /One packaged `\.kdna` asset/);
+  });
 });
 
 // ─── Provenance with Compile ────────────────────────────────────────
