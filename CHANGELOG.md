@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.12 (2026-07-13)
+
+- Make Argon2id the password-protected export profile so JavaScript and Swift
+  runtimes consume the same newly written encrypted assets.
+- Keep the scrypt profile readable in JavaScript Core for compatibility; new
+  Studio exports no longer write it.
+
 ## 1.7.11 (2026-07-13)
 
 - Emit the single current KDNA runtime contract: CBOR payloads and CBOR
