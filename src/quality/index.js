@@ -33,8 +33,8 @@ function computeReadiness(project) {
   // ── Source mode trust checks (v1.4.0) ───────────────────────────
   const sourceMode = project.source_mode || 'blank';
   if (sourceMode === 'source_folder') {
-    blocking.push('source_folder: all imported cards must be re-locked — legacy trust is not inherited');
-    blocking.push('source_folder: schema audit required; verify all required fields before Human Lock');
+    warnings.push('source_folder: imported cards have no inherited review provenance');
+    warnings.push('source_folder: review the schema audit before making provenance claims');
   }
   if (sourceMode === 'kdna_asset') {
     const hasRelevantLineage = project.lineage &&
@@ -42,7 +42,7 @@ function computeReadiness(project) {
     if (!hasRelevantLineage) {
       blocking.push('kdna_asset: lineage missing — must record parent KDNA identity');
     }
-    warnings.push('kdna_asset: cards imported from existing KDNA must be re-locked; parent trust is not inherited');
+    warnings.push('kdna_asset: imported cards do not inherit parent review provenance');
   }
 
   // ── I18N check (v1.2.0) ─────────────────────────────────────────
@@ -71,7 +71,7 @@ function computeReadiness(project) {
 
   // ── Minimum Structure ──────────────────────────────────────────
   if (cards.length === 0) { blocking.push('Project has no cards'); return buildResult('draft_grade', blocking, warnings, project); }
-  if (locked.length === 0) { blocking.push('No locked cards — nothing to compile'); return buildResult('draft_grade', blocking, warnings, project); }
+  if (locked.length === 0) warnings.push('No Human Lock provenance is recorded; compilation remains allowed');
 
   // ── Axiom Checks ──────────────────────────────────────────────
   for (const ax of lockedAxioms) {

@@ -317,8 +317,8 @@ function checkHumanLockGate(project) {
 }
 
 /**
- * Export a project for release, with Human Lock gate enforcement.
- * Blocks if any judgment-class cards are not properly locked.
+ * Export a Studio project record. Human Lock is optional provenance; callers
+ * may request a reviewed-only export with `requireHumanLock: true`.
  *
  * @throws {Error} if Human Lock gate blocks export
  * @returns {string} JSON string of the project
@@ -326,7 +326,7 @@ function checkHumanLockGate(project) {
 function exportProject(project, options = {}) {
   const gate = checkHumanLockGate(project);
 
-  if (gate.blocked && !options.force) {
+  if (gate.blocked && options.requireHumanLock && !options.force) {
     const lines = ['Human Lock Gate blocked export:', ''];
     for (const issue of gate.issues) {
       lines.push(`  ✗ ${issue.cardId}: ${issue.reason}`);
@@ -337,7 +337,7 @@ function exportProject(project, options = {}) {
     throw new Error(lines.join('\n'));
   }
 
-  if (gate.blocked && options.force) {
+  if (gate.blocked && options.requireHumanLock && options.force) {
     // Emergency override: recorded but not blocked
     project._human_lock_override = {
       overridden_at: new Date().toISOString(),
@@ -352,7 +352,7 @@ function exportProject(project, options = {}) {
   if (!project.release) project.release = {};
   project.release.exported_at = new Date().toISOString();
   project.release.locked_judgment_cards = gate.lockedJudgmentCards;
-  project.release.human_lock_gate_passed = !gate.blocked || !!options.force;
+  project.release.human_lock_gate_passed = !gate.blocked || Boolean(options.requireHumanLock && options.force);
 
   return JSON.stringify(project, null, 2);
 }

@@ -36,12 +36,13 @@ describe('Quality Gates', () => {
     assert.ok(r.blocking.length > 0);
   });
 
-  test('draft_grade: no locked cards → nothing to compile', () => {
+  test('draft_grade: no Human Lock remains compilable with a provenance warning', () => {
     const project = createProject('test');
     project.cards = [createCard('axiom', { one_sentence: 'Draft.' })];
     const r = computeReadiness(project);
     assert.equal(r.grade, 'draft_grade');
-    assert.ok(r.blocking.some(b => b.includes('nothing to compile') || b.includes('No locked cards')));
+    assert.ok(r.warnings.some(w => w.includes('No Human Lock provenance')));
+    assert.equal(r.blocking.some(b => b.includes('nothing to compile')), false);
   });
 
   test('human_controlled: 3+ locked axioms with boundaries ', () => {
@@ -187,7 +188,7 @@ describe('Full Compile', () => {
     assert.ok(result.stats.kdna_files >= 2); // Core + Patterns minimum
   });
 
-  test('excludes draft cards from output', () => {
+  test('includes draft cards while reporting Human Lock separately', () => {
     const project = createProject('test');
     project.cards = [
       makeLockedCard('axiom', { one_sentence: 'Locked.', full_statement: 'FS.', why: 'B.', applies_when: ['x'], does_not_apply_when: ['y'], failure_risk: 'r' }),
@@ -195,9 +196,10 @@ describe('Full Compile', () => {
     ];
     const result = compileDomain(project);
     assert.equal(result.stats.locked_cards, 1);
-    assert.equal(result.stats.excluded_cards, 1);
+    assert.equal(result.stats.compiled_cards, 2);
+    assert.equal(result.stats.excluded_cards, 0);
     const core = JSON.parse(result.files['KDNA_Core.json']);
-    assert.equal(core.axioms.length, 1);
+    assert.equal(core.axioms.length, 2);
   });
 
   test('produces Scenarios when scenario cards locked', () => {

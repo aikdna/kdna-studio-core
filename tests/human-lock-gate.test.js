@@ -103,10 +103,13 @@ test('checkHumanLockGate: all 16 judgment card types block when not locked', () 
 
 // ─── exportProject Human Lock enforcement ────────────────────────────
 
-test('exportProject: throws when judgment cards are not locked', () => {
+test('exportProject: allows unreviewed cards without claiming Human Lock passed', () => {
   const p = createProject('test');
   p.cards.push(createCard('axiom', { one_sentence: 'Test axiom' }));
-  assert.throws(() => exportProject(p), /Human Lock Gate blocked export/);
+  const parsed = JSON.parse(exportProject(p));
+  assert.equal(parsed.release.locked_judgment_cards, 0);
+  assert.equal(parsed.release.human_lock_gate_passed, false);
+  assert.throws(() => exportProject(p, { requireHumanLock: true }), /Human Lock Gate blocked export/);
 });
 
 test('exportProject: succeeds when properly locked', () => {
@@ -129,14 +132,14 @@ test('exportProject: succeeds when properly locked', () => {
 test('exportProject: force override allows blocked export', () => {
   const p = createProject('test');
   p.cards.push(createCard('axiom', { one_sentence: 'Emergency fix' }));
-  const json = exportProject(p, { force: true, forceReason: 'Critical security fix' });
+  const json = exportProject(p, { requireHumanLock: true, force: true, forceReason: 'Critical security fix' });
   const parsed = JSON.parse(json);
   assert.ok(parsed._human_lock_override);
   assert.equal(parsed._human_lock_override.reason, 'Critical security fix');
   assert.equal(parsed.release.human_lock_gate_passed, true);
 });
 
-test('exportProject: multiple judgment cards, partial lock blocks', () => {
+test('exportProject: reviewed-only mode blocks a partial Human Lock', () => {
   const p = createProject('test');
 
   // Properly locked axiom
@@ -151,7 +154,8 @@ test('exportProject: multiple judgment cards, partial lock blocks', () => {
   // Unlocked boundary — should block
   p.cards.push(createCard('boundary', { out_of_scope: 'Not covered.' }));
 
-  assert.throws(() => exportProject(p), /Human Lock Gate/);
+  assert.doesNotThrow(() => exportProject(p));
+  assert.throws(() => exportProject(p, { requireHumanLock: true }), /Human Lock Gate/);
 });
 
 // ─── cardJudgmentFingerprint ─────────────────────────────────────────

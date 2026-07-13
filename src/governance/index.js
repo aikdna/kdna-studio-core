@@ -116,7 +116,7 @@ function validateGovernance(project) {
 function generateKdnaCard(project, compiledStats, provenance, gates) {
   const gov = project.governance || {};
   const cards = project.cards || [];
-  const lockedCards = cards.filter(c => c.locked);
+  const lockedCards = cards.filter(c => c.locked && c.human_lock?.by && c.human_lock?.statement);
 
   const card = {
     name: project.name,

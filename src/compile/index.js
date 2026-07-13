@@ -1,12 +1,13 @@
 /**
- * Compile locked cards into KDNA domain JSON files — SPEC-compatible output.
+ * Compile non-deprecated judgment cards into Studio authoring output.
  *
  * KDNA Container:
  *   - Judgment content is encoded as CBOR payload (payload.kdnab)
  *   - Individual KDNA_Core.json etc. are NOT exposed as ZIP entries
  *   - kdna.json manifest contains metadata only, no judgment content
  *
- * Only locked cards enter compilation. Draft/Revised excluded silently.
+ * Human Lock is optional review provenance. It is recorded when present but
+ * does not decide whether a complete judgment card may be compiled.
  */
 
 const cbor = require('cbor-x');
@@ -24,6 +25,10 @@ const JUDGMENT_CARD_TYPES_FOR_COMPILE = new Set([
   'stance', 'pattern', 'reasoning', 'framework',
   'term', 'banned_term', 'evolution_stage',
 ]);
+
+function hasHumanLock(card) {
+  return Boolean(card?.locked && card?.human_lock?.by && card?.human_lock?.statement);
+}
 
 function stringList(value) {
   if (Array.isArray(value)) return value.filter((item) => item !== undefined && item !== null && item !== '');
@@ -81,7 +86,6 @@ function computeContentDigest(files) {
     .sort()
     .map(name => {
       let content = files[name];
-      if (name === 'mimetype') content = 'application/vnd.aikdna.kdna+zip';
       const buf = name.endsWith('.json')
         ? Buffer.from(canonicalizeJson(name, content))
         : Buffer.from(content);
@@ -146,7 +150,7 @@ function makeMeta(project) {
     created: project.created || new Date().toISOString().slice(0, 10),
     purpose: project.release?.description || `Domain judgment for ${project.name}`,
     // Default load_condition. Schema requires this field to be a
-    // non-empty string (validated by kdna dev validate). The default
+    // non-empty string (validated during runtime export). The default
     // is the legacy placeholder; export-runtime detects it and skips
     // injecting it into core.highest_question, falling through to
     // firstAxiom.one_sentence or the explicit "(unset)" marker (PC-3,
@@ -179,7 +183,7 @@ function compileCore(cards, project) {
     ontology: lockedOntology,
     // Bug: this used to be hardcoded `[]`, dropping every framework card
     // at compile. Locked framework cards are now collected the same way
-    // as ontology / stances and surface in the v1 payload.
+    // as ontology / stances and surface in the runtime payload.
     frameworks: lockedFrameworks,
     stances: lockedStances,
     core_structure: [],
@@ -329,7 +333,7 @@ function compileReasoning(cards, project, sourceReasoning = null) {
 
   // Fallback: synthesize 1 chain per axiom. Preserved for backward
   // compat with assets that have axioms but no explicit reasoning
-  // cards (legacy 1.0.0 path).
+  // cards synthesized by older authoring projects.
   const lockedAxioms = cards.filter(c => c.type === 'axiom' && c.locked);
   if (lockedAxioms.length === 0) return null;
   return {
@@ -448,7 +452,10 @@ function compileEvolution(cards, project, sourceEvolution = null) {
 
 function compileManifest(project, files, identity = null) {
   const kdnaFileCount = Object.keys(files).filter(f => f.startsWith('KDNA_')).length;
-  const lockedCards = (project.cards || []).filter(c => c.locked);
+  const compiledCards = (project.cards || []).filter(
+    c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== 'deprecated',
+  );
+  const lockedCards = compiledCards.filter(hasHumanLock);
   const tests = project.tests || [];
   const version = require('../../package.json').version;
   const assetIdentity = identity || buildAssetIdentity(project, files);
@@ -457,7 +464,7 @@ function compileManifest(project, files, identity = null) {
     .update(JSON.stringify({
       project_id: project.project_id,
       name: project.name,
-      cards: lockedCards.map(c => ({ id: c.id, type: c.type, fields: c.fields, human_lock: c.human_lock })),
+      cards: compiledCards.map(c => ({ id: c.id, type: c.type, fields: c.fields, human_lock: c.human_lock })),
     }))
     .digest('hex');
   const manifest = {
@@ -537,7 +544,7 @@ function compileManifest(project, files, identity = null) {
 
 function buildReports(project, files, identity, provenance, stats) {
   const cards = project.cards || [];
-  const lockedCards = cards.filter(c => c.locked);
+  const lockedCards = cards.filter(hasHumanLock);
   // Judgment card types — every type the Human Lock gate accepts as
   // substantive judgment content. Must stay in sync with the gate list
   // below and with cards/index.js#CARD_TYPES. Bug: prior version omitted
@@ -656,12 +663,14 @@ function compileDomain(project, options = {}) {
   const cards = project.cards || [];
 
   // ── Empty-domain gate (PR-2) ────────────────────────────────────
-  // A KDNA domain with no locked judgment content of any kind is not a
+  // A KDNA domain with no judgment content of any kind is not a
   // domain — it is a content-shaped empty file. Refuse to compile so the
   // downstream Registry / Lab / Studio export never advertises an empty
   // judgment asset as "successfully compiled".
-  const lockedCards = cards.filter(c => c.locked);
-  const hasJudgmentContent = lockedCards.some(c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type));
+  const compiledCards = cards.filter(
+    c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== 'deprecated',
+  );
+  const hasJudgmentContent = compiledCards.length > 0;
   if (!hasJudgmentContent) {
     // Bug (#26): the error message used to hard-code 9 card types
     // (axiom / misunderstanding / scenario / case / self_check /
@@ -669,20 +678,24 @@ function compileDomain(project, options = {}) {
     // types added since the 1.0 launch. Derive the list from the
     // single source of truth so the message can never drift again.
     const err = new Error(
-      'refusing to compile empty KDNA domain: no locked judgment content ' +
+      'refusing to compile empty KDNA domain: no non-deprecated judgment content ' +
       `(${Array.from(JUDGMENT_CARD_TYPES_FOR_COMPILE).join(' / ')}). ` +
-      `Found ${lockedCards.length} locked card(s) and ${cards.length} total card(s).`
+      `Found ${compiledCards.length} compilable card(s) and ${cards.length} total card(s).`
     );
     err.code = 'EMPTY_DOMAIN';
     throw err;
   }
 
-  const core = compileCore(cards, project);
-  const patterns = compilePatterns(cards, project);
-  const scenarios = compileScenarios(cards, project);
-  const cases = compileCases(cards, project);
-  const reasoning = compileReasoning(cards, project, options.source?.reasoning || null);
-  const evolution = compileEvolution(cards, project, options.source?.evolution || null);
+  // The compile helpers historically selected on `card.locked`. Feed them a
+  // compile-only view so existing field shaping stays stable while Human Lock
+  // remains optional provenance on the original project cards.
+  const compileInputCards = compiledCards.map(c => ({ ...c, locked: true }));
+  const core = compileCore(compileInputCards, project);
+  const patterns = compilePatterns(compileInputCards, project);
+  const scenarios = compileScenarios(compileInputCards, project);
+  const cases = compileCases(compileInputCards, project);
+  const reasoning = compileReasoning(compileInputCards, project, options.source?.reasoning || null);
+  const evolution = compileEvolution(compileInputCards, project, options.source?.evolution || null);
 
   // ── RFC-0013 §3.1/§3.2 Compile Gates (PR-3) ───────────────────
   // Run the Source Authority Graph gate and the Truth Charter gate
@@ -745,10 +758,12 @@ function compileDomain(project, options = {}) {
   const kdnaCard = generateKdnaCard(project, {}, provenance, gates);
   files['KDNA_CARD.json'] = JSON.stringify(kdnaCard, null, 2);
 
-  const excludedCount = cards.filter(c => !c.locked && !['deprecated'].includes(c.status)).length;
+  const excludedCount = cards.length - compiledCards.length;
   const stats = {
     total_cards: cards.length,
+    compiled_cards: compiledCards.length,
     locked_cards: cards.filter(c => c.locked).length,
+    human_lock_count: cards.filter(hasHumanLock).length,
     excluded_cards: excludedCount,
     deprecated_cards: cards.filter(c => c.status === 'deprecated').length,
     kdna_files: Object.keys(files).filter(f => f.startsWith('KDNA_')).length,

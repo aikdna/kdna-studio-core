@@ -8,9 +8,7 @@
  * Usage: node examples/creator-lifecycle.js
  */
 
-const {
-  createProject, checkHumanLockGate, exportProject,
-} = require('../src/project');
+const { createProject, checkHumanLockGate, exportProject } = require('../src/project');
 const { createCard, lockCard, transitionCard } = require('../src/cards');
 const { compileDomain } = require('../src/compile');
 const { computeReadiness } = require('../src/quality');
@@ -71,7 +69,8 @@ if (gateBefore.blocked) {
 }
 
 // Lock the axiom (judgment-class card)
-const locked = lockCard(axiom, {
+const reviewedAxiom = transitionCard(axiom, 'revised', { by: 'writer_001' });
+const locked = lockCard(reviewedAxiom, {
   by: 'writer_001',
   statement: 'I confirm this is my professional writing judgment.',
   checked: { applies_when: true, does_not_apply_when: true, failure_risk: true },
@@ -100,12 +99,13 @@ console.log(`   Warnings:   ${readiness.warnings.length}`);
 console.log('');
 
 // ═══ Step 5: Compile ═══
-console.log('5. COMPILE — Generate KDNA files from locked cards');
+console.log('5. COMPILE — Generate KDNA files from complete cards');
 try {
   const compiled = compileDomain(project);
-  console.log(`   Files:      ${compiled.stats.kdnaFiles}`);
-  console.log(`   Locked:     ${compiled.stats.lockedCards} cards included`);
-  console.log(`   Excluded:   ${compiled.stats.excludedCards} cards excluded (not locked)`);
+  console.log(`   Files:      ${compiled.stats.kdna_files}`);
+  console.log(`   Compiled:   ${compiled.stats.compiled_cards} complete cards`);
+  console.log(`   Reviewed:   ${compiled.stats.human_lock_count} cards with Human Lock`);
+  console.log(`   Excluded:   ${compiled.stats.excluded_cards} incomplete/deprecated cards`);
   console.log('');
 
   // Show a snippet
@@ -131,7 +131,7 @@ try {
   console.log(`   Gate passed:   ${exported.release?.human_lock_gate_passed}`);
 } catch (e) {
   console.log(`   ❌ BLOCKED: ${e.message.split('\n')[0]}`);
-  console.log('   (This is the Studio reviewed-publishing gate, not a Core v1 format-validity rule)');
+  console.log('   (Studio review provenance is separate from KDNA format validity)');
 }
 console.log('');
 
@@ -143,8 +143,8 @@ console.log('  ✅ Create     — Studio Project initialized');
 console.log('  ✅ Author     — Judgment cards created');
 console.log('  ✅ Review     — Optional Human Lock provenance recorded');
 console.log('  ✅ Quality    — Readiness check before compile');
-console.log('  ✅ Compile    — Locked cards → KDNA files');
-console.log('  ✅ Export     — Gate enforcement on publish');
+console.log('  ✅ Compile    — Complete cards → KDNA files');
+console.log('  ✅ Export     — Runtime asset + optional review provenance');
 console.log('');
 console.log('  Principle: .kdna format validity is content-neutral.');
 console.log('  Human Lock is optional provenance for reviewed publishing flows.');

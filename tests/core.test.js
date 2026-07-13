@@ -83,7 +83,7 @@ test('getLockedCards filters correctly', () => {
 
 // ─── Compile ──────────────────────────────────────────────────────────
 
-test('compileDomain only includes locked cards', () => {
+test('compileDomain includes non-deprecated cards and reports review provenance separately', () => {
   const project = createProject('test');
   let card = createCard('axiom', {
     one_sentence: 'Test axiom.',
@@ -104,7 +104,10 @@ test('compileDomain only includes locked cards', () => {
   assert.equal(kdnaCard.name, 'test');
   assert.equal(kdnaCard.human_lock_summary.locked_cards, 1);
   assert.equal(result.stats.locked_cards, 1);
-  assert.equal(result.stats.excluded_cards, 1);
+  assert.equal(result.stats.compiled_cards, 2);
+  assert.equal(result.stats.excluded_cards, 0);
+  const core = JSON.parse(result.files['KDNA_Core.json']);
+  assert.equal(core.axioms.length, 2);
 });
 
 // ─── Quality ──────────────────────────────────────────────────────────

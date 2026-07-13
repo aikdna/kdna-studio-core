@@ -35,16 +35,15 @@ test('compileDomain refuses empty domain (no cards)', () => {
   );
 });
 
-test('compileDomain refuses domain with only draft (unlocked) cards', () => {
+test('compileDomain accepts draft cards because review evidence is optional', () => {
   const project = makeProject('test');
   project.cards = [
     createCard('axiom', { one_sentence: 'Draft', full_statement: 'x', why: 'x' }),
     createCard('boundary', { scope: 'x', out_of_scope: 'y' }),
   ];
-  assert.throws(
-    () => compileDomain(project),
-    (e) => e.code === 'EMPTY_DOMAIN',
-  );
+  const result = compileDomain(project);
+  assert.equal(result.stats.compiled_cards, 2);
+  assert.equal(result.stats.locked_cards, 0);
 });
 
 test('compileDomain refuses domain with no judgment-bearing cards', () => {
