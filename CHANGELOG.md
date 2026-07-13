@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.8.0 (2026-07-13)
 
 - Compile and export complete judgment cards without treating Human Lock as a
   creation or loading permission.
@@ -10,6 +10,8 @@
   than the absence of approval records.
 - Replace skip-on-error legacy CLI E2E checks with real runtime export, pack,
   validate, and inspect assertions; harden the release tag/cleanliness gate.
+- Align runtime export and validation with KDNA Core 0.16.0 and CLI 0.31.0,
+  including account/device entitlement support in the shared runtime.
 
 ## 1.7.13 (2026-07-13)
 
