@@ -461,9 +461,8 @@ function compileManifest(project, files, identity = null) {
     }))
     .digest('hex');
   const manifest = {
-    format: 'kdna',
-    format_version: '2.0',
-    spec_version: '2.0',
+    artifact_type: 'kdna.studio.compile-manifest',
+    schema_version: '1.0',
     name: project.name,
     domain_id: assetIdentity.domain_id,
     asset_uid: assetIdentity.asset_uid,
@@ -481,11 +480,11 @@ function compileManifest(project, files, identity = null) {
     license: project.license || { type: 'CC-BY-4.0' },
     description: project.release?.description || project.name,
     file_count: kdnaFileCount,
-    container: {
-      type: 'kdna-container-v2',
+    compile_payload: {
+      type: 'kdna.studio.compile-payload',
       payload: 'payload.kdnab',
       payload_encoding: 'cbor',
-      payload_schema: 'kdna-payload-v2',
+      payload_schema: 'studio-compile-payload',
       payload_digest: `sha256:${crypto.createHash('sha256').update(files['payload.kdnab']).digest('hex')}`,
     },
     runtime: {
@@ -506,7 +505,7 @@ function compileManifest(project, files, identity = null) {
       compiler_version: version,
       conformance: {
         passed: true,
-        spec_version: '2.0',
+        schema_version: '1.0',
         validator: '@aikdna/kdna-studio-core',
         validator_version: version,
         checked_at: assetIdentity.compiled_at,
@@ -725,8 +724,8 @@ function compileDomain(project, options = {}) {
 
   // Encode judgment as CBOR payload
   const payload = {
-    kind: 'kdna.payload',
-    payload_version: '2.0',
+    kind: 'kdna.studio.compile-payload',
+    schema_version: '1.0',
     domain: { name: project.name, version: (project.release && project.release.version) || '0.1.0' },
     judgment: { core, patterns },
     profiles: {},

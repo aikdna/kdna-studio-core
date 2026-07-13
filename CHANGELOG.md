@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.13 (2026-07-13)
+
+- Identify the intermediate Studio compile manifest and CBOR payload as
+  Studio authoring artifacts instead of advertising a second KDNA container
+  generation. Runtime export continues to emit the single current KDNA Asset
+  Container through `exportRuntime`.
+
 ## 1.7.12 (2026-07-13)
 
 - Make Argon2id the password-protected export profile so JavaScript and Swift
