@@ -2,8 +2,8 @@
  * End-to-end validation: prove Studio Core output passes KDNA SPEC validation.
  *
  * Tests:
- *   1. compile → write files → kdna dev validate passes
- *   2. compile → kdna dev pack → kdna inspect returns valid asset
+ *   1. compile → runtime export → pack → kdna validate passes
+ *   2. compile → runtime export → pack → kdna inspect returns valid asset
  *   3. compile output matches KDNA SPEC reference structure
  *   4. kdna-core schema validation on compiled output
  */
@@ -18,13 +18,18 @@ const os = require('os');
 const { createProject } = require('../src/project');
 const { createCard, lockCard, transitionCard, createFeynmanRestatement, attachRestatementToLock } = require('../src/cards');
 const { compileDomain } = require('../src/compile');
+const { exportRuntimeAsset } = require('../src/export-runtime');
 const { buildProvenance } = require('../src/provenance');
+const kdnaCore = require('@aikdna/kdna-core');
+
+const KDNA_CLI = process.env.KDNA_CLI || path.join(
+  path.dirname(require.resolve('@aikdna/kdna-cli/package.json')),
+  'src',
+  'cli.js',
+);
 
 function runKdna(args, options) {
-  if (process.env.KDNA_CLI) {
-    return execFileSync(process.execPath, [process.env.KDNA_CLI, ...args], options);
-  }
-  return execFileSync('kdna', args, options);
+  return execFileSync(process.execPath, [KDNA_CLI, ...args], options);
 }
 
 function makeLockedCard(type, fields, id) {
@@ -121,30 +126,25 @@ function writeCompiledFiles(domainDir, files) {
   }
 }
 
-// ─── E2E: compile → kdna dev validate ────────────────────────────────
+// ─── E2E: compile → runtime export → pack → validate ────────────────
 
 describe('E2E: compile → validate', () => {
-  test('compiled output passes kdna dev validate', () => {
+  test('compiled output exports and passes kdna validate', () => {
     const project = createFullProject();
-    const result = compileDomain(project);
-    const domainDir = path.join(TMPDIR, 'test-domain');
+    const exported = exportRuntimeAsset(project, {
+      asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000401',
+      timestamp: '2026-07-13T00:00:00.000Z',
+    });
+    const sourceDir = path.join(TMPDIR, 'test-runtime-source');
+    const assetPath = path.join(TMPDIR, 'test-runtime.kdna');
+    writeCompiledFiles(sourceDir, exported.files);
+    kdnaCore.pack(sourceDir, assetPath);
 
-    writeCompiledFiles(domainDir, result.files);
-
-    try {
-      const validateResult = runKdna(['dev', 'validate', domainDir], {
-        encoding: 'utf8', timeout: 30000,
-      });
-      assert.match(validateResult, /valid|✓/i);
-    } catch (e) {
-      const stderr = (e.stderr || '').toString();
-      // If kdna CLI not installed, skip gracefully
-      if (stderr.includes('kdna') || stderr.includes('not found')) {
-        console.log('  (kdna CLI not available — skipping validate test)');
-        return;
-      }
-      throw e;
-    }
+    const validateResult = runKdna(['validate', assetPath, '--json'], {
+      encoding: 'utf8',
+      timeout: 30000,
+    });
+    assert.equal(JSON.parse(validateResult).overall_valid, true);
   });
 
   test('compiled output structure matches KDNA SPEC', () => {
@@ -225,42 +225,27 @@ describe('E2E: compile → validate', () => {
   });
 });
 
-// ─── E2E: compile → dev pack → inspect ───────────────────────────────
+// ─── E2E: compile → runtime export → pack → inspect ─────────────────
 
-describe('E2E: compile → dev pack → inspect', () => {
-  test('compiled output survives dev pack→inspect round-trip', () => {
+describe('E2E: compile → runtime pack → inspect', () => {
+  test('compiled output survives runtime export→pack→inspect', () => {
     const project = createFullProject();
-    const result = compileDomain(project);
-    const domainDir = path.join(TMPDIR, 'pack-test');
+    const exported = exportRuntimeAsset(project, {
+      asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000402',
+      timestamp: '2026-07-13T00:00:00.000Z',
+    });
+    const sourceDir = path.join(TMPDIR, 'inspect-runtime-source');
+    const assetPath = path.join(TMPDIR, 'inspect-runtime.kdna');
+    writeCompiledFiles(sourceDir, exported.files);
+    kdnaCore.pack(sourceDir, assetPath);
 
-    writeCompiledFiles(domainDir, result.files);
-
-    try {
-      // Pack
-      const packResult = runKdna(['dev', 'pack', domainDir, '--output', TMPDIR], {
-        encoding: 'utf8', timeout: 60000,
-      });
-      assert.match(packResult, /Packed|✓/);
-
-      // Find the .kdna file
-      const kdnaFile = fs.readdirSync(TMPDIR).find(f => f.endsWith('.kdna'));
-      assert.ok(kdnaFile, 'Should produce a .kdna file');
-
-      // Inspect
-      const inspectResult = runKdna(['inspect', path.join(TMPDIR, kdnaFile), '--json'], {
-        encoding: 'utf8', timeout: 15000,
-      });
-      const inspected = JSON.parse(inspectResult);
-      assert.equal(inspected.name, 'leadership_decisions');
-      assert.equal(inspected.version, '0.1.0');
-    } catch (e) {
-      const stderr = (e.stderr || '').toString();
-      if (stderr.includes('kdna') || stderr.includes('not found')) {
-        console.log('  (kdna CLI not available — skipping pack/inspect test)');
-        return;
-      }
-      throw e;
-    }
+    const inspectResult = runKdna(['inspect', assetPath, '--json'], {
+      encoding: 'utf8',
+      timeout: 15000,
+    });
+    const inspected = JSON.parse(inspectResult);
+    assert.equal(inspected.asset_id, 'kdna:studio:leadership_decisions');
+    assert.equal(inspected.version, '0.1.0');
   });
 });
 

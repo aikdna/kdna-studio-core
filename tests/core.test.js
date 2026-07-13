@@ -83,7 +83,7 @@ test('getLockedCards filters correctly', () => {
 
 // ─── Compile ──────────────────────────────────────────────────────────
 
-test('compileDomain only includes locked cards', () => {
+test('compileDomain includes non-deprecated cards and reports review provenance separately', () => {
   const project = createProject('test');
   let card = createCard('axiom', {
     one_sentence: 'Test axiom.',
@@ -103,8 +103,33 @@ test('compileDomain only includes locked cards', () => {
   const kdnaCard = JSON.parse(result.files['KDNA_CARD.json']);
   assert.equal(kdnaCard.name, 'test');
   assert.equal(kdnaCard.human_lock_summary.locked_cards, 1);
+  assert.equal(kdnaCard.migration_status, 'not_declared');
   assert.equal(result.stats.locked_cards, 1);
-  assert.equal(result.stats.excluded_cards, 1);
+  assert.equal(result.stats.compiled_cards, 2);
+  assert.equal(result.stats.excluded_cards, 0);
+  const core = JSON.parse(result.files['KDNA_Core.json']);
+  assert.equal(core.axioms.length, 2);
+});
+
+test('compileDomain preserves explicit AI authorship without inventing human provenance', () => {
+  const project = createProject('ai-authored');
+  project.cards = [createCard('axiom', {
+    one_sentence: 'AI-authored judgments remain valid assets.',
+    full_statement: 'A valid KDNA asset may be authored by AI without being mislabeled as human-authored.',
+    why: 'Invented human provenance would make the asset metadata untrustworthy.',
+    applies_when: ['when an AI authors a KDNA asset'],
+    does_not_apply_when: ['when explicit human authorship evidence exists'],
+    failure_risk: 'The toolchain could fabricate a human endorsement.',
+  })];
+  project.migration = { status: 'ai_authored', synthesized: false };
+
+  const result = compileDomain(project);
+  const manifest = JSON.parse(result.files['kdna.json']);
+  const kdnaCard = JSON.parse(result.files['KDNA_CARD.json']);
+  assert.equal(manifest.authoring.human_lock_count, 0);
+  assert.equal(manifest.authoring.human_confirmed, false);
+  assert.equal(kdnaCard.migration_status, 'ai_authored');
+  assert.equal(result.files['KDNA_Evolution.json'].includes('Human judgment confirmed'), false);
 });
 
 // ─── Quality ──────────────────────────────────────────────────────────

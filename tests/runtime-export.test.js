@@ -110,13 +110,16 @@ test('runtime export validates with KDNA Core and plans ready when planLoad is a
     const validation = kdnaCore.validate(dir);
     assert.equal(validation.overall_valid, true, validation.problems.join('\n'));
 
-    const plan = kdnaCore.planLoad(dir);
+    const assetPath = `${dir}.kdna`;
+    kdnaCore.pack(dir, assetPath);
+    const plan = kdnaCore.planLoad(assetPath);
     assert.equal(plan.access, 'public');
     assert.equal(plan.state, 'ready');
     assert.equal(plan.required_action, 'load');
     assert.equal(plan.can_load_now, true);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(`${dir}.kdna`, { force: true });
   }
 });
 
@@ -136,13 +139,16 @@ test('runtime export maps protected legacy access to licensed receipt profile', 
     const validation = kdnaCore.validate(dir);
     assert.equal(validation.overall_valid, true, validation.problems.join('\n'));
 
-    const plan = kdnaCore.planLoad(dir);
+    const assetPath = `${dir}.kdna`;
+    kdnaCore.pack(dir, assetPath);
+    const plan = kdnaCore.planLoad(assetPath);
     assert.equal(plan.access, 'licensed');
     assert.equal(plan.entitlement_profile, 'local_receipt');
     assert.equal(plan.state, 'needs_license');
     assert.equal(plan.required_action, 'install_receipt');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(`${dir}.kdna`, { force: true });
   }
 });
 
@@ -167,14 +173,17 @@ test('password export uses a CBOR envelope and loads only with the password', ()
   try {
     writeFiles(dir, exported.files);
     assert.equal(kdnaCore.validate(dir).overall_valid, true);
-    assert.equal(kdnaCore.planLoad(dir).state, 'needs_password');
+    const assetPath = `${dir}.kdna`;
+    kdnaCore.pack(dir, assetPath);
+    assert.equal(kdnaCore.planLoad(assetPath).state, 'needs_password');
     assert.throws(
-      () => kdnaCore.load(dir, { password: 'wrong-password' }),
+      () => kdnaCore.load(assetPath, { password: 'wrong-password' }),
       /decrypt|integrity|KDNA_DECRYPT_FAILED/i,
     );
-    const capsule = kdnaCore.load(dir, { password, profile: 'compact', as: 'json' });
+    const capsule = kdnaCore.load(assetPath, { password, profile: 'compact', as: 'json' });
     assert.equal(capsule.type, 'kdna.context.capsule');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(`${dir}.kdna`, { force: true });
   }
 });

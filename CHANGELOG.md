@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Compile and export complete judgment cards without treating Human Lock as a
+  creation or loading permission.
+- Keep Human Lock as optional provenance/review evidence, and retain an
+  explicit `requireHumanLock` policy for workflows that choose to enforce it.
+- Block empty projects based on the absence of complete judgment cards rather
+  than the absence of approval records.
+- Replace skip-on-error legacy CLI E2E checks with real runtime export, pack,
+  validate, and inspect assertions; harden the release tag/cleanliness gate.
+
 ## 1.7.13 (2026-07-13)
 
 - Identify the intermediate Studio compile manifest and CBOR payload as

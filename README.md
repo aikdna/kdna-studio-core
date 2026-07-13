@@ -49,7 +49,7 @@ LoadPlan contract in `aikdna/kdna`. Studio products must not create app-private
   readiness, evaluation, and receipt artifacts for audit.
 - **Feynman Restatement** — verify understanding, not just agreement
 - **Readiness Gates** — readiness check: draft → structurally_ready → judgment_ready → publish_ready
-- **Compiler** — locked cards → `KDNA_Core.json` + `KDNA_Patterns.json`
+- **Compiler** — complete, non-deprecated cards → authoring compile output; optional Human Lock provenance is preserved
 - **Runtime Export** — compiled judgment → canonical `mimetype` +
   `kdna.json` + `payload.kdnab` + `checksums.json`
 - **Test Lab** — A/B comparison (No KDNA vs Best Prompt vs KDNA)
@@ -166,13 +166,12 @@ const locked = cardApi.lockCard(card, {
 });
 
 // 4. Check readiness
-const gate = projectApi.checkHumanLockGate(project);
-if (!gate.blocked) {
-  // 5. Compile and runtime-export
-  const compiled = compile.compileDomain(project, { strictAuthority: false });
-  const runtimeAsset = exportRuntime.exportRuntimeAsset(project, { compiled });
-  console.log(Object.keys(runtimeAsset.files));
-}
+const gate = projectApi.checkHumanLockGate(project); // optional review report
+
+// 5. Compile and runtime-export. Human Lock does not grant creation permission.
+const compiled = compile.compileDomain(project, { strictAuthority: false });
+const runtimeAsset = exportRuntime.exportRuntimeAsset(project, { compiled });
+console.log(Object.keys(runtimeAsset.files), gate.lockedJudgmentCards);
 ```
 
 ## Runtime Export Contract
