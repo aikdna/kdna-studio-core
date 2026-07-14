@@ -78,6 +78,35 @@ function canonicalLineage(lineage) {
   };
 }
 
+function nonEmptyString(value) {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function canonicalRuntimeCreator(project, sourceManifest) {
+  // Runtime creator metadata is optional provenance. Studio projects keep an
+  // empty author object as an editing convenience, but that placeholder is
+  // not an identity and must not mask a real imported creator or leak into a
+  // published manifest. A declared Runtime creator always has a real name;
+  // otherwise omit the entire record rather than inventing "Unknown".
+  const candidates = [
+    project?.author,
+    sourceManifest?.creator,
+    sourceManifest?.author,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+    const name = nonEmptyString(candidate.name) || nonEmptyString(candidate.display_name);
+    if (!name) continue;
+    const id = nonEmptyString(candidate.id) || nonEmptyString(candidate.creator_id);
+    return id ? { name, id } : { name };
+  }
+
+  return null;
+}
+
 function sha256Hex(value) {
   return crypto.createHash('sha256').update(Buffer.isBuffer(value) ? value : Buffer.from(value)).digest('hex');
 }
@@ -231,7 +260,7 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
   const access = canonicalAccess(options.access || project.release?.access || sourceManifest.access);
   const domainId = sourceManifest.domain_id || domainIdFromName(project.name);
   const now = options.timestamp || sourceManifest.updated_at || sourceManifest.updated || new Date().toISOString();
-  const creator = project.author || sourceManifest.creator || sourceManifest.author || { name: 'Unknown' };
+  const creator = canonicalRuntimeCreator(project, sourceManifest);
 
   const manifest = {
     kdna_version: '1.0',
@@ -243,10 +272,6 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     judgment_version: semverValue(sourceManifest.judgment_version || project.release?.judgment_version || project.release?.version, '0.1.0'),
     created_at: options.created_at || sourceManifest.created_at || new Date(project.created || now).toISOString(),
     updated_at: options.updated_at || now,
-    creator: {
-      name: creator.name || creator.display_name || 'Unknown',
-      id: creator.id || creator.creator_id || undefined,
-    },
     compatibility: {
       min_loader_version: '1.0.0',
       profile: 'judgment-profile-v1',
@@ -316,6 +341,10 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
       human_confirmed: (sourceManifest.authoring?.human_lock_count ?? compiled.stats?.human_lock_count ?? 0) > 0,
     },
   };
+
+  if (creator) {
+    manifest.creator = creator;
+  }
 
   if (access === 'licensed') {
     manifest.entitlement = options.entitlement || { profile: 'local_receipt', offline: true, revocable: true };

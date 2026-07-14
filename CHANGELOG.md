@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Omit optional Runtime `creator` provenance when no real creator name is
+  declared, instead of fabricating an `Unknown` identity; preserve declared
+  creator names and IDs.
 - Preserve explicitly declared `judgment_core` values from Studio project
   source through `KDNA_Core.json` and the CBOR runtime payload without
   substitution or reordering.

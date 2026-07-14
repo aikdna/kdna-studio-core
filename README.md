@@ -212,6 +212,12 @@ The exported files are tested against `@aikdna/kdna-core.validate`. In the OPEN
 workspace they are also tested against the current `aikdna/kdna` LoadPlan
 implementation when available.
 
+Runtime `creator` metadata is optional provenance. Studio Core preserves a
+declared creator name and ID, but omits the entire `creator` record when no
+non-empty creator name is available. It never invents an `Unknown` identity.
+The Studio project's editable `author` object remains independent of this
+runtime validity rule.
+
 Access values are canonicalized for runtime export:
 
 | Studio / legacy value | Runtime value |

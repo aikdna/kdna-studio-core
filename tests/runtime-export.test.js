@@ -7,7 +7,7 @@ const cbor = require('cbor-x');
 
 const { createProject } = require('../src/project');
 const { createCard, lockCard, transitionCard } = require('../src/cards');
-const { exportRuntimeAsset } = require('../src/export-runtime');
+const { exportRuntimeAsset, buildManifest } = require('../src/export-runtime');
 const kdnaCore = require('@aikdna/kdna-core');
 
 function makeLockedCard(type, fields, id) {
@@ -80,6 +80,92 @@ test('runtime export emits only canonical runtime entries', () => {
   assert.ok(!('KDNA_Core.json' in exported.files));
   assert.ok(!('KDNA_Patterns.json' in exported.files));
   assert.equal(cbor.decode(exported.files['payload.kdnab']).profile, 'judgment-profile-v1');
+});
+
+test('runtime export preserves a declared project creator name and id', () => {
+  const project = createRuntimeProject();
+  const exported = exportRuntimeAsset(project, {
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000326',
+    timestamp: '2026-07-14T00:00:00.000Z',
+  });
+
+  assert.deepEqual(exported.manifest.creator, {
+    name: 'Studio Expert',
+    id: 'studio_expert',
+  });
+});
+
+test('runtime export omits creator when no real creator identity is declared', () => {
+  const project = createRuntimeProject();
+  project.author = { name: '', id: '' };
+  const exported = exportRuntimeAsset(project, {
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000327',
+    timestamp: '2026-07-14T00:00:00.000Z',
+  });
+
+  assert.equal(Object.hasOwn(exported.manifest, 'creator'), false);
+  assert.equal(exported.files['kdna.json'].includes('Unknown'), false);
+});
+
+test('runtime export uses real imported creator provenance when project author is blank', () => {
+  const project = createRuntimeProject();
+  project.author = { name: '  ', id: 'blank_author_must_not_win' };
+  project.creator_identity = {
+    creator_id: 'kdna:creator:agent:studio-import',
+    display_name: 'Studio Import Agent',
+  };
+  const exported = exportRuntimeAsset(project, {
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000328',
+    timestamp: '2026-07-14T00:00:00.000Z',
+  });
+
+  assert.deepEqual(exported.manifest.creator, {
+    name: 'Studio Import Agent',
+    id: 'kdna:creator:agent:studio-import',
+  });
+});
+
+test('runtime manifest preserves a legacy source author when newer creator fields are absent', () => {
+  const project = createRuntimeProject();
+  project.author = { name: '', id: '' };
+  const manifest = buildManifest(
+    project,
+    {
+      files: {
+        'kdna.json': JSON.stringify({
+          author: { name: ' Source Author ', id: ' source_author ' },
+        }),
+      },
+      identity: { asset_uid: '00000000-0000-4000-8000-000000000331' },
+      stats: {},
+    },
+    Buffer.from('creator-source-author-payload'),
+    {
+      asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000331',
+      timestamp: '2026-07-14T00:00:00.000Z',
+    },
+  );
+
+  assert.deepEqual(manifest.creator, {
+    name: 'Source Author',
+    id: 'source_author',
+  });
+});
+
+test('runtime export does not turn whitespace-only provenance into an identity', () => {
+  const project = createRuntimeProject();
+  project.author = { name: '\t ', id: 'author-id-without-name' };
+  project.creator_identity = {
+    creator_id: 'creator-id-without-name',
+    display_name: ' \n ',
+  };
+  const exported = exportRuntimeAsset(project, {
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000329',
+    timestamp: '2026-07-14T00:00:00.000Z',
+  });
+
+  assert.equal(Object.hasOwn(exported.manifest, 'creator'), false);
+  assert.doesNotMatch(exported.files['kdna.json'], /Unknown|author-id-without-name|creator-id-without-name/);
 });
 
 test('runtime export normalizes string routing fields into arrays', () => {
