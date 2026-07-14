@@ -40,6 +40,39 @@
         "id": { "type": "string" }
       }
     },
+    "judgment_core": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "highest_question": { "type": "string", "minLength": 1 },
+        "worldview": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "value_order": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "judgment_role": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "acts_as": { "type": "string", "minLength": 1 },
+            "does_not_act_as": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "responsibility": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "description": "Explicit scoped judgment semantics preserved verbatim into compiled and runtime payload core fields."
+    },
     "status": {
       "type": "string",
       "enum": ["drafting", "cards_in_progress", "ready_for_test", "ready_for_release", "released"],

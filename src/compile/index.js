@@ -12,6 +12,7 @@
 
 const cbor = require('cbor-x');
 const crypto = require('crypto');
+const { copyDeclaredJudgmentCore } = require('../judgment-core');
 
 // Every type the Human Lock gate and compile pipeline treat as substantive
 // judgment content. MUST stay in sync with cards/index.js#CARD_TYPES and
@@ -161,6 +162,7 @@ function makeMeta(project) {
 }
 
 function compileCore(cards, project) {
+  const judgmentCore = copyDeclaredJudgmentCore(project.judgment_core);
   const lockedAxioms = cards
     .filter(c => c.type === 'axiom' && c.locked)
     .map(c => ({
@@ -179,6 +181,7 @@ function compileCore(cards, project) {
 
   return {
     meta: makeMeta(project),
+    ...judgmentCore,
     axioms: lockedAxioms,
     ontology: lockedOntology,
     // Bug: this used to be hardcoded `[]`, dropping every framework card

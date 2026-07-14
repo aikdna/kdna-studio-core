@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const projectSchema = require('../../schemas/studio.project.schema.json');
 const { CARD_TYPES } = require('../cards');
 const { JUDGMENT_CARD_TYPES, cardJudgmentFingerprint } = require('../judgment-fields');
+const { validateJudgmentCore } = require('../judgment-core');
 
 function createProject(name, type = 'domain', options = {}) {
   const project = {
@@ -27,6 +28,9 @@ function createProject(name, type = 'domain', options = {}) {
     creator_identity: options.creatorIdentity || null,
     lineage: options.lineage || null,
     imported_source_folder: options.sourcePath || null,
+    ...(options.judgmentCore
+      ? { judgment_core: JSON.parse(JSON.stringify(options.judgmentCore)) }
+      : {}),
     cards: [],
     evidence: [],
     tests: [],
@@ -137,6 +141,10 @@ function validateProject(project) {
   // author
   if (project.author !== undefined) {
     checkType(project.author, 'object', 'author');
+  }
+
+  for (const issue of validateJudgmentCore(project.judgment_core)) {
+    issues.push(issue);
   }
 
   // cards

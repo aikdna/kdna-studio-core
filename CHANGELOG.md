@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Preserve explicitly declared `judgment_core` values from Studio project
+  source through `KDNA_Core.json` and the CBOR runtime payload without
+  substitution or reordering.
+- Add a synthetic Golden Single-Asset fixture and fail-closed export checks for
+  source-to-payload value loss. This is infrastructure fidelity evidence, not
+  an author-quality, applicability, consumption, or conformance claim.
+
 ## 1.8.0 (2026-07-13)
 
 - Compile and export complete judgment cards without treating Human Lock as a

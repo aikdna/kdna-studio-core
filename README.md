@@ -52,6 +52,10 @@ LoadPlan contract in `aikdna/kdna`. Studio products must not create app-private
 - **Compiler** — complete, non-deprecated cards → authoring compile output; optional Human Lock provenance is preserved
 - **Runtime Export** — compiled judgment → canonical `mimetype` +
   `kdna.json` + `payload.kdnab` + `checksums.json`
+- **Declared Judgment Core** — optional `judgment_core` fields
+  (`highest_question`, `worldview`, ordered `value_order`, and bounded
+  `judgment_role`) are preserved verbatim from project source through compile
+  and runtime payload. They are scoped judgment data, not facts or policy.
 - **Test Lab** — A/B comparison (No KDNA vs Best Prompt vs KDNA)
 - **Provenance** — content fingerprinting, build tracking, audit trail
 
@@ -132,7 +136,17 @@ const {
 
 // 1. Create a project
 const project = projectApi.createProject('writing_judgment', 'domain', {
-  author: { name: 'Writing Expert', id: 'writer_001' }
+  author: { name: 'Writing Expert', id: 'writer_001' },
+  judgmentCore: {
+    highest_question: 'Which in-scope tradeoff should this asset resolve?',
+    worldview: ['Observed task facts remain authoritative.'],
+    value_order: ['prevent irreversible harm', 'preserve reversibility'],
+    judgment_role: {
+      acts_as: 'a scoped judgment authority',
+      does_not_act_as: ['a fact source', 'a policy engine'],
+      responsibility: 'Order qualitative tradeoffs inside the declared scope.'
+    }
+  }
 });
 
 // Optional: declare a distillation target before extracting from evidence.

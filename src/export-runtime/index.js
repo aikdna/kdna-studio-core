@@ -1,6 +1,11 @@
 const crypto = require('crypto');
 const cbor = require('cbor-x');
 const { compileDomain } = require('../compile');
+const {
+  assertJudgmentCorePreserved,
+  copyDeclaredJudgmentCore,
+  pickJudgmentCore,
+} = require('../judgment-core');
 
 const MIMETYPE = 'application/vnd.kdna.asset';
 
@@ -149,6 +154,7 @@ function buildPayload(compiled) {
     core: {
       highest_question:
         authorSet || firstAxiom?.one_sentence || '(unset — author should set load_condition in project meta)',
+      ...pickJudgmentCore(core),
       axioms: Array.isArray(core.axioms) ? core.axioms : [],
       ontology: Array.isArray(core.ontology) ? core.ontology : [],
       // Bug (#27): prior version produced core_structure as an empty
@@ -347,6 +353,18 @@ function exportRuntimeAsset(project, options = {}) {
   };
   const compiled = options.compiled || compileDomain(project, compileOptions);
   const payload = buildPayload(compiled);
+  const declaredJudgmentCore = copyDeclaredJudgmentCore(project.judgment_core);
+  const compiledCore = parseJsonFile(compiled.files, 'KDNA_Core.json', {});
+  assertJudgmentCorePreserved(
+    declaredJudgmentCore,
+    pickJudgmentCore(compiledCore),
+    'compiled_core',
+  );
+  assertJudgmentCorePreserved(
+    declaredJudgmentCore,
+    pickJudgmentCore(payload.core),
+    'runtime_payload',
+  );
   let payloadBytes = cbor.encode(payload);
   let encryptionMeta = null;
 
