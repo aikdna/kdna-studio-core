@@ -80,6 +80,11 @@ test('runtime export emits only canonical runtime entries', () => {
   assert.ok(!('KDNA_Core.json' in exported.files));
   assert.ok(!('KDNA_Patterns.json' in exported.files));
   assert.equal(cbor.decode(exported.files['payload.kdnab']).profile, 'judgment-profile-v1');
+  const checksums = JSON.parse(exported.files['checksums.json']);
+  assert.equal(checksums.digest_profile, 'kdna-runtime-entry-set-v1');
+  assert.deepEqual(checksums.covered_entries, ['kdna.json', 'payload.kdnab']);
+  assert.match(checksums.entry_set_digest, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(checksums.entry_set_digest, checksums.asset_digest);
 });
 
 test('runtime export preserves a declared project creator name and id', () => {

@@ -120,11 +120,16 @@ function buildChecksums(files) {
     .sort()
     .map((name) => `${name}:${entries[name].value}`)
     .join('\n');
+  const entrySetDigest = `sha256:${sha256Hex(combined)}`;
   return {
+    digest_profile: 'kdna-runtime-entry-set-v1',
+    covered_entries: ['kdna.json', 'payload.kdnab'],
     algorithm: 'sha256',
     manifest_digest: `sha256:${entries['kdna.json'].value}`,
     payload_digest: `sha256:${entries['payload.kdnab'].value}`,
-    asset_digest: `sha256:${sha256Hex(combined)}`,
+    entry_set_digest: entrySetDigest,
+    // Deprecated v1 compatibility alias. This is not the final .kdna file hash.
+    asset_digest: entrySetDigest,
     entries,
   };
 }
