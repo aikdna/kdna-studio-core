@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.9.0 (2026-07-14)
+
+- Require the exact released Runtime pair: KDNA CLI 0.32.0 and KDNA Core
+  0.17.0.
 
 - Omit optional Runtime `creator` provenance when no real creator name is
   declared, instead of fabricating an `Unknown` identity; preserve declared
