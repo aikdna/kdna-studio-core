@@ -78,7 +78,7 @@ function releaseTarball() {
 }
 
 function releaseInput(overrides = {}) {
-  const version = overrides.pkg?.version || '1.10.0';
+  const version = overrides.pkg?.version || '2.0.0';
   return {
     pkg: { name: '@aikdna/kdna-studio-core', version, ...overrides.pkg },
     changelog: overrides.changelog ?? `# Changelog\n\n## ${version} (2026-07-15)\n`,
@@ -101,10 +101,10 @@ function candidateEvidence(bytes = releaseTarball()) {
   return {
     schema: 'kdna.studio-core.release-evidence',
     version: '1.0',
-    source: { ref: 'refs/tags/1.10.0', commit: HASH },
-    package: { name: '@aikdna/kdna-studio-core', version: '1.10.0' },
+    source: { ref: 'refs/tags/2.0.0', commit: HASH },
+    package: { name: '@aikdna/kdna-studio-core', version: '2.0.0' },
     artifact: {
-      filename: 'aikdna-kdna-studio-core-1.10.0.tgz',
+      filename: 'aikdna-kdna-studio-core-2.0.0.tgz',
       integrity: `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`,
       shasum: crypto.createHash('sha1').update(bytes).digest('hex'),
       packed_size: bytes.length,
@@ -118,8 +118,8 @@ function candidateEvidence(bytes = releaseTarball()) {
 function packReport(bytes, files = parseTarFiles(bytes)) {
   return [{
     name: '@aikdna/kdna-studio-core',
-    version: '1.10.0',
-    filename: 'aikdna-kdna-studio-core-1.10.0.tgz',
+    version: '2.0.0',
+    filename: 'aikdna-kdna-studio-core-2.0.0.tgz',
     integrity: `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`,
     shasum: crypto.createHash('sha1').update(bytes).digest('hex'),
     size: bytes.length,
@@ -161,9 +161,9 @@ test('publish workflow is release-only, serialized, pinned, and publishes one ve
 test('release context binds package, changelog, event, tag ref, HEAD, and workflow SHA', () => {
   assert.deepEqual(validateReleaseContext(releaseInput()), {
     name: '@aikdna/kdna-studio-core',
-    version: '1.10.0',
-    tag: '1.10.0',
-    ref: 'refs/tags/1.10.0',
+    version: '2.0.0',
+    tag: '2.0.0',
+    ref: 'refs/tags/2.0.0',
     commit: HASH,
   });
   for (const input of [
@@ -213,8 +213,8 @@ test('pack evidence independently parses a real npm tgz and rejects changed byte
   const evidence = validatePackReport({
     reportText: packed.stdout,
     tarball: bytes,
-    pkg: { name: '@aikdna/kdna-studio-core', version: '1.10.0' },
-    source: { ref: 'refs/tags/1.10.0', commit: HASH },
+    pkg: { name: '@aikdna/kdna-studio-core', version: '2.0.0' },
+    source: { ref: 'refs/tags/2.0.0', commit: HASH },
   });
   assert.equal(validateArtifact(evidence, bytes), evidence);
   assert.throws(() => validateArtifact(evidence, Buffer.from('changed')), /size|integrity|shasum/);
@@ -290,8 +290,8 @@ test('pack JSON and retained evidence must exactly match the independently parse
       validatePackReport({
         reportText: JSON.stringify(report),
         tarball: bytes,
-        pkg: { name: '@aikdna/kdna-studio-core', version: '1.10.0' },
-        source: { ref: 'refs/tags/1.10.0', commit: HASH },
+        pkg: { name: '@aikdna/kdna-studio-core', version: '2.0.0' },
+        source: { ref: 'refs/tags/2.0.0', commit: HASH },
       }),
     /file report/,
   );
@@ -375,9 +375,9 @@ test('registry policy publishes only on the exact npm 11 E404 and skips only ide
 });
 
 test('registry lookup and publication use the official registry and the exact tarball', () => {
-  assert.deepEqual(lookupArguments('@aikdna/kdna-studio-core@1.10.0'), [
+  assert.deepEqual(lookupArguments('@aikdna/kdna-studio-core@2.0.0'), [
     'view',
-    '@aikdna/kdna-studio-core@1.10.0',
+    '@aikdna/kdna-studio-core@2.0.0',
     'name',
     'version',
     'dist.integrity',

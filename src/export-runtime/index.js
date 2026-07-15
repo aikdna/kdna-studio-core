@@ -66,9 +66,55 @@ function semverValue(value, fallback = '0.1.0') {
   return fallback;
 }
 
-function isoDateTime(value, fallback = new Date().toISOString()) {
-  const parsed = new Date(value || fallback);
-  return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined && value !== null);
+}
+
+function normalizeIsoDateTime(value, options = {}) {
+  const label = options.label || 'timestamp';
+  const candidate = firstDefined(value, options.fallback, new Date().toISOString());
+  if (candidate instanceof Date) {
+    if (Number.isNaN(candidate.getTime())) throw new Error(`${label}: invalid date-time`);
+    return candidate.toISOString();
+  }
+  if (typeof candidate !== 'string' || candidate.trim() === '') {
+    throw new Error(`${label}: expected an ISO 8601 date-time or date`);
+  }
+
+  const raw = candidate.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const parsedDate = new Date(`${raw}T00:00:00.000Z`);
+    if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== raw) {
+      throw new Error(`${label}: invalid ISO 8601 date`);
+    }
+    return parsedDate.toISOString();
+  }
+
+  const dateTimePattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|([+-])(\d{2}):(\d{2}))$/;
+  const parts = raw.match(dateTimePattern);
+  if (!parts) {
+    throw new Error(`${label}: expected an ISO 8601 date-time with an explicit timezone`);
+  }
+  const year = Number(parts[1]);
+  const month = Number(parts[2]);
+  const day = Number(parts[3]);
+  const hour = Number(parts[4]);
+  const minute = Number(parts[5]);
+  const second = Number(parts[6]);
+  const offsetHour = Number(parts[9] || 0);
+  const offsetMinute = Number(parts[10] || 0);
+  const daysInMonth = month >= 1 && month <= 12
+    ? new Date(Date.UTC(year, month, 0)).getUTCDate()
+    : 0;
+  if (
+    day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59 ||
+    offsetHour > 23 || offsetMinute > 59
+  ) {
+    throw new Error(`${label}: invalid ISO 8601 date-time`);
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) throw new Error(`${label}: invalid ISO 8601 date-time`);
+  return parsed.toISOString();
 }
 
 function canonicalLineage(lineage) {
@@ -276,8 +322,17 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
   const packageVersion = require('../../package.json').version;
   const access = canonicalAccess(options.access || project.release?.access || sourceManifest.access);
   const domainId = sourceManifest.domain_id || domainIdFromName(project.name);
-  const now = isoDateTime(
-    options.timestamp || sourceManifest.updated_at || sourceManifest.updated,
+  const now = normalizeIsoDateTime(
+    firstDefined(options.timestamp, sourceManifest.updated_at, sourceManifest.updated),
+    { label: 'timestamp' },
+  );
+  const createdAt = normalizeIsoDateTime(
+    firstDefined(options.created_at, sourceManifest.created_at, project.created),
+    { fallback: now, label: 'created_at' },
+  );
+  const updatedAt = normalizeIsoDateTime(
+    firstDefined(options.updated_at, now),
+    { fallback: now, label: 'updated_at' },
   );
   const creator = canonicalRuntimeCreator(project, sourceManifest);
 
@@ -289,8 +344,8 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     title: options.title || project.title || project.name,
     version: semverValue(sourceManifest.version || project.release?.version, '0.1.0'),
     judgment_version: semverValue(sourceManifest.judgment_version || project.release?.judgment_version || project.release?.version, '0.1.0'),
-    created_at: isoDateTime(options.created_at || sourceManifest.created_at || project.created, now),
-    updated_at: options.updated_at || now,
+    created_at: createdAt,
+    updated_at: updatedAt,
     compatibility: {
       min_loader_version: '0.18.1',
       profile: PAYLOAD_PROFILE,
@@ -478,4 +533,5 @@ module.exports = {
   buildChecksums,
   canonicalAccess,
   canonicalLineage,
+  normalizeIsoDateTime,
 };

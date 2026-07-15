@@ -10,9 +10,9 @@
  */
 
 const { cardJudgmentFingerprint } = require('../judgment-fields');
+const { CARD_TYPES } = require('../project-schema');
 
 const VALID_STATES = ['draft', 'revised', 'locked', 'tested', 'published', 'deprecated'];
-const CARD_TYPES = ['axiom', 'ontology', 'misunderstanding', 'boundary', 'self_check', 'risk', 'aesthetic', 'scenario', 'case', 'stance', 'framework', 'term', 'banned_term', 'reasoning', 'evolution_stage', 'pattern'];
 
 const TRANSITIONS = {
   draft: ['revised', 'deprecated'],

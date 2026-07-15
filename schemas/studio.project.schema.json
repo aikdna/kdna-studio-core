@@ -87,7 +87,24 @@
           "id": { "type": "string" },
           "type": {
             "type": "string",
-            "enum": ["axiom", "ontology", "misunderstanding", "boundary", "self_check", "risk", "aesthetic", "scenario", "case"]
+            "enum": [
+              "axiom",
+              "ontology",
+              "misunderstanding",
+              "boundary",
+              "self_check",
+              "risk",
+              "aesthetic",
+              "scenario",
+              "case",
+              "stance",
+              "framework",
+              "term",
+              "banned_term",
+              "reasoning",
+              "evolution_stage",
+              "pattern"
+            ]
           },
           "status": {
             "type": "string",

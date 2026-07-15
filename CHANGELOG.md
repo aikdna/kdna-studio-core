@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.10.0 (2026-07-16)
+## 2.0.0 (2026-07-16)
 
 - Emit current responsibility-specific report types with independent `0.1.0`
   schema coordinates and ship schemas for all five report contracts.
@@ -12,6 +12,16 @@
   the current Core.
 - Depend directly on KDNA Core 0.18.1. The authoring library no longer installs
   the separate Runtime CLI as a transitive application dependency.
+- Make the shipped Studio project Schema the single card-type authority for
+  all 16 authoring card types; both project validation and card creation read
+  that exact packaged schema instead of maintaining parallel enums.
+- Normalize every Runtime manifest timestamp to a valid ISO date-time and
+  reject malformed explicit timestamp input before an invalid asset can be
+  returned.
+
+This is a major package release because the emitted Runtime container,
+responsibility-specific report contracts, and public project-schema contract
+replace the output contract shipped by the 1.x line.
 
 ## 1.9.1 (2026-07-15)
 

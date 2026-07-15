@@ -48,7 +48,8 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
 - **Distillation Target** — declare domain category, owner scope, granularity, task scope, include/exclude areas, and load condition before extraction
 - **Evidence Relevance** — classify source material as relevant, weakly relevant, out-of-scope, or split-domain before distillation
 - **Scope Gate** — mark candidates with `scope_fit`, relevance score, and suggested split domain before they can become cards
-- **Judgment Cards** — 8 card types: axiom, ontology, stance, framework, misunderstanding, self_check, banned_term, terminology
+- **Judgment Cards** — 16 schema-authoritative card types spanning principles,
+  boundaries, risks, scenarios, reasoning, terminology, and evolution.
 - **Review and provenance** — AI may propose candidates; projects can record review and release evidence when needed.
 - **Authoring Provenance** — every compiled manifest records Studio-compatible
   compiler metadata, project digest, review counts, and confirmation status.
@@ -247,7 +248,15 @@ and `KDNA_CARD.json` must not be present in runtime export output.
 | `misunderstanding` | KDNA_Patterns.json | Common wrong interpretation |
 | `self_check` | KDNA_Patterns.json | Yes/no verification question |
 | `banned_term` | KDNA_Patterns.json | Terms to avoid and replacements |
-| `terminology` | KDNA_Patterns.json | Standard term definitions |
+| `term` | KDNA_Patterns.json | Standard term definitions |
+| `boundary` | KDNA_Core.json | In-scope and out-of-scope boundaries |
+| `risk` | KDNA_Core.json | Named risks and mitigations |
+| `aesthetic` | KDNA_Core.json | Domain aesthetic judgment |
+| `scenario` | KDNA_Scenarios.json | Situational judgment examples |
+| `case` | KDNA_Cases.json | Source-authored cases |
+| `pattern` | KDNA_Patterns.json | Reusable judgment patterns |
+| `reasoning` | KDNA_Reasoning.json | Source-authored reasoning chains |
+| `evolution_stage` | KDNA_Evolution.json | Source-authored evolution stages |
 
 ## Card State Machine
 

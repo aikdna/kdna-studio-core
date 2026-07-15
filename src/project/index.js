@@ -9,8 +9,7 @@
  */
 
 const crypto = require('crypto');
-const projectSchema = require('../../schemas/studio.project.schema.json');
-const { CARD_TYPES } = require('../cards');
+const { CARD_TYPES, PROJECT_SCHEMA: projectSchema } = require('../project-schema');
 const { JUDGMENT_CARD_TYPES, cardJudgmentFingerprint } = require('../judgment-fields');
 const { validateJudgmentCore } = require('../judgment-core');
 
@@ -69,8 +68,6 @@ function saveProject(project) {
 
 function validateProject(project) {
   const issues = [];
-
-  function check(cond, msg) { if (!cond) issues.push(msg); }
 
   function checkType(val, expected, path) {
     if (expected === 'string' && typeof val !== 'string') issues.push(path + ': expected string, got ' + typeof val);

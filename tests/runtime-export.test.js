@@ -90,6 +90,54 @@ test('runtime export emits only canonical runtime entries', () => {
   assert.equal(Object.hasOwn(checksums, 'asset_digest'), false);
 });
 
+test('runtime export normalizes every accepted timestamp source to an ISO date-time', () => {
+  const project = createRuntimeProject();
+  project.created = '2026-07-01';
+  const exported = exportRuntimeAsset(project, {
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000332',
+    timestamp: '2026-07-16',
+    created_at: '2026-07-02',
+    updated_at: '2026-07-16T08:30:00+08:00',
+  });
+
+  assert.equal(exported.manifest.created_at, '2026-07-02T00:00:00.000Z');
+  assert.equal(exported.manifest.updated_at, '2026-07-16T00:30:00.000Z');
+  assert.equal(exported.manifest.authoring.conformance.checked_at, '2026-07-16T00:00:00.000Z');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-dates-'));
+  try {
+    writeFiles(dir, exported.files);
+    const validation = kdnaCore.validate(dir);
+    assert.equal(validation.overall_valid, true, validation.problems.join('\n'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('runtime export rejects malformed explicit timestamp inputs instead of emitting a Core-invalid asset', () => {
+  const cases = [
+    ['timestamp', '2026-02-31T00:00:00Z'],
+    ['timestamp', '2026-07-16T00:00:00'],
+    ['created_at', 'not-a-date'],
+    ['created_at', ''],
+    ['updated_at', '2026-13-01'],
+    ['updated_at', 1720000000000],
+  ];
+
+  for (const [field, value] of cases) {
+    const options = {
+      asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000333',
+      timestamp: '2026-07-16T00:00:00.000Z',
+      [field]: value,
+    };
+    assert.throws(
+      () => exportRuntimeAsset(createRuntimeProject(), options),
+      new RegExp(field === 'timestamp' ? 'timestamp' : field),
+      `${field}=${String(value)}`,
+    );
+  }
+});
+
 test('runtime export preserves a declared project creator name and id', () => {
   const project = createRuntimeProject();
   const exported = exportRuntimeAsset(project, {
