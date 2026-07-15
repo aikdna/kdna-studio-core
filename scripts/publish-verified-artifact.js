@@ -43,6 +43,14 @@ function releaseDecision({ evidence, tarball, bindCurrent, lookup }) {
   return evaluateRegistryResult(lookup(lookupArguments(spec)), evidence);
 }
 
+function publishCandidate({ evidence, tarball, artifactPath, bindCurrent, publish }) {
+  bindCurrent(evidence);
+  validateArtifact(evidence, tarball);
+  const result = publish(publishArguments(artifactPath));
+  if (result?.error) throw new Error(`npm publish failed: ${result.error.message}`);
+  if (result?.status !== 0) throw new Error(`npm publish exited ${String(result?.status)}`);
+}
+
 function main() {
   const evidenceIndex = process.argv.indexOf('--evidence');
   const artifactIndex = process.argv.indexOf('--artifact');
@@ -71,16 +79,19 @@ function main() {
     return;
   }
 
-  bindCurrent(evidence);
-  validateArtifact(evidence, fs.readFileSync(artifactPath));
-  const published = spawnSync('npm', publishArguments(artifactPath), {
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
-    shell: false,
-    stdio: 'inherit',
+  publishCandidate({
+    evidence,
+    tarball: fs.readFileSync(artifactPath),
+    artifactPath,
+    bindCurrent,
+    publish: (args) =>
+      spawnSync('npm', args, {
+        encoding: 'utf8',
+        maxBuffer: 16 * 1024 * 1024,
+        shell: false,
+        stdio: 'inherit',
+      }),
   });
-  if (published.error) throw new Error(`npm publish failed: ${published.error.message}`);
-  if (published.status !== 0) throw new Error(`npm publish exited ${String(published.status)}`);
 }
 
 if (require.main === module) {
@@ -92,4 +103,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { lookupArguments, publishArguments, releaseDecision };
+module.exports = { lookupArguments, publishArguments, publishCandidate, releaseDecision };
