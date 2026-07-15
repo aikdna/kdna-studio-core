@@ -5,13 +5,17 @@
 - Emit current responsibility-specific report types with independent `0.1.0`
   schema coordinates and ship schemas for all five report contracts.
 - Emit the current manifest, payload, digest, encryption, LoadPlan, and Runtime
-  Capsule names defined by KDNA Core 0.18.1; remove compatibility aliases and
+  Capsule names defined by KDNA Core 0.19.0; remove compatibility aliases and
   combined generation labels from producer output.
 - Preserve declared judgment-core and card fields exactly through authoring
   JSON and CBOR export while validating the produced runtime package against
   the current Core.
-- Depend directly on KDNA Core 0.18.1. The authoring library no longer installs
+- Depend directly on KDNA Core 0.19.0. The authoring library no longer installs
   the separate Runtime CLI as a transitive application dependency.
+- Bind the unpublished Core candidate to its exact source commit and
+  reproducible tar integrity. Clean installs use that checked-in candidate
+  artifact until the identical package exists in the public registry; the
+  release gate rejects publication while that registry prerequisite is open.
 - Make the shipped Studio project Schema the single card-type authority for
   all 16 authoring card types; both project validation and card creation read
   that exact packaged schema instead of maintaining parallel enums.

@@ -15,6 +15,10 @@ const { createProject } = require('../src/project');
 const { createCard } = require('../src/cards');
 const { compileDomain } = require('../src/compile');
 const { exportRuntimeAsset } = require('../src/export-runtime');
+const {
+  assertRegistryReleaseReady,
+  verifyCandidateBinding,
+} = require('../scripts/runtime-candidate-binding');
 
 function writeFiles(directory, files) {
   for (const [name, content] of Object.entries(files)) {
@@ -24,14 +28,14 @@ function writeFiles(directory, files) {
   }
 }
 
-test('release dependency graph binds the current Core and has no Runtime CLI dependency', () => {
-  assert.equal(studioPackage.dependencies['@aikdna/kdna-core'], '0.18.1');
+test('release dependency graph binds the exact Core candidate and has no Runtime CLI dependency', () => {
+  assert.equal(studioPackage.dependencies['@aikdna/kdna-core'], '0.19.0');
   assert.equal(studioPackage.dependencies['@aikdna/kdna-cli'], undefined);
-  assert.equal(packageLock.packages[''].dependencies['@aikdna/kdna-core'], '0.18.1');
+  assert.equal(packageLock.packages[''].dependencies['@aikdna/kdna-core'], '0.19.0');
   assert.equal(packageLock.packages[''].dependencies['@aikdna/kdna-cli'], undefined);
-  assert.equal(packageLock.packages['node_modules/@aikdna/kdna-core'].version, '0.18.1');
+  assert.equal(packageLock.packages['node_modules/@aikdna/kdna-core'].version, '0.19.0');
   assert.equal(packageLock.packages['node_modules/@aikdna/kdna-cli'], undefined);
-  assert.equal(corePackage.version, '0.18.1');
+  assert.equal(corePackage.version, '0.19.0');
 
   const coreEntries = Object.keys(packageLock.packages).filter((entry) =>
     entry.endsWith('node_modules/@aikdna/kdna-core'),
@@ -39,6 +43,20 @@ test('release dependency graph binds the current Core and has no Runtime CLI dep
   assert.deepEqual(coreEntries, ['node_modules/@aikdna/kdna-core']);
 
   assert.ok(fs.realpathSync(require.resolve('@aikdna/kdna-core/package.json')));
+
+  const evidence = verifyCandidateBinding(path.resolve(__dirname, '..'));
+  assert.deepEqual(
+    evidence.packages.map((entry) => [entry.name, entry.version, entry.commit]),
+    [[
+      '@aikdna/kdna-core',
+      '0.19.0',
+      'a245b291a51ed19de30fd1ced8c803e396ca405c',
+    ]],
+  );
+  assert.throws(
+    () => assertRegistryReleaseReady(path.resolve(__dirname, '..')),
+    /registry dependency gate blocked.*0\.19\.0/i,
+  );
 });
 
 test('blank authoring project reaches current Core LoadPlan and Runtime Capsule', (t) => {

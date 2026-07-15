@@ -5,6 +5,7 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { validateReleaseContext } = require('./release-policy');
+const { assertRegistryReleaseReady } = require('./runtime-candidate-binding');
 
 const root = path.resolve(__dirname, '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
@@ -19,6 +20,7 @@ function git(args) {
 }
 
 try {
+  assertRegistryReleaseReady(root);
   const tag = pkg.version;
   const context = validateReleaseContext({
     pkg,
