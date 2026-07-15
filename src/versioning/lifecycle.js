@@ -145,7 +145,7 @@ function rollbackToVersion(lifecycle, targetVersion, opts = {}) {
       to_version: targetVersion,
       reason: opts.reason || 'Rollback requested',
     },
-    changelog: `Rollback from v${current.version} to content of v${targetVersion}`,
+    changelog: `Rollback from ${current.version} to content of ${targetVersion}`,
     regression_evidence: null,
   };
 

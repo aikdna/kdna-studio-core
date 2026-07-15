@@ -7,7 +7,7 @@
 - [ ] Fresh `npm install` verified
 - [ ] Library exports tested
 
-## Does this reintroduce registry / v2 / install / compatibility?
+## Does this reintroduce retired registry, install, or compatibility behavior?
 - [ ] No
 
 ## If adding or changing a .kdna asset

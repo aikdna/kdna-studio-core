@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aikdna/kdna-studio-core/schemas/studio-build-receipt.schema.json",
+  "title": "KDNA Studio Build Receipt",
+  "type": "object",
+  "required": [
+    "type",
+    "schema_version",
+    "asset_uid",
+    "project_uid",
+    "build_id",
+    "domain_id",
+    "version",
+    "judgment_version",
+    "content_digest",
+    "compiler",
+    "compiler_version",
+    "signature_status",
+    "encryption_profile",
+    "encryption_profile_version",
+    "built_at"
+  ],
+  "properties": {
+    "type": { "const": "kdna.studio.build-receipt" },
+    "schema_version": { "const": "0.1.0" },
+    "asset_uid": { "type": "string", "minLength": 1 },
+    "project_uid": { "type": "string", "minLength": 1 },
+    "build_id": { "type": "string", "minLength": 1 },
+    "domain_id": { "type": "string", "minLength": 1 },
+    "registry_name": { "type": ["string", "null"] },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$" },
+    "judgment_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$" },
+    "content_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "asset_digest": { "type": "null" },
+    "compiler": { "const": "@aikdna/kdna-studio-core" },
+    "compiler_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$" },
+    "signature_status": { "type": "string", "minLength": 1 },
+    "encryption_profile": {
+      "oneOf": [
+        { "type": "null" },
+        { "const": "kdna.encryption.licensed-entry" }
+      ]
+    },
+    "encryption_profile_version": {
+      "oneOf": [
+        { "type": "null" },
+        { "const": "0.1.0" }
+      ]
+    },
+    "built_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

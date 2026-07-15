@@ -182,7 +182,7 @@ function validateFiles(files) {
 function validatePackReport({ reportText, tarball, pkg, source }) {
   assert(pkg.name === EXPECTED_PACKAGE_NAME, 'npm pack package name mismatch');
   assert(STABLE_VERSION_RE.test(pkg.version || ''), 'npm pack package version is invalid');
-  assert(source.ref === `refs/tags/v${pkg.version}`, 'npm pack source ref mismatch');
+  assert(source.ref === `refs/tags/${pkg.version}`, 'npm pack source ref mismatch');
   assert(COMMIT_RE.test(source.commit || ''), 'npm pack source commit is invalid');
   const reports = parseJsonDocument(reportText, 'npm pack output');
   assert(Array.isArray(reports) && reports.length === 1, 'npm pack must report one artifact');
@@ -227,7 +227,7 @@ function validateEvidence(evidence) {
   assert(evidence.version === '1.0', 'release evidence version mismatch');
   assert(evidence.package?.name === EXPECTED_PACKAGE_NAME, 'release evidence package mismatch');
   assert(STABLE_VERSION_RE.test(evidence.package.version || ''), 'release evidence package version invalid');
-  assert(evidence.source?.ref === `refs/tags/v${evidence.package.version}`, 'release evidence ref mismatch');
+  assert(evidence.source?.ref === `refs/tags/${evidence.package.version}`, 'release evidence ref mismatch');
   assert(COMMIT_RE.test(evidence.source.commit || ''), 'release evidence commit invalid');
   assert(
     evidence.artifact?.filename ===

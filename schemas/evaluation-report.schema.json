@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aikdna/kdna-studio-core/schemas/evaluation-report.schema.json",
+  "title": "KDNA Studio Evaluation Report",
+  "type": "object",
+  "required": ["type", "schema_version", "build_id", "total", "rated", "cases"],
+  "properties": {
+    "type": { "const": "kdna.studio.evaluation-report" },
+    "schema_version": { "const": "0.1.0" },
+    "build_id": { "type": "string", "minLength": 1 },
+    "total": { "type": "integer", "minimum": 0 },
+    "rated": { "type": "integer", "minimum": 0 },
+    "cases": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": true
+}

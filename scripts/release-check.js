@@ -19,13 +19,13 @@ function git(args) {
 }
 
 try {
-  const tag = `v${pkg.version}`;
+  const tag = pkg.version;
   const context = validateReleaseContext({
     pkg,
     changelog,
     env: process.env,
     git: {
-      status: git(['status', '--porcelain=v1', '--untracked-files=all']),
+      status: git(['status', '--porcelain', '--untracked-files=all']),
       head: git(['rev-parse', 'HEAD']),
       tagCommit: git(['rev-parse', `${tag}^{commit}`]),
     },

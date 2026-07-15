@@ -1,5 +1,5 @@
 // Domain-First Distillation API Tests
-// Aligned with SOURCE_DISTILLATION_CONTRACT.md v0.2
+// Aligned with SOURCE_DISTILLATION_CONTRACT.md 0.2
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');

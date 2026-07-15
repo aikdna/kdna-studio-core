@@ -37,6 +37,7 @@ const contradiction = require('./quality/contradiction');
 const validateCards = require('./quality/validate-cards');
 const delta = require('./testlab/delta');
 const granularity = require('./granularity');
+const protocolContract = require('./protocol-contract');
 
 module.exports = {
   // Stable
@@ -61,6 +62,7 @@ module.exports = {
   validateCards,
   versioning,
   granularity,
+  protocolContract,
 
   // Internal
   packaging,

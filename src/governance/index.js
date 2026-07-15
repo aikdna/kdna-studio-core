@@ -142,7 +142,7 @@ function generateKdnaCard(project, compiledStats, provenance, gates) {
     license: (project.release && project.release.license) || 'CC-BY-4.0',
   };
 
-  // ── RFC-0014 Card v2 fields ──────────────────────────────────────
+  // ── RFC-0014 expanded card fields ────────────────────────────────
   if (gates) {
     const sag = gates.sag || {};
     const tc = gates.tc || {};

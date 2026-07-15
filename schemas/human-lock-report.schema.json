@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aikdna/kdna-studio-core/schemas/human-lock-report.schema.json",
+  "title": "KDNA Studio Human Lock Report",
+  "type": "object",
+  "required": [
+    "type",
+    "schema_version",
+    "build_id",
+    "human_lock_required",
+    "human_lock_policy",
+    "human_lock_count",
+    "judgment_card_count",
+    "unlocked_judgment_card_count",
+    "cards"
+  ],
+  "properties": {
+    "type": { "const": "kdna.studio.human-lock-report" },
+    "schema_version": { "const": "0.1.0" },
+    "build_id": { "type": "string", "minLength": 1 },
+    "human_lock_required": { "type": "boolean" },
+    "human_lock_policy": { "type": "string", "minLength": 1 },
+    "human_lock_count": { "type": "integer", "minimum": 0 },
+    "judgment_card_count": { "type": "integer", "minimum": 0 },
+    "unlocked_judgment_card_count": { "type": "integer", "minimum": 0 },
+    "cards": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": true
+}

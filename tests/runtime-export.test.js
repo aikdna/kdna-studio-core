@@ -72,19 +72,22 @@ test('runtime export emits only canonical runtime entries', () => {
   assert.equal(exported.manifest.payload.encoding, 'cbor');
   assert.equal(exported.manifest.payload.encrypted, false);
   assert.equal(exported.manifest.authoring.conformance.passed, true);
-  assert.equal(exported.manifest.authoring.conformance.kdna_version, '1.0');
+  assert.equal(exported.manifest.format_version, '0.1.0');
+  assert.equal(exported.manifest.authoring.conformance.format_version, '0.1.0');
   assert.equal(
     exported.manifest.authoring.conformance.validator,
     '@aikdna/kdna-studio-core/export-runtime',
   );
   assert.ok(!('KDNA_Core.json' in exported.files));
   assert.ok(!('KDNA_Patterns.json' in exported.files));
-  assert.equal(cbor.decode(exported.files['payload.kdnab']).profile, 'judgment-profile-v1');
+  assert.equal(cbor.decode(exported.files['payload.kdnab']).profile, 'kdna.payload.judgment');
+  assert.equal(cbor.decode(exported.files['payload.kdnab']).profile_version, '0.1.0');
   const checksums = JSON.parse(exported.files['checksums.json']);
-  assert.equal(checksums.digest_profile, 'kdna-runtime-entry-set-v1');
+  assert.equal(checksums.digest_profile, 'kdna.digest-basis.runtime-entry-set');
+  assert.equal(checksums.digest_profile_version, '0.1.0');
   assert.deepEqual(checksums.covered_entries, ['kdna.json', 'payload.kdnab']);
   assert.match(checksums.entry_set_digest, /^sha256:[0-9a-f]{64}$/);
-  assert.equal(checksums.entry_set_digest, checksums.asset_digest);
+  assert.equal(Object.hasOwn(checksums, 'asset_digest'), false);
 });
 
 test('runtime export preserves a declared project creator name and id', () => {
@@ -258,7 +261,12 @@ test('password export uses a CBOR envelope and loads only with the password', ()
   const envelope = cbor.decode(exported.files['payload.kdnab']);
   assert.equal(typeof envelope, 'object');
   assert.equal(envelope.profile, kdnaCore.PASSWORD_PROTECTED_PROFILE);
+  assert.equal(envelope.profile_version, kdnaCore.ENCRYPTION_PROFILE_VERSION);
   assert.equal(exported.manifest.encryption.profile, kdnaCore.PASSWORD_PROTECTED_PROFILE);
+  assert.equal(
+    exported.manifest.encryption.profile_version,
+    kdnaCore.ENCRYPTION_PROFILE_VERSION,
+  );
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-encrypted-'));
   try {
@@ -272,7 +280,8 @@ test('password export uses a CBOR envelope and loads only with the password', ()
       /decrypt|integrity|KDNA_DECRYPT_FAILED/i,
     );
     const capsule = kdnaCore.load(assetPath, { password, profile: 'compact', as: 'json' });
-    assert.equal(capsule.type, 'kdna.context.capsule');
+    assert.equal(capsule.type, 'kdna.runtime-capsule');
+    assert.equal(capsule.contract_version, '0.1.0');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(`${dir}.kdna`, { force: true });

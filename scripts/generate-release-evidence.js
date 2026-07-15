@@ -32,11 +32,11 @@ function main() {
     }
   }
   if (output === artifact) fail('release evidence and artifact paths must differ');
-  if (git(['status', '--porcelain=v1', '--untracked-files=all'])) fail('worktree must be clean');
+  if (git(['status', '--porcelain', '--untracked-files=all'])) fail('worktree must be clean');
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const commit = git(['rev-parse', 'HEAD']);
   if (process.env.GITHUB_SHA !== commit) fail('GITHUB_SHA must equal the packed commit');
-  if (git(['rev-parse', `v${pkg.version}^{commit}`]) !== commit) fail('release tag must resolve to the packed commit');
+  if (git(['rev-parse', `${pkg.version}^{commit}`]) !== commit) fail('release tag must resolve to the packed commit');
 
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.mkdirSync(path.dirname(artifact), { recursive: true });
@@ -72,7 +72,7 @@ function main() {
     fs.writeFileSync(output, `${JSON.stringify(evidence, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
     evidenceCreated = true;
     if (!fs.readFileSync(artifact).equals(bytes)) fail('retained artifact differs from npm pack');
-    if (git(['status', '--porcelain=v1', '--untracked-files=all'])) fail('npm pack changed the repository');
+    if (git(['status', '--porcelain', '--untracked-files=all'])) fail('npm pack changed the repository');
     complete = true;
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });

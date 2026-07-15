@@ -1,5 +1,5 @@
 // Domain-First Distillation — Core API
-// Aligned with SOURCE_DISTILLATION_CONTRACT.md v0.2
+// Aligned with SOURCE_DISTILLATION_CONTRACT.md 0.2
 
 // ─── Domain Taxonomy ───────────────────────────────────────────────
 

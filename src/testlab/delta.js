@@ -170,10 +170,10 @@ function buildSummary(domain, domainScore, verdict) {
 function compareDeltas(delta1, delta2) {
   const diffs = [];
   for (const axis of ['classification', 'diagnosis', 'actions', 'boundary_awareness', 'terminology']) {
-    const v1 = delta1.axes[axis] || 'SAME';
-    const v2 = delta2.axes[axis] || 'SAME';
-    if (v1 !== v2) {
-      diffs.push({ axis, before: v1, after: v2 });
+    const beforeValue = delta1.axes[axis] || 'SAME';
+    const afterValue = delta2.axes[axis] || 'SAME';
+    if (beforeValue !== afterValue) {
+      diffs.push({ axis, before: beforeValue, after: afterValue });
     }
   }
   return {
@@ -204,7 +204,7 @@ function formatDeltaMarkdown(delta) {
   return lines.join('\n');
 }
 
-// ─── JSON report parsing (v0.3.3) ─────────────────────────────────────
+// ─── JSON report parsing (0.3.3) ─────────────────────────────────────
 
 function parseCompareReportJson(report) {
   if (!report || !report.diff) return { axes: {}, verdict: 'trajectory_unchanged' };

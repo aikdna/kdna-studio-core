@@ -6,6 +6,13 @@ const {
   copyDeclaredJudgmentCore,
   pickJudgmentCore,
 } = require('../judgment-core');
+const {
+  FORMAT_VERSION,
+  PAYLOAD_PROFILE,
+  PAYLOAD_PROFILE_VERSION,
+  RUNTIME_ENTRY_SET_DIGEST_PROFILE,
+  RUNTIME_ENTRY_SET_DIGEST_PROFILE_VERSION,
+} = require('../protocol-contract');
 
 const MIMETYPE = 'application/vnd.kdna.asset';
 
@@ -57,6 +64,11 @@ function semverValue(value, fallback = '0.1.0') {
   const twoPart = raw.match(/^([0-9]+)\.([0-9]+)$/);
   if (twoPart) return `${twoPart[1]}.${twoPart[2]}.0`;
   return fallback;
+}
+
+function isoDateTime(value, fallback = new Date().toISOString()) {
+  const parsed = new Date(value || fallback);
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString();
 }
 
 function canonicalLineage(lineage) {
@@ -122,14 +134,13 @@ function buildChecksums(files) {
     .join('\n');
   const entrySetDigest = `sha256:${sha256Hex(combined)}`;
   return {
-    digest_profile: 'kdna-runtime-entry-set-v1',
+    digest_profile: RUNTIME_ENTRY_SET_DIGEST_PROFILE,
+    digest_profile_version: RUNTIME_ENTRY_SET_DIGEST_PROFILE_VERSION,
     covered_entries: ['kdna.json', 'payload.kdnab'],
     algorithm: 'sha256',
     manifest_digest: `sha256:${entries['kdna.json'].value}`,
     payload_digest: `sha256:${entries['payload.kdnab'].value}`,
     entry_set_digest: entrySetDigest,
-    // Deprecated v1 compatibility alias. This is not the final .kdna file hash.
-    asset_digest: entrySetDigest,
     entries,
   };
 }
@@ -182,9 +193,10 @@ function buildPayload(compiled) {
   // the wrong object shape into a field whose schema is `misunderstanding`.
   // Cards of those types round-tripped out of the asset as if they had
   // never existed. The fix threads every compile output into the
-  // judgment-profile-v1 payload it should have carried all along.
+  // current judgment payload it should have carried all along.
   return {
-    profile: 'judgment-profile-v1',
+    profile: PAYLOAD_PROFILE,
+    profile_version: PAYLOAD_PROFILE_VERSION,
     core: {
       highest_question:
         authorSet || firstAxiom?.one_sentence || '(unset — author should set load_condition in project meta)',
@@ -216,7 +228,7 @@ function buildPayload(compiled) {
     cases: Array.isArray(cases.cases) ? cases.cases : [],
     reasoning: {
       // Field name is singular (`self_check`) to match the source KDNA_Patterns
-      // and the payload-profile-v1 schema. (Earlier revision of buildPayload
+      // and the current payload-profile schema. (Earlier revision of buildPayload
       // emitted `self_checks` here, which the canonical schema rejects.)
       self_check: Array.isArray(patterns.self_check) ? patterns.self_check : [],
       // failure_modes is the structured `misunderstanding` summary, not
@@ -229,7 +241,7 @@ function buildPayload(compiled) {
       //
       // Bug (#145 follow-up): the prior map only copied id / mode /
       // correct / key_distinction / why. The three field names that
-      // v1 round-trip actually cares about — failure_risk,
+      // runtime round-trip actually cares about — failure_risk,
       // applies_when, does_not_apply_when — were dropped here even
       // though `compilePatterns` writes them on the producer side
       // (compile/index.js). The fix forwards all three so a
@@ -264,22 +276,25 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
   const packageVersion = require('../../package.json').version;
   const access = canonicalAccess(options.access || project.release?.access || sourceManifest.access);
   const domainId = sourceManifest.domain_id || domainIdFromName(project.name);
-  const now = options.timestamp || sourceManifest.updated_at || sourceManifest.updated || new Date().toISOString();
+  const now = isoDateTime(
+    options.timestamp || sourceManifest.updated_at || sourceManifest.updated,
+  );
   const creator = canonicalRuntimeCreator(project, sourceManifest);
 
   const manifest = {
-    kdna_version: '1.0',
+    format_version: FORMAT_VERSION,
     asset_id: options.asset_id || `kdna:studio:${domainId}`,
     asset_uid: options.asset_uid || `urn:uuid:${sourceManifest.asset_uid || compiled.identity?.asset_uid}`,
     asset_type: 'domain',
     title: options.title || project.title || project.name,
     version: semverValue(sourceManifest.version || project.release?.version, '0.1.0'),
     judgment_version: semverValue(sourceManifest.judgment_version || project.release?.judgment_version || project.release?.version, '0.1.0'),
-    created_at: options.created_at || sourceManifest.created_at || new Date(project.created || now).toISOString(),
+    created_at: isoDateTime(options.created_at || sourceManifest.created_at || project.created, now),
     updated_at: options.updated_at || now,
     compatibility: {
-      min_loader_version: '1.0.0',
-      profile: 'judgment-profile-v1',
+      min_loader_version: '0.18.1',
+      profile: PAYLOAD_PROFILE,
+      profile_version: PAYLOAD_PROFILE_VERSION,
     },
     payload: {
       path: 'payload.kdnab',
@@ -296,7 +311,7 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     lineage: canonicalLineage(project.lineage || sourceManifest.lineage),
     load_contract: {
       // Must stay in sync with the spec (specs/load-profiles.md) and with
-      // the studio-cli buildV1Manifest in bin/kdna-studio.js. Two builders
+      // the Studio CLI runtime manifest builder. Two builders
       // previously diverged: the studio-core path emitted incomplete
       // profile entries (scenario had no max_tokens_hint, full had no
       // selection), which broke loaders that read the contract.
@@ -333,7 +348,7 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
       compiler_version: packageVersion,
       conformance: {
         passed: true,
-        kdna_version: '1.0',
+        format_version: FORMAT_VERSION,
         validator: '@aikdna/kdna-studio-core/export-runtime',
         validator_version: packageVersion,
         checked_at: now,
@@ -369,7 +384,7 @@ function exportRuntimeAsset(project, options = {}) {
   // `sourceEvolution = null` and emit evolution.changelog /
   // version_notes as []. Likewise compileReasoning had no
   // sourceReasoning and compilePatterns had no sourcePatterns. The
-  // v1.7.2 release added the source-* handling inside the compile
+  // 1.7.2 release added the source-* handling inside the compile
   // functions, but the runtime export path was the one that actually has
   // access to the source — it has to forward it.
   const compileOptions = {
@@ -427,6 +442,7 @@ function exportRuntimeAsset(project, options = {}) {
     payloadBytes = cbor.encode(envelope);
     encryptionMeta = {
       profile: core.PASSWORD_PROTECTED_PROFILE,
+      profile_version: core.ENCRYPTION_PROFILE_VERSION,
       encrypted_entries: ['payload.kdnab'],
     };
     // Password-protected assets are implicitly licensed access.

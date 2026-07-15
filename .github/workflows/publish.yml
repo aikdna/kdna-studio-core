@@ -13,8 +13,7 @@ jobs:
     if: >-
       github.event.action == 'published' &&
       github.event.release.draft == false &&
-      github.event.release.prerelease == false &&
-      startsWith(github.event.release.tag_name, 'v')
+      github.event.release.prerelease == false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,14 +24,14 @@ jobs:
       RELEASE_IS_DRAFT: ${{ github.event.release.draft }}
       RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           fetch-depth: 0
           fetch-tags: true
           ref: ${{ github.event.release.tag_name }}
       - name: Fetch the canonical release tag
         run: git fetch --force --tags origin
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'

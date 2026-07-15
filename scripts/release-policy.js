@@ -17,7 +17,7 @@ function validateReleaseContext({ pkg, changelog, env, git }) {
   assert(pkg.name === EXPECTED_PACKAGE_NAME, `package name must be ${EXPECTED_PACKAGE_NAME}`);
   assert(STABLE_VERSION_RE.test(pkg.version || ''), 'package version must be stable canonical SemVer');
   const version = pkg.version;
-  const tag = `v${version}`;
+  const tag = version;
   const ref = `refs/tags/${tag}`;
 
   assert(env.GITHUB_EVENT_NAME === 'release', 'GITHUB_EVENT_NAME must be release');

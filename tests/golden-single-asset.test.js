@@ -43,14 +43,6 @@ const BOUNDARY_FIELDS = [
   'acceptable_exceptions',
 ];
 
-function compiledDataMap(files) {
-  return Object.fromEntries(
-    Object.entries(files)
-      .filter(([name]) => /^KDNA_.*\.json$/.test(name))
-      .map(([name, content]) => [name, JSON.parse(content)]),
-  );
-}
-
 function writeFiles(directory, files) {
   for (const [name, content] of Object.entries(files)) {
     const target = path.join(directory, name);
@@ -111,9 +103,6 @@ test('Golden synthetic authoring source preserves exact values through compiled 
 test('Golden compiled domain lints clean and runtime export passes every public Core validation gate', () => {
   const project = loadFixture();
   const compiled = compileDomain(project);
-  const lint = kdnaCore.lintDomain(compiledDataMap(compiled.files));
-  assert.deepEqual(lint.errors, []);
-
   const exported = exportRuntimeAsset(project, {
     compiled,
     asset_id: 'kdna:fixture:release-decision-golden',

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.10.0 (2026-07-16)
+
+- Emit current responsibility-specific report types with independent `0.1.0`
+  schema coordinates and ship schemas for all five report contracts.
+- Emit the current manifest, payload, digest, encryption, LoadPlan, and Runtime
+  Capsule names defined by KDNA Core 0.18.1; remove compatibility aliases and
+  combined generation labels from producer output.
+- Preserve declared judgment-core and card fields exactly through authoring
+  JSON and CBOR export while validating the produced runtime package against
+  the current Core.
+- Depend directly on KDNA Core 0.18.1. The authoring library no longer installs
+  the separate Runtime CLI as a transitive application dependency.
+
 ## 1.9.1 (2026-07-15)
 
 - Require the exact released Runtime pair: KDNA CLI 0.33.0 and KDNA Core
@@ -71,7 +84,7 @@
 
 - Preserve locked `evolution_stage` cards in `KDNA_Evolution.json` as
   `source_authored: true` stages. This prevents
-  `create --from-folder` → `migrate --format v1` → `create --from-kdna`
+  source-folder import → canonical export → asset re-import
   from silently dropping source-authored evolution stages.
 
 ## 1.7.8 (2026-07-01)
@@ -84,10 +97,10 @@ Normalize runtime routing fields — stringList helper ensures applies_when / do
 UX pass — fix the #4 entry-point inconsistency.
 
 - `compileReasoning` now tags axiom-synthesised reasoning chains
-  with `source_authored: false`. Importer (`cardsFromV1Payload`
-  in `@aikdna/kdna-studio-cli`) skips these on round-trip so a
+  with `source_authored: false`. The canonical Studio CLI importer
+  skips these on round-trip so a
   project with 1 axiom + 1 misunderstanding + 1 self_check stays
-  at 3 cards after `migrate --format v1` + `create --from-kdna`,
+  at 3 cards after canonical export plus `create --from-kdna`,
   not 4 or 5.
 
 ## 1.7.6 (2026-06-28)
@@ -99,7 +112,7 @@ Phase 12 audit follow-up. Closes the residual half of #145.
   misunderstanding card into the published `failure_modes` entry.
   Prior version dropped these three fields even though
   `compilePatterns` wrote them on the producer side, so a
-  misunderstanding card round-trip through `migrate --format v1`
+  misunderstanding card round-trip through canonical export
   lost them. End-to-end verified: a Studio project with
   `failure_risk='risk!'`, `applies_when=['a1','a2']`,
   `does_not_apply_when=['d1']` now round-trips all three fields
@@ -128,7 +141,7 @@ kdna-studio-core repo (#15, #27, #28, #29, #30).
   `compileDomain` via `options.source`. Prior version passed no
   source, so `compileEvolution.sourceEvolution` was always `null`
   and `evolution.changelog` / `version_notes` were always `[]`. The
-  v1 export path now round-trips the source's changelog and
+  canonical export path now round-trips the source's changelog and
   version_notes when the project was created via `create --from-kdna`
   (which now stores `source_patterns` / `source_reasoning` /
   `source_evolution` on the project).
@@ -177,17 +190,17 @@ exercise all 16 types as judgment-bearing.
 Audit follow-ups (2026-06-28 round-trip verification). This release is
 required to keep the round-trip path intact for the eight card types
 that compile/index.js was tracking but export-runtime/index.js was
-silently dropping. Without 1.7.2, a `kdna-studio migrate --format v1`
+silently dropping. Without 1.7.2, the former explicit-format migration path
 that includes reasoning / framework / term / banned_term / aesthetic
 / ontology cards still loses them on the way into `payload.kdnab`
 even when every card is Human Locked.
 
-- **buildPayload now threads every compile output into the v1 payload.** Prior version only knew the original 6 judgment types and additionally mis-mapped `reasoning.failure_modes` to `reasoning.reasoning_chains`, putting the wrong object shape into a field whose schema is `misunderstanding`. Adds `core.ontology`, `core.frameworks`, `core.aesthetics`; threads `term` and `banned_term` from `patterns.terminology` into the `patterns` array; emits `reasoning_chains` separately from `failure_modes`; renames the field to `self_check` (singular) to match the source KDNA_Patterns and the payload-profile-v1 schema. Backward compatible: legacy readers can read the legacy field name from the same source.
-- **compileCore.frameworks is no longer hardcoded `[]`.** A locked framework card is now collected alongside ontology / stances and surfaces in the v1 payload.
+- **buildPayload now threads every compile output into the canonical payload.** Prior version only knew the original 6 judgment types and additionally mis-mapped `reasoning.failure_modes` to `reasoning.reasoning_chains`, putting the wrong object shape into a field whose schema is `misunderstanding`. Adds `core.ontology`, `core.frameworks`, `core.aesthetics`; threads `term` and `banned_term` from `patterns.terminology` into the `patterns` array; emits `reasoning_chains` separately from `failure_modes`; renames the field to `self_check` (singular) to match the source KDNA_Patterns and the current payload-profile schema.
+- **compileCore.frameworks is no longer hardcoded `[]`.** A locked framework card is now collected alongside ontology / stances and surfaces in the canonical payload.
 - **lockCard schema gate covers boundary / risk / aesthetic.** The prior gate only enforced for axiom and misunderstanding, which let boundary / risk / aesthetic lock with empty fields and produce fingerprints that did not reflect their actual content. Thresholds are conservative (presence, not length) so the gate does not reject reasonable short values like `name: "r1"`.
 - **JUDGMENT_FIELDS now includes `name`, `description`, `mitigation`.** The fingerprint is computed across all of these so a Human Lock signature cannot be reused against a card whose only non-axiom fields were silently changed.
 - **`compile` / `hasJudgmentContent` use a single shared `JUDGMENT_CARD_TYPES_FOR_COMPILE` set** covering axiom / ontology / misunderstanding / self_check / boundary / risk / aesthetic / scenario / case / stance / pattern / reasoning / framework / term / banned_term / evolution_stage. The two filters previously diverged; domains that contained only `reasoning` or `framework` cards used to fail with "refusing to compile empty domain" even when every card was Human Locked.
-- **`buildManifest.load_contract.profiles` is now complete.** Prior version omitted `max_tokens_hint` for scenario and `selection` for full. Mirrors the studio-cli `buildV1Manifest` and the load-profiles spec.
+- **`buildManifest.load_contract.profiles` is now complete.** Prior version omitted `max_tokens_hint` for scenario and `selection` for full. Mirrors the Studio CLI runtime manifest builder and the load-profiles spec.
 - `tests/empty-domain-gate.test.js` updated to exercise the empty-domain guard with a genuinely non-judgment card type, since `term` is now judgment-bearing.
 
 ## 1.7.1 (2026-06-27)
@@ -215,12 +228,12 @@ even when every card is Human Locked.
 - B2: encrypt payload via scrypt profile when password is provided
   - `exportRuntimeAsset` encrypts `payload.kdnab` with `encryptProtectedEntryScrypt`
   - Forces `access: licensed` + `entitlement.profile: password` for encrypted exports
-  - Manifest declares `encryption.profile: kdna-password-protected-v1-scrypt`
+  - Manifest declares the password-protected encryption profile
   - Payload `encrypted` flag + load_contract `requires_decryption` dynamic
 - Deps: bump @aikdna/kdna-core to ^0.15.0 (B2 scrypt profile)
 
 ## 1.6.0 (2026-06-23)
-- Feat: RFC-0014 Card v2 fields.
+- Feat: RFC-0014 expanded card fields.
 - Feat: Product Runtime module (RFC-0011).
 
 ## 1.5.12 (2026-06-22)
@@ -228,7 +241,7 @@ even when every card is Human Locked.
 
 ## 1.5.11 (2026-06-22)
 - Fixed: compilePatterns() now extracts locked pattern cards and maps them to payload patterns field.
-- Fixed: buildPayload() merges pattern cards into v1 payload alongside misunderstandings.
+- Fixed: buildPayload() merges pattern cards into the canonical payload alongside misunderstandings.
 - Fixed: compileDomain empty-domain gate includes pattern and stance types.
 
 ## 1.5.10 (2026-06-22)
@@ -238,16 +251,16 @@ even when every card is Human Locked.
 - compileCore now extracts locked stance cards; stance added to valid judgment content types; buildPayload includes stances field.
 
 ## 1.5.8 (2026-06-21)
-- (pre-v1 GA cleanup release)
+- (pre-GA cleanup release)
 ## 1.5.7 (2026-06-21)
-- (pre-v1 GA cleanup release)
+- (pre-GA cleanup release)
 
 ## 1.5.6 (2026-06-20)
 - Align README package matrix with the current local `.kdna` CLI path: inspect, validate, plan-load, pack/unpack, load.
 - Depend on `@aikdna/kdna-cli@^0.26.5` for corrected public CLI wording.
 
 ## 1.5.5 (2026-06-20)
-- Clarify that Human Lock, signatures, and release evidence are optional provenance layers, not KDNA Core v1 format-validity requirements.
+- Clarify that Human Lock, signatures, and release evidence are optional provenance layers, not KDNA Core format-validity requirements.
 - Align README and npm package description with the public `.kdna` file model.
 
 ## 1.4.2 (2026-05-30)

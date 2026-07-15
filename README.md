@@ -27,6 +27,13 @@ Runtime export must validate with `@aikdna/kdna-core` and must plan through the
 LoadPlan contract in `aikdna/kdna`. Studio products must not create app-private
 `.kdna` shapes that KDNA Core or CLI cannot inspect, validate, or plan-load.
 
+Current exports keep responsibility names separate from compatibility
+coordinates: the container uses `format_version: 0.1.0`, the payload declares
+`profile: kdna.payload.judgment` with `profile_version: 0.1.0`, checksums use
+`digest_profile: kdna.digest-basis.runtime-entry-set` with
+`digest_profile_version: 0.1.0`, and Runtime loading yields a
+`kdna.runtime-capsule` contract at `0.1.0`.
+
 | Library | Language | Role |
 |---------|----------|------|
 | `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — inspect, validate, plan-load, pack/unpack, load |

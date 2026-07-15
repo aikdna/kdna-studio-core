@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aikdna/kdna-studio-core/schemas/studio-build-report.schema.json",
+  "title": "KDNA Studio Build Report",
+  "type": "object",
+  "required": [
+    "type",
+    "schema_version",
+    "build_id",
+    "asset_uid",
+    "project_uid",
+    "domain_id",
+    "compiler",
+    "compiler_version",
+    "compiled_at",
+    "content_digest",
+    "stats",
+    "validations",
+    "outputs"
+  ],
+  "properties": {
+    "type": { "const": "kdna.studio.build-report" },
+    "schema_version": { "const": "0.1.0" },
+    "build_id": { "type": "string", "minLength": 1 },
+    "asset_uid": { "type": "string", "minLength": 1 },
+    "project_uid": { "type": "string", "minLength": 1 },
+    "domain_id": { "type": "string", "minLength": 1 },
+    "registry_name": { "type": ["string", "null"] },
+    "compiler": { "const": "@aikdna/kdna-studio-core" },
+    "compiler_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$" },
+    "compiled_at": { "type": "string", "format": "date-time" },
+    "content_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "stats": { "type": "object" },
+    "validations": { "type": "object" },
+    "outputs": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

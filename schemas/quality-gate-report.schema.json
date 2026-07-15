@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/aikdna/kdna-studio-core/schemas/quality-gate-report.schema.json",
+  "title": "KDNA Studio Quality Gate Report",
+  "type": "object",
+  "required": [
+    "type",
+    "schema_version",
+    "build_id",
+    "quality_badge",
+    "eval_count",
+    "rated_eval_count",
+    "gates"
+  ],
+  "properties": {
+    "type": { "const": "kdna.studio.quality-gate-report" },
+    "schema_version": { "const": "0.1.0" },
+    "build_id": { "type": "string", "minLength": 1 },
+    "quality_badge": { "type": "string", "minLength": 1 },
+    "eval_count": { "type": "integer", "minimum": 0 },
+    "rated_eval_count": { "type": "integer", "minimum": 0 },
+    "gates": { "type": "object" }
+  },
+  "additionalProperties": true
+}

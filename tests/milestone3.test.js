@@ -147,7 +147,7 @@ describe('Versioning', () => {
     newProject.cards = [makeLockedCard('axiom', { one_sentence: 'New axiom for agent judgment.' }, 'ax_001')];
     const diff = diffProjects(oldProject, newProject);
     const changelog = generateChangelog(diff, '0.1.0', '0.2.0', { domain: 'test' });
-    assert.ok(changelog.includes('# test v0.2.0'));
+    assert.ok(changelog.includes('# test 0.2.0'));
     assert.ok(changelog.includes('MINOR'));
     assert.ok(changelog.includes('ax_001'));
   });

@@ -10,7 +10,6 @@
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -21,16 +20,6 @@ const { compileDomain } = require('../src/compile');
 const { exportRuntimeAsset } = require('../src/export-runtime');
 const { buildProvenance } = require('../src/provenance');
 const kdnaCore = require('@aikdna/kdna-core');
-
-const KDNA_CLI = process.env.KDNA_CLI || path.join(
-  path.dirname(require.resolve('@aikdna/kdna-cli/package.json')),
-  'src',
-  'cli.js',
-);
-
-function runKdna(args, options) {
-  return execFileSync(process.execPath, [KDNA_CLI, ...args], options);
-}
 
 function makeLockedCard(type, fields, id) {
   let card = createCard(type, fields, id);
@@ -140,11 +129,7 @@ describe('E2E: compile → validate', () => {
     writeCompiledFiles(sourceDir, exported.files);
     kdnaCore.pack(sourceDir, assetPath);
 
-    const validateResult = runKdna(['validate', assetPath, '--json'], {
-      encoding: 'utf8',
-      timeout: 30000,
-    });
-    assert.equal(JSON.parse(validateResult).overall_valid, true);
+    assert.equal(kdnaCore.validate(assetPath).overall_valid, true);
   });
 
   test('compiled output structure matches KDNA SPEC', () => {
@@ -239,11 +224,7 @@ describe('E2E: compile → runtime pack → inspect', () => {
     writeCompiledFiles(sourceDir, exported.files);
     kdnaCore.pack(sourceDir, assetPath);
 
-    const inspectResult = runKdna(['inspect', assetPath, '--json'], {
-      encoding: 'utf8',
-      timeout: 15000,
-    });
-    const inspected = JSON.parse(inspectResult);
+    const inspected = kdnaCore.inspect(assetPath);
     assert.equal(inspected.asset_id, 'kdna:studio:leadership_decisions');
     assert.equal(inspected.version, '0.1.0');
   });

@@ -7,7 +7,7 @@
  *   tested_grade      — ≥5 rated evals, ≥3 comparison tests
  *   publishable_grade — ≥10 evals, all axioms have Feynman, README 4 questions, no blocking
  *
- * v0.3.2: integrates validateAllCards, Feynman enforcement at publishable grade.
+ * 0.3.2: integrates validateAllCards, Feynman enforcement at publishable grade.
  */
 
 const contradiction = require('./contradiction');
@@ -27,10 +27,10 @@ function computeReadiness(project) {
   const blocking = [];
   const warnings = [];
 
-  // ── Governance check (v0.6.1) ───────────────────────────────────
+  // ── Governance check (0.6.1) ───────────────────────────────────
   const govResult = validateGovernance(project);
 
-  // ── Source mode trust checks (v1.4.0) ───────────────────────────
+  // ── Source mode trust checks (1.4.0) ───────────────────────────
   const sourceMode = project.source_mode || 'blank';
   if (sourceMode === 'source_folder') {
     warnings.push('source_folder: imported cards have no inherited review provenance');
@@ -45,7 +45,7 @@ function computeReadiness(project) {
     warnings.push('kdna_asset: imported cards do not inherit parent review provenance');
   }
 
-  // ── I18N check (v1.2.0) ─────────────────────────────────────────
+  // ── I18N check (1.2.0) ─────────────────────────────────────────
   // I18N gates are triggered by declared languages, not by scope prefix.
   // Projects declaring multi-language support SHOULD have corresponding locale files.
   const i18nCoverage = computeI18nCoverage(project);
@@ -60,7 +60,7 @@ function computeReadiness(project) {
     (issue.severity === 'blocking' ? blocking : warnings).push(`Governance: ${issue.message}`);
   }
 
-  // ── Card validation integration (v0.3.2) ─────────────────────────
+  // ── Card validation integration (0.3.2) ─────────────────────────
   const cardResults = validateAllCards(project);
   for (const { card_id, issues } of cardResults) {
     for (const issue of issues) {
@@ -105,7 +105,7 @@ function computeReadiness(project) {
   const feynmanRatio = lockedAxioms.length > 0 ? lockedAxioms.filter(ax => ax.feynman_restatement).length / lockedAxioms.length : 0;
   const allFeynman = lockedAxioms.every(ax => ax.feynman_restatement) && lockedMisunderstandings.every(ms => !ms.locked || ms.feynman_restatement);
 
-  // Feynman quality threshold (v0.6.2)
+  // Feynman quality threshold (0.6.2)
   const feynmanQuality = lockedAxioms.every(ax => {
     if (!ax.feynman_restatement?.score) return false;
     return ax.feynman_restatement.score.total >= 4;
@@ -119,7 +119,7 @@ function computeReadiness(project) {
     warnings.push('Feynman: axiom restatements should score ≥4/5 for publishable grade');
   }
 
-  // Compare test results requirements (v0.6.4)
+  // Compare test results requirements (0.6.4)
   const withKdnaBetter = ratedTests.filter(t => t.result === 'with_kdna_better').length;
   const withoutKdnaBetter = ratedTests.filter(t => t.result === 'without_kdna_better').length;
   if (ratedTests.length > 0 && withoutKdnaBetter > 0) {

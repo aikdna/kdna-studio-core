@@ -1,5 +1,5 @@
 /**
- * Versioning — Judgment-aware semver with refined bump rules (v0.3.3).
+ * Versioning — Judgment-aware semver with refined bump rules (0.3.3).
  *
  * PATCH: typo, description, Feynman restatement, evidence_refs, examples
  * MINOR: new axiom/misunderstanding/self_check, narrowed applies_when, new does_not_apply_when, new evals
@@ -102,9 +102,9 @@ function recommendVersionBump(diff) {
 function generateChangelog(diff, oldVersion, newVersion, options = {}) {
   const lines = [];
   const bump = recommendVersionBump(diff);
-  lines.push(`# ${options.domain || 'domain'} v${newVersion}`);
+  lines.push(`# ${options.domain || 'domain'} ${newVersion}`);
   lines.push('');
-  lines.push(`**Previous:** v${oldVersion}  **Bump:** ${bump.toUpperCase()}`);
+  lines.push(`**Previous:** ${oldVersion}  **Bump:** ${bump.toUpperCase()}`);
   lines.push('');
 
   for (const [label, items] of [['Added', diff.added], ['Removed', diff.removed], ['Changed', diff.changed]]) {

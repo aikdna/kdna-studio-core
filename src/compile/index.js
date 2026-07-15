@@ -13,6 +13,11 @@
 const cbor = require('cbor-x');
 const crypto = require('crypto');
 const { copyDeclaredJudgmentCore } = require('../judgment-core');
+const {
+  REPORT_CONTRACTS,
+  RUNTIME_CAPSULE_TYPE,
+  RUNTIME_CAPSULE_VERSION,
+} = require('../protocol-contract');
 
 // Every type the Human Lock gate and compile pipeline treat as substantive
 // judgment content. MUST stay in sync with cards/index.js#CARD_TYPES and
@@ -347,7 +352,7 @@ function compileReasoning(cards, project, sourceReasoning = null) {
       logic: [ax.fields?.full_statement || ''],
       so_what: ax.fields?.why || 'Agent judgment changes when this axiom is loaded.',
       // Bug (#4 UX follow-up): the prior version did not mark
-      // synthesised reasoning_chains. Importers (cardsFromV1Payload)
+      // synthesised reasoning_chains. Canonical payload importers
       // therefore imported every synthesised chain as if it were a
       // user-authored reasoning card, doubling the count on
       // round-trip. The fix tags these chains `source_authored: false`
@@ -499,7 +504,8 @@ function compileManifest(project, files, identity = null) {
     },
     runtime: {
       min_runtime_version: '0.3.0',
-      load_contract: 'context-capsule-v1',
+      load_contract: RUNTIME_CAPSULE_TYPE,
+      load_contract_version: RUNTIME_CAPSULE_VERSION,
     },
     creator: project.creator_identity ? {
       creator_id: project.creator_identity.creator_id,
@@ -561,7 +567,7 @@ function buildReports(project, files, identity, provenance, stats) {
   const packageVersion = require('../../package.json').version;
 
   const buildReport = {
-    schema_version: 'studio-build-report-v1',
+    ...REPORT_CONTRACTS.build,
     build_id: identity.build_id,
     asset_uid: identity.asset_uid,
     project_uid: identity.project_uid,
@@ -582,7 +588,7 @@ function buildReports(project, files, identity, provenance, stats) {
   };
 
   const humanLockReport = {
-    schema_version: 'human-lock-report-v1',
+    ...REPORT_CONTRACTS.humanLock,
     build_id: identity.build_id,
     human_lock_required: false,
     human_lock_policy: 'optional_provenance',
@@ -600,7 +606,7 @@ function buildReports(project, files, identity, provenance, stats) {
   };
 
   const qualityGateReport = {
-    schema_version: 'quality-gate-report-v1',
+    ...REPORT_CONTRACTS.qualityGate,
     build_id: identity.build_id,
     quality_badge: qualityBadge,
     eval_count: tests.length,
@@ -622,7 +628,7 @@ function buildReports(project, files, identity, provenance, stats) {
   };
 
   const evalReport = {
-    schema_version: 'eval-report-v1',
+    ...REPORT_CONTRACTS.evaluation,
     build_id: identity.build_id,
     total: tests.length,
     rated: ratedTests.length,
@@ -635,7 +641,7 @@ function buildReports(project, files, identity, provenance, stats) {
   };
 
   const buildReceipt = {
-    schema_version: 'studio-build-receipt-v1',
+    ...REPORT_CONTRACTS.receipt,
     asset_uid: identity.asset_uid,
     project_uid: identity.project_uid,
     build_id: identity.build_id,
@@ -648,7 +654,10 @@ function buildReports(project, files, identity, provenance, stats) {
     compiler: '@aikdna/kdna-studio-core',
     compiler_version: packageVersion,
     signature_status: 'pending_export_sign',
-    encryption_profile: project.release?.access === 'licensed' ? 'kdna-licensed-entry-v1' : null,
+    encryption_profile:
+      project.release?.access === 'licensed' ? 'kdna.encryption.licensed-entry' : null,
+    encryption_profile_version:
+      project.release?.access === 'licensed' ? '0.1.0' : null,
     built_at: identity.compiled_at,
   };
 
