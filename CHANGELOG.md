@@ -12,10 +12,13 @@
   the current Core.
 - Depend directly on KDNA Core 0.19.0. The authoring library no longer installs
   the separate Runtime CLI as a transitive application dependency.
-- Bind the unpublished Core candidate to its exact source commit and
-  reproducible tar integrity. Clean installs use that checked-in candidate
-  artifact until the identical package exists in the public registry; the
-  release gate rejects publication while that registry prerequisite is open.
+- Bind the unpublished Core candidate to its exact checked-in tar digests and
+  require exactly one top-level Core copy across the complete lock graph.
+  The recorded commit is an audit source reference, not a cryptographic
+  identity claim; the tar integrity and SHA-256 digest are authoritative.
+  Clean installs use that candidate artifact until the identical package
+  exists in the public registry, and the release gate rejects publication
+  while that registry prerequisite is open.
 - Make the shipped Studio project Schema the single card-type authority for
   all 16 authoring card types; both project validation and card creation read
   that exact packaged schema instead of maintaining parallel enums.

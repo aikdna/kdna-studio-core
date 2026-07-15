@@ -32,7 +32,7 @@ function mutateJson(root, relativePath, mutation) {
   fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-test('candidate binding completeness rejects omissions, duplicates, extras, and unbound locks', (t) => {
+test('candidate binding completeness rejects omissions, duplicates, extras, and hostile lock graphs', (t) => {
   const root = copyFixtureRoot(t);
   const bindingPath = path.join(root, 'fixtures/runtime-candidates/binding.json');
   const packagePath = path.join(root, 'package.json');
@@ -97,5 +97,72 @@ test('candidate binding completeness rejects omissions, duplicates, extras, and 
       };
     },
     /unbound file lock package/,
+  );
+  rejects(
+    'package-lock.json',
+    (lock) => {
+      lock.packages['node_modules/foreign/node_modules/@aikdna/kdna-core'] = {
+        version: '0.18.1',
+        resolved: 'https://registry.npmjs.org/@aikdna/kdna-core/-/kdna-core-0.18.1.tgz',
+      };
+    },
+    /bound AIKDNA lock package must appear exactly once.*kdna-core.*count=2/,
+  );
+  rejects(
+    'package-lock.json',
+    (lock) => {
+      lock.packages[
+        'node_modules/foreign/node_modules/@aikdna/kdna-core/node_modules/transitive'
+      ] = { version: '1.0.0' };
+    },
+    /bound AIKDNA lock package must appear exactly once.*kdna-core.*count=2/,
+  );
+  rejects(
+    'package-lock.json',
+    (lock) => {
+      const topLevel = lock.packages['node_modules/@aikdna/kdna-core'];
+      lock.packages['node_modules/foreign/node_modules/@aikdna/kdna-core'] = {
+        ...topLevel,
+        resolved: 'file:fixtures/runtime-candidates/kdna-core-0.19.0.tgz',
+      };
+    },
+    /bound AIKDNA lock package must appear exactly once.*kdna-core.*count=2/,
+  );
+  rejects(
+    'package-lock.json',
+    (lock) => {
+      const topLevelPath = 'node_modules/@aikdna/kdna-core';
+      lock.packages['node_modules/foreign/node_modules/@aikdna/kdna-core'] =
+        lock.packages[topLevelPath];
+      delete lock.packages[topLevelPath];
+    },
+    /bound AIKDNA lock package must be top-level.*kdna-core/,
+  );
+  rejects(
+    'package-lock.json',
+    (lock) => {
+      lock.packages['node_modules/foreign/node_modules/@aikdna%2fkdna-core'] = {
+        version: '0.19.0',
+      };
+    },
+    /AIKDNA lock package path invalid/,
+  );
+  rejects(
+    'package-lock.json',
+    (lock) => {
+      lock.packages['node_modules/foreign/node_modules/%2540aikdna%252fkdna-core'] = {
+        version: '0.19.0',
+      };
+    },
+    /AIKDNA lock package name invalid/,
+  );
+  rejects(
+    'package-lock.json',
+    (lock) => {
+      lock.packages['node_modules/foreign/node_modules/@AIKDNA/kdna-core'] = {
+        version: '0.19.0',
+      };
+    },
+    /AIKDNA lock package name invalid/,
   );
 });
