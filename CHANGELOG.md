@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.1 (2026-07-15)
+
+- Require the exact released Runtime pair: KDNA CLI 0.33.0 and KDNA Core
+  0.18.0, while preserving the existing Studio authoring compile/export
+  behavior and default Runtime boundary.
+
 ## 1.9.0 (2026-07-14)
 
 - Require the exact released Runtime pair: KDNA CLI 0.32.0 and KDNA Core
