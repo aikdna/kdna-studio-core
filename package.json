@@ -43,7 +43,10 @@
     "test": "node --test tests/*.test.js",
     "test:all": "npm run lint && npm run check:protocol-names && npm test",
     "check:protocol-names": "node scripts/check-current-protocol-names.js",
+    "verify:candidate-sources": "node scripts/verify-runtime-candidate-sources.js",
     "release:check": "node scripts/release-check.js",
+    "release:generate-evidence": "node scripts/generate-release-evidence.js",
+    "release:publish-verified": "node scripts/publish-verified-artifact.js",
     "prepublishOnly": "npm run test:all && npm run release:check"
   }
 }

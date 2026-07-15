@@ -5,7 +5,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: aikdna/kdna
+          ref: a257b92345af57e6fb20215576bc976a5291b297
+          path: .candidate-sources/kdna
       - uses: actions/setup-node@v6
         with: { node-version: 22 }
-      - run: npm ci
+      - name: Pin the candidate pack npm client
+        run: |
+          npm install --global npm@11.17.0 --ignore-scripts --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
+          npm --version | grep -Fx 11.17.0
+      - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
+      - run: npm run verify:candidate-sources
+        env:
+          KDNA_CORE_CANDIDATE_SOURCE: ${{ github.workspace }}/.candidate-sources/kdna
       - run: npm test

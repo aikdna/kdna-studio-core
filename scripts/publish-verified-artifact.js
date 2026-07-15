@@ -7,6 +7,7 @@ const path = require('node:path');
 const { readCurrentBinding } = require('./current-release-binding');
 const { validateArtifact } = require('./release-evidence');
 const { evaluateRegistryResult } = require('./registry-policy');
+const { resolveTrustedNpmInvocation } = require('./runtime-candidate-binding');
 
 const REGISTRY = 'https://registry.npmjs.org/';
 
@@ -19,6 +20,7 @@ function publishArguments(artifactPath) {
     '--access',
     'public',
     `--registry=${REGISTRY}`,
+    `--@aikdna:registry=${REGISTRY}`,
   ];
 }
 
@@ -33,6 +35,7 @@ function lookupArguments(spec) {
     '--json',
     '--loglevel=silent',
     `--registry=${REGISTRY}`,
+    `--@aikdna:registry=${REGISTRY}`,
   ];
 }
 
@@ -61,13 +64,14 @@ function main() {
   const evidencePath = path.resolve(process.argv[evidenceIndex + 1] || '');
   const artifactPath = path.resolve(process.argv[artifactIndex + 1] || '');
   const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+  const npmInvocation = resolveTrustedNpmInvocation(root);
   const bindCurrent = (candidate) => readCurrentBinding({ root, evidence: candidate });
   const decision = releaseDecision({
     evidence,
     tarball: fs.readFileSync(artifactPath),
     bindCurrent,
     lookup: (args) =>
-      spawnSync('npm', args, {
+      spawnSync(npmInvocation.command, [...npmInvocation.prefixArgs, ...args], {
         encoding: 'utf8',
         maxBuffer: 1024 * 1024,
         shell: false,
@@ -85,7 +89,7 @@ function main() {
     artifactPath,
     bindCurrent,
     publish: (args) =>
-      spawnSync('npm', args, {
+      spawnSync(npmInvocation.command, [...npmInvocation.prefixArgs, ...args], {
         encoding: 'utf8',
         maxBuffer: 16 * 1024 * 1024,
         shell: false,

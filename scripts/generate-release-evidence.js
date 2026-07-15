@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { validatePackReport } = require('./release-evidence');
+const { resolveTrustedNpmInvocation } = require('./runtime-candidate-binding');
 
 const root = path.resolve(__dirname, '..');
 
@@ -41,13 +42,23 @@ function main() {
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.mkdirSync(path.dirname(artifact), { recursive: true });
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-core-pack-'));
+  const npmInvocation = resolveTrustedNpmInvocation(root);
   let complete = false;
   let artifactCreated = false;
   let evidenceCreated = false;
   try {
     const packed = spawnSync(
-      'npm',
-      ['pack', '--json', '--ignore-scripts', '--pack-destination', temp],
+      npmInvocation.command,
+      [
+        ...npmInvocation.prefixArgs,
+        'pack',
+        '--json',
+        '--ignore-scripts',
+        '--pack-destination',
+        temp,
+        '--registry=https://registry.npmjs.org/',
+        '--@aikdna:registry=https://registry.npmjs.org/',
+      ],
       { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, shell: false },
     );
     if (packed.error) fail(`npm pack failed: ${packed.error.message}`);

@@ -16,6 +16,11 @@ function copyFixtureRoot(t) {
   for (const file of ['package.json', 'package-lock.json']) {
     fs.copyFileSync(path.join(ROOT, file), path.join(root, file));
   }
+  fs.mkdirSync(path.join(root, '.github/workflows'), { recursive: true });
+  fs.copyFileSync(
+    path.join(ROOT, '.github/workflows/ci.yml'),
+    path.join(root, '.github/workflows/ci.yml'),
+  );
   for (const file of fs.readdirSync(path.join(ROOT, 'fixtures/runtime-candidates'))) {
     fs.copyFileSync(
       path.join(ROOT, 'fixtures/runtime-candidates', file),
@@ -70,7 +75,7 @@ test('candidate binding completeness rejects omissions, duplicates, extras, and 
   rejects(
     'package.json',
     (pkg) => { pkg.dependencies['@aikdna/unbound-runtime'] = '1.0.0'; },
-    /candidate binding package set mismatch.*unbound-runtime/,
+    /(?:candidate binding|lock root AIKDNA dependencies) package set mismatch.*unbound-runtime/,
   );
   rejects(
     'package-lock.json',
@@ -106,7 +111,7 @@ test('candidate binding completeness rejects omissions, duplicates, extras, and 
         resolved: 'https://registry.npmjs.org/@aikdna/kdna-core/-/kdna-core-0.18.1.tgz',
       };
     },
-    /bound AIKDNA lock package must appear exactly once.*kdna-core.*count=2/,
+    /AIKDNA lock resolution\/path mismatch|bound AIKDNA lock package must appear exactly once.*kdna-core.*count=2/,
   );
   rejects(
     'package-lock.json',

@@ -13,6 +13,7 @@ const { validateCurrentBinding } = require('../scripts/current-release-binding')
 const { parseTarFiles, validateArtifact, validatePackReport } = require('../scripts/release-evidence');
 const { validateReleaseContext } = require('../scripts/release-policy');
 const { evaluateRegistryResult, expectedE404 } = require('../scripts/registry-policy');
+const { resolveTrustedNpmInvocation } = require('../scripts/runtime-candidate-binding');
 const {
   lookupArguments,
   publishArguments,
@@ -152,8 +153,11 @@ test('publish workflow is release-only, serialized, pinned, and publishes one ve
   assert.match(workflow, /actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38/);
   assert.match(workflow, /npm@11\.17\.0/);
   assert.match(workflow, /npm ci --ignore-scripts/);
-  assert.match(workflow, /generate-release-evidence\.js/);
-  assert.match(workflow, /publish-verified-artifact\.js/);
+  assert.match(workflow, /npm run release:generate-evidence --/);
+  assert.match(workflow, /npm run release:publish-verified --/);
+  const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
+  assert.equal(scripts['release:generate-evidence'], 'node scripts/generate-release-evidence.js');
+  assert.equal(scripts['release:publish-verified'], 'node scripts/publish-verified-artifact.js');
   assert.match(workflow, /kdna-studio-core-release\.tgz/g);
   assert.match(workflow, /if: always\(\)/);
 });
@@ -202,9 +206,19 @@ test('current binding rejects stale evidence before registry lookup', () => {
 test('pack evidence independently parses a real npm tgz and rejects changed bytes', (t) => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-release-pack-test-'));
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
+  const npmInvocation = resolveTrustedNpmInvocation(ROOT);
   const packed = spawnSync(
-    'npm',
-    ['pack', '--json', '--ignore-scripts', '--pack-destination', temp],
+    npmInvocation.command,
+    [
+      ...npmInvocation.prefixArgs,
+      'pack',
+      '--json',
+      '--ignore-scripts',
+      '--pack-destination',
+      temp,
+      '--registry=https://registry.npmjs.org/',
+      '--@aikdna:registry=https://registry.npmjs.org/',
+    ],
     { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, shell: false },
   );
   assert.equal(packed.status, 0, packed.stderr);
@@ -385,6 +399,7 @@ test('registry lookup and publication use the official registry and the exact ta
     '--json',
     '--loglevel=silent',
     '--registry=https://registry.npmjs.org/',
+    '--@aikdna:registry=https://registry.npmjs.org/',
   ]);
   assert.deepEqual(publishArguments('/tmp/exact.tgz'), [
     'publish',
@@ -394,5 +409,6 @@ test('registry lookup and publication use the official registry and the exact ta
     '--access',
     'public',
     '--registry=https://registry.npmjs.org/',
+    '--@aikdna:registry=https://registry.npmjs.org/',
   ]);
 });
