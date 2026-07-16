@@ -380,6 +380,16 @@ test('release evidence requires byte-identical isolated npm packs', () => {
     () => assertReproduciblePackBytes(bytes, Buffer.from('different release bytes')),
     /not byte-identical/,
   );
+  const source = fs.readFileSync(
+    path.join(ROOT, 'scripts/generate-release-evidence.js'),
+    'utf8',
+  );
+  assert.match(source, /const firstSource =/);
+  assert.match(source, /const secondSource =/);
+  assert.equal(source.split('packIsolatedSource(').length - 1, 3);
+  assert.match(source, /packIsolatedSource\(\s*npmInvocation,\s*firstSource,/);
+  assert.match(source, /packIsolatedSource\(\s*npmInvocation,\s*secondSource,/);
+  assert.match(source, /assertReproduciblePackBytes\(firstPack\.bytes, secondPack\.bytes\)/);
 });
 
 test('every release Git consumer uses the centralized authority helper', () => {

@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
+  assertPackageTarInstallEquivalent,
   resolveTrustedNpmInvocation,
   verifyCandidateBinding,
 } = require('./runtime-candidate-binding');
@@ -146,6 +147,7 @@ function verifyCandidateSources(options = {}) {
       assert.ok(sourceRoot, `${authority.sourceEnvironment} is required`);
       const repository = path.resolve(sourceRoot);
       const expectedCommit = pinned.get(authority.name);
+      const boundPackage = byName.get(authority.name);
       assertCleanPinnedRepository(repository, expectedCommit, authority.sourcePackageSubdirectory);
 
       const isolatedSource = path.join(temporary, `${authority.name.split('/').at(-1)}-source`);
@@ -159,21 +161,37 @@ function verifyCandidateSources(options = {}) {
       const packageManifest = JSON.parse(fs.readFileSync(path.join(isolatedSource, 'package.json'), 'utf8'));
       assert.equal(packageManifest.name, authority.name, `candidate source package mismatch: ${authority.name}`);
       assert.equal(packageManifest.version, authority.version, `candidate source version mismatch: ${authority.name}`);
-      assert.equal(byName.get(authority.name)?.commit, expectedCommit);
+      assert.equal(boundPackage?.commit, expectedCommit);
 
-      const first = path.join(temporary, `${authority.name.split('/').at(-1)}-first`);
-      const second = path.join(temporary, `${authority.name.split('/').at(-1)}-second`);
-      fs.mkdirSync(first);
-      fs.mkdirSync(second);
-      const firstBytes = packOnce(invocation, isolatedSource, first);
-      const secondBytes = packOnce(invocation, isolatedSource, second);
-      assert.deepEqual(firstBytes, secondBytes, `candidate source pack is not reproducible: ${authority.name}`);
-      assert.deepEqual(
-        firstBytes,
-        fs.readFileSync(path.join(repositoryRoot, byName.get(authority.name).artifact)),
-        `candidate artifact differs from the CI-pinned commit tree: ${authority.name}`,
+      const packDestination = path.join(
+        temporary,
+        `${authority.name.split('/').at(-1)}-pack`,
+      );
+      fs.mkdirSync(packDestination);
+      const sourcePack = packOnce(invocation, isolatedSource, packDestination);
+      const checkedArtifact = fs.readFileSync(
+        path.join(repositoryRoot, boundPackage.artifact),
+      );
+      const comparison = assertPackageTarInstallEquivalent(
+        checkedArtifact,
+        sourcePack,
+        {
+          referenceLabel: `checked candidate artifact ${authority.name}`,
+          candidateLabel: `candidate source pack ${authority.name}`,
+        },
+      );
+      assert.equal(
+        comparison.entry_count,
+        JSON.parse(
+          fs.readFileSync(path.join(repositoryRoot, authority.evidencePath), 'utf8'),
+        ).pack.entry_count,
+        `candidate source pack entry count differs from evidence: ${authority.name}`,
       );
       assertCleanPinnedRepository(repository, expectedCommit, authority.sourcePackageSubdirectory);
+      console.log(
+        `${authority.name}: ${comparison.status}; entries=${comparison.entry_count}; ` +
+          `excluded=${comparison.excluded_non_install_metadata.join(',')}`,
+      );
     }
     return binding;
   } finally {
@@ -182,10 +200,16 @@ function verifyCandidateSources(options = {}) {
   }
 }
 
-if (require.main === module) verifyCandidateSources();
+function main(argv = process.argv.slice(2)) {
+  assert.deepEqual(argv, [], 'usage: verify-runtime-candidate-sources.js');
+  return verifyCandidateSources();
+}
+
+if (require.main === module) main();
 
 module.exports = {
   assertCleanPinnedRepository,
+  main,
   materializeCommitPackage,
   packOnce,
   verifyCandidateSources,

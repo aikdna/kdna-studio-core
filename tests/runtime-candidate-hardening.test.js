@@ -6,12 +6,15 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { test } = require('node:test');
+const zlib = require('node:zlib');
 const {
   acquire,
   destinationFromArguments,
 } = require('../scripts/acquire-trusted-npm-release');
 const {
   BINDING_PATH,
+  STRICT_PACKAGE_INSTALL_EQUIVALENCE,
+  assertPackageTarInstallEquivalent,
   resolveTrustedNpmInvocation,
   strictRegistryLookup,
   verifyCandidateBinding,
@@ -23,6 +26,7 @@ const {
 } = require('../scripts/runtime-candidate-authority');
 const {
   assertCleanPinnedRepository,
+  main: verifyCandidateSourcesMain,
   materializeCommitPackage,
   packOnce,
 } = require('../scripts/verify-runtime-candidate-sources');
@@ -33,6 +37,63 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 const CORE = '@aikdna/kdna-core';
+
+function writeTarString(header, offset, length, value) {
+  const bytes = Buffer.from(value);
+  assert.ok(bytes.length <= length, `tar field is too long: ${value}`);
+  bytes.copy(header, offset);
+}
+
+function writeTarOctal(header, offset, length, value) {
+  const octal = value.toString(8).padStart(length - 1, '0');
+  assert.ok(octal.length < length, `tar numeric field is too large: ${value}`);
+  header.write(octal, offset, length - 1, 'ascii');
+  header[offset + length - 1] = 0;
+}
+
+function rewriteTarChecksum(header) {
+  header.fill(0x20, 148, 156);
+  const checksum = header.reduce((total, byte) => total + byte, 0);
+  header.write(checksum.toString(8).padStart(6, '0'), 148, 6, 'ascii');
+  header[154] = 0;
+  header[155] = 0x20;
+}
+
+function syntheticTarEntry({
+  name,
+  content = Buffer.alloc(0),
+  type = '0',
+  mode = 0o644,
+  uid = 0,
+  gid = 0,
+  mtime = 0,
+}) {
+  const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content);
+  const header = Buffer.alloc(512);
+  writeTarString(header, 0, 100, name);
+  writeTarOctal(header, 100, 8, mode);
+  writeTarOctal(header, 108, 8, uid);
+  writeTarOctal(header, 116, 8, gid);
+  writeTarOctal(header, 124, 12, bytes.length);
+  writeTarOctal(header, 136, 12, mtime);
+  header[156] = type.charCodeAt(0);
+  writeTarString(header, 257, 6, 'ustar');
+  writeTarString(header, 263, 2, '00');
+  rewriteTarChecksum(header);
+  return Buffer.concat([
+    header,
+    bytes,
+    Buffer.alloc((512 - (bytes.length % 512)) % 512),
+  ]);
+}
+
+function syntheticTarGzip(entries, options = {}) {
+  const archive = Buffer.concat([
+    ...entries.map((entry) => syntheticTarEntry(entry)),
+    Buffer.alloc(1024),
+  ]);
+  return zlib.gzipSync(archive, options);
+}
 
 function copyAuthorityRoot(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-core-candidate-hardening-'));
@@ -151,16 +212,134 @@ test('candidate commits are bound to canonical CI pins and evidence', (t) => {
     evidence.git_head = 'b'.repeat(40);
   });
   assert.throws(() => verifyCandidateBinding(evidenceRoot), /source evidence mismatch/);
+
+  const policyRoot = copyAuthorityRoot(t);
+  mutateJson(policyRoot, CANDIDATE_AUTHORITIES[0].evidencePath, (evidence) => {
+    evidence.pack.source_equivalence.excluded_non_install_metadata.push('tar_mode');
+  });
+  assert.throws(() => verifyCandidateBinding(policyRoot), /candidate pack evidence mismatch/);
+
+  const evidence = JSON.parse(
+    fs.readFileSync(path.join(ROOT, CANDIDATE_AUTHORITIES[0].evidencePath), 'utf8'),
+  );
+  assert.equal(evidence.pack.reproducible_runs, 2);
+  assert.deepEqual(evidence.pack.source_equivalence, STRICT_PACKAGE_INSTALL_EQUIVALENCE);
 });
 
 test('candidate CI acquires verified npm bytes and has no PATH npm downgrade', () => {
   const workflow = fs.readFileSync(path.join(ROOT, CANDIDATE_WORKFLOW_PATH), 'utf8');
+  const verifier = fs.readFileSync(
+    path.join(ROOT, 'scripts/verify-runtime-candidate-sources.js'),
+    'utf8',
+  );
+  const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
   assert.doesNotMatch(workflow, /npm install --global|npm_execpath/);
   assert.match(workflow, /acquire-trusted-npm-release\.js --out/);
   assert.match(workflow, /KDNA_TRUSTED_NPM_TARBALL=/);
   assert.match(workflow, /run-trusted-npm\.js ci --ignore-scripts/);
-  assert.match(workflow, /run-trusted-npm\.js run verify:candidate-sources/);
+  assert.match(workflow, /run-trusted-npm\.js run verify:candidate-sources\s*$/m);
   assert.match(workflow, /run-trusted-npm\.js test/);
+  assert.equal(
+    scripts['verify:candidate-sources'],
+    'node scripts/verify-runtime-candidate-sources.js',
+  );
+  assert.equal(verifier.split('const sourcePack = packOnce(').length - 1, 1);
+  assert.match(verifier, /assertPackageTarInstallEquivalent\(/);
+  assert.doesNotMatch(verifier, /SOURCE_EQUIVALENCE|equivalence.*environment/i);
+  assert.throws(
+    () => verifyCandidateSourcesMain(['--ci-source-equivalence']),
+    /usage: verify-runtime-candidate-sources\.js/,
+  );
+  assert.throws(
+    () => verifyCandidateSourcesMain(['--unknown']),
+    /usage: verify-runtime-candidate-sources\.js/,
+  );
+});
+
+test('candidate source equivalence excludes only recorded non-install metadata', () => {
+  const checked = syntheticTarGzip(
+    [{ name: 'package/index.js', content: 'module.exports = true;\n', uid: 0, gid: 0, mtime: 0 }],
+    { level: 1 },
+  );
+  const source = syntheticTarGzip(
+    [{ name: 'package/index.js', content: 'module.exports = true;\n', uid: 501, gid: 20, mtime: 123 }],
+    { level: 9 },
+  );
+  assert.notDeepEqual(source, checked);
+  assert.deepEqual(assertPackageTarInstallEquivalent(checked, source), {
+    ...STRICT_PACKAGE_INSTALL_EQUIVALENCE,
+    entry_count: 1,
+  });
+});
+
+test('candidate source equivalence rejects malformed excluded tar metadata', async (t) => {
+  const checked = syntheticTarGzip([{ name: 'package/index.js', content: 'abc' }]);
+  for (const [field, offset, length] of [
+    ['uid', 108, 8],
+    ['gid', 116, 8],
+    ['mtime', 136, 12],
+  ]) {
+    await t.test(field, () => {
+      const archive = zlib.gunzipSync(checked);
+      const header = archive.subarray(0, 512);
+      header.fill(0, offset, offset + length);
+      header[offset] = 'x'.charCodeAt(0);
+      rewriteTarChecksum(header);
+      assert.throws(
+        () => assertPackageTarInstallEquivalent(checked, zlib.gzipSync(archive)),
+        new RegExp(`${field} is invalid`),
+      );
+    });
+  }
+});
+
+test('candidate source equivalence blocks path, set, type, size, mode, and byte drift', async (t) => {
+  const checked = syntheticTarGzip([
+    { name: 'package/index.js', content: 'abc', mode: 0o644 },
+  ]);
+  const cases = [
+    [
+      'canonical path',
+      [{ name: 'package/../index.js', content: 'abc', mode: 0o644 }],
+      /entry path invalid/,
+    ],
+    [
+      'complete entry set',
+      [
+        { name: 'package/index.js', content: 'abc', mode: 0o644 },
+        { name: 'package/extra.js', content: 'x', mode: 0o644 },
+      ],
+      /complete entry set differs/,
+    ],
+    [
+      'regular file type',
+      [{ name: 'package/index.js', content: 'abc', type: '2', mode: 0o644 }],
+      /entry type is unsupported/,
+    ],
+    [
+      'file size',
+      [{ name: 'package/index.js', content: 'ab', mode: 0o644 }],
+      /file size differs/,
+    ],
+    [
+      'file mode',
+      [{ name: 'package/index.js', content: 'abc', mode: 0o755 }],
+      /file mode differs/,
+    ],
+    [
+      'file bytes',
+      [{ name: 'package/index.js', content: 'abd', mode: 0o644 }],
+      /file bytes differ/,
+    ],
+  ];
+  for (const [label, entries, pattern] of cases) {
+    await t.test(label, () => {
+      assert.throws(
+        () => assertPackageTarInstallEquivalent(checked, syntheticTarGzip(entries)),
+        pattern,
+      );
+    });
+  }
 });
 
 test('trusted npm wrapper binds execution to the repository root', (t) => {
@@ -616,7 +795,7 @@ test('commit-object materialization accepts executable blobs and rejects special
   }
 });
 
-test('commit-tree packing ignores fake npm_execpath and never runs lifecycle scripts', (t) => {
+test('formal candidate evidence keeps two byte-identical trusted npm packs', (t) => {
   const marker = path.join(fs.realpathSync(os.tmpdir()), `studio-core-lifecycle-${process.pid}-${Date.now()}`);
   t.after(() => fs.rmSync(marker, { force: true }));
   const packageJson = {
