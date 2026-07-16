@@ -37,10 +37,31 @@ function run(command, args, options = {}) {
   return result.stdout;
 }
 
+function sourceGitEnvironment() {
+  const environment = { ...process.env };
+  for (const key of Object.keys(environment)) {
+    if (key.startsWith('GIT_')) delete environment[key];
+  }
+  environment.GIT_CONFIG_NOSYSTEM = '1';
+  environment.GIT_NO_REPLACE_OBJECTS = '1';
+  environment.GIT_REPLACE_REF_BASE = 'refs/replace';
+  environment.GIT_TERMINAL_PROMPT = '0';
+  return environment;
+}
+
 function git(repository, args, options = {}) {
-  const output = run('git', args, {
-    cwd: repository,
+  const output = run('git', [
+    '--no-replace-objects',
+    '--literal-pathspecs',
+    '-c',
+    'core.useReplaceRefs=false',
+    '-C',
+    repository,
+    ...args,
+  ], {
+    cwd: path.parse(repository).root,
     encoding: options.encoding,
+    env: sourceGitEnvironment(),
     maxBuffer: options.maxBuffer,
     label: 'candidate source git inspection',
   });
@@ -57,6 +78,11 @@ function assertCleanPinnedRepository(repository, expectedCommit, packageSubdirec
     fs.realpathSync(repository),
     repository,
     'candidate source repository path must be canonical',
+  );
+  assert.equal(
+    git(repository, ['for-each-ref', '--format=%(refname)', 'refs/replace/']),
+    '',
+    'candidate source repository contains Git replacement refs',
   );
   assert.equal(
     git(repository, ['rev-parse', 'HEAD']),
@@ -292,5 +318,6 @@ module.exports = {
   assertCleanPinnedRepository,
   extractCommitPackage,
   packOnce,
+  sourceGitEnvironment,
   verifyCandidateSources,
 };

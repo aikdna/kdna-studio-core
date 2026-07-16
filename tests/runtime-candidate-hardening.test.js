@@ -323,6 +323,95 @@ test('candidate source inspection rejects status-hidden index changes', async (t
   }
 });
 
+test('candidate source authority rejects replace refs and archives the original commit', (t) => {
+  const fixture = createSourceRepository(t);
+  fs.writeFileSync(
+    path.join(fixture.source, 'index.js'),
+    "'use strict';\nmodule.exports = 'replacement-content';\n",
+  );
+  git(fixture.repository, ['add', 'packages/kdna-core/index.js']);
+  git(fixture.repository, ['commit', '--quiet', '-m', 'replacement']);
+  const replacement = git(fixture.repository, ['rev-parse', 'HEAD']);
+  git(fixture.repository, ['checkout', '--quiet', '--detach', fixture.commit]);
+  git(fixture.repository, ['replace', fixture.commit, replacement]);
+
+  const oldArchive = spawnSync(
+    'git',
+    ['-C', fixture.repository, 'archive', '--format=tar', fixture.commit, '--', 'packages/kdna-core'],
+    { encoding: null, maxBuffer: 16 * 1024 * 1024, shell: false },
+  );
+  assert.equal(oldArchive.status, 0, oldArchive.stderr?.toString('utf8'));
+  assert.ok(oldArchive.stdout.includes(Buffer.from('replacement-content')));
+  assert.throws(
+    () => assertCleanPinnedRepository(
+      fixture.repository,
+      fixture.commit,
+      path.join('packages', 'kdna-core'),
+    ),
+    /contains Git replacement refs/,
+  );
+
+  const isolated = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-no-replace-'));
+  t.after(() => fs.rmSync(isolated, { recursive: true, force: true }));
+  extractCommitPackage(
+    fixture.repository,
+    fixture.commit,
+    path.join('packages', 'kdna-core'),
+    isolated,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(isolated, 'index.js'), 'utf8'),
+    "'use strict';\nmodule.exports = true;\n",
+  );
+
+  git(fixture.repository, ['replace', '--delete', fixture.commit]);
+  git(fixture.repository, ['update-ref', `refs/alternate-replacements/${fixture.commit}`, replacement]);
+  const prior = Object.fromEntries(
+    ['GIT_REPLACE_REF_BASE', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0']
+      .map((key) => [key, process.env[key]]),
+  );
+  process.env.GIT_REPLACE_REF_BASE = 'refs/alternate-replacements';
+  process.env.GIT_CONFIG_COUNT = '1';
+  process.env.GIT_CONFIG_KEY_0 = 'core.useReplaceRefs';
+  process.env.GIT_CONFIG_VALUE_0 = 'true';
+  t.after(() => {
+    for (const [key, value] of Object.entries(prior)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  const rewrittenArchive = spawnSync(
+    'git',
+    ['-C', fixture.repository, 'archive', '--format=tar', fixture.commit, '--', 'packages/kdna-core'],
+    {
+      encoding: null,
+      env: process.env,
+      maxBuffer: 16 * 1024 * 1024,
+      shell: false,
+    },
+  );
+  assert.equal(rewrittenArchive.status, 0, rewrittenArchive.stderr?.toString('utf8'));
+  assert.ok(rewrittenArchive.stdout.includes(Buffer.from('replacement-content')));
+
+  const sanitized = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-sanitized-git-'));
+  t.after(() => fs.rmSync(sanitized, { recursive: true, force: true }));
+  extractCommitPackage(
+    fixture.repository,
+    fixture.commit,
+    path.join('packages', 'kdna-core'),
+    sanitized,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(sanitized, 'index.js'), 'utf8'),
+    "'use strict';\nmodule.exports = true;\n",
+  );
+  assert.doesNotThrow(() => assertCleanPinnedRepository(
+    fixture.repository,
+    fixture.commit,
+    path.join('packages', 'kdna-core'),
+  ));
+});
+
 test('commit-tree packing ignores fake npm_execpath and never runs lifecycle scripts', (t) => {
   const marker = path.join(fs.realpathSync(os.tmpdir()), `studio-core-lifecycle-${process.pid}-${Date.now()}`);
   t.after(() => fs.rmSync(marker, { force: true }));
