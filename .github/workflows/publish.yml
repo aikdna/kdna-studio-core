@@ -29,8 +29,6 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           ref: ${{ github.event.release.tag_name }}
-      - name: Fetch the canonical release tag
-        run: git fetch --force --tags origin
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 22

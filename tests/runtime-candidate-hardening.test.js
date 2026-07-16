@@ -23,7 +23,7 @@ const {
 } = require('../scripts/runtime-candidate-authority');
 const {
   assertCleanPinnedRepository,
-  extractCommitPackage,
+  materializeCommitPackage,
   packOnce,
 } = require('../scripts/verify-runtime-candidate-sources');
 const {
@@ -317,7 +317,7 @@ test('candidate source inspection rejects status-hidden index changes', async (t
           fixture.commit,
           path.join('packages', 'kdna-core'),
         ),
-        /index contains assume-unchanged or skip-worktree flags/,
+        /index contains assume-unchanged, skip-worktree, or non-ordinary entries/,
       );
     });
   }
@@ -353,7 +353,7 @@ test('candidate source authority rejects replace refs and archives the original 
 
   const isolated = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-no-replace-'));
   t.after(() => fs.rmSync(isolated, { recursive: true, force: true }));
-  extractCommitPackage(
+  materializeCommitPackage(
     fixture.repository,
     fixture.commit,
     path.join('packages', 'kdna-core'),
@@ -395,7 +395,7 @@ test('candidate source authority rejects replace refs and archives the original 
 
   const sanitized = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-sanitized-git-'));
   t.after(() => fs.rmSync(sanitized, { recursive: true, force: true }));
-  extractCommitPackage(
+  materializeCommitPackage(
     fixture.repository,
     fixture.commit,
     path.join('packages', 'kdna-core'),
@@ -412,6 +412,115 @@ test('candidate source authority rejects replace refs and archives the original 
   ));
 });
 
+test('commit-object materialization ignores private export attributes', (t) => {
+  const fixture = createSourceRepository(t);
+  const substitutedSource = 'literal-$Format:%H$-value\n';
+  fs.writeFileSync(path.join(fixture.source, 'substituted.txt'), substitutedSource);
+  git(fixture.repository, ['add', 'packages/kdna-core/substituted.txt']);
+  git(fixture.repository, ['commit', '--quiet', '-m', 'substitution fixture']);
+  const commit = git(fixture.repository, ['rev-parse', 'HEAD']);
+  fs.writeFileSync(
+    path.join(fixture.repository, '.git', 'info', 'attributes'),
+    [
+      'packages/kdna-core/index.js export-ignore',
+      'packages/kdna-core/substituted.txt export-subst',
+      '',
+    ].join('\n'),
+  );
+  assert.equal(git(fixture.repository, ['status', '--porcelain', '--untracked-files=all']), '');
+  assert.doesNotThrow(() => assertCleanPinnedRepository(
+    fixture.repository,
+    commit,
+    path.join('packages', 'kdna-core'),
+  ));
+
+  const oldArchive = spawnSync(
+    'git',
+    ['-C', fixture.repository, 'archive', '--format=tar', commit, '--', 'packages/kdna-core'],
+    { encoding: null, maxBuffer: 16 * 1024 * 1024, shell: false },
+  );
+  assert.equal(oldArchive.status, 0, oldArchive.stderr?.toString('utf8'));
+  assert.equal(oldArchive.stdout.includes(Buffer.from('module.exports = true')), false);
+  assert.equal(oldArchive.stdout.includes(Buffer.from(substitutedSource)), false);
+  assert.ok(oldArchive.stdout.includes(Buffer.from(commit)));
+
+  const materialized = fs.mkdtempSync(
+    path.join(fs.realpathSync(os.tmpdir()), 'studio-core-raw-commit-'),
+  );
+  t.after(() => fs.rmSync(materialized, { recursive: true, force: true }));
+  materializeCommitPackage(
+    fixture.repository,
+    commit,
+    path.join('packages', 'kdna-core'),
+    materialized,
+  );
+  assert.equal(
+    fs.readFileSync(path.join(materialized, 'index.js'), 'utf8'),
+    "'use strict';\nmodule.exports = true;\n",
+  );
+  assert.equal(fs.readFileSync(path.join(materialized, 'substituted.txt'), 'utf8'), substitutedSource);
+});
+
+test('commit-object materialization accepts executable blobs and rejects special modes', async (t) => {
+  await t.test('executable blob', (t) => {
+    const fixture = createSourceRepository(t);
+    fs.chmodSync(path.join(fixture.source, 'index.js'), 0o755);
+    git(fixture.repository, ['add', 'packages/kdna-core/index.js']);
+    git(fixture.repository, ['commit', '--quiet', '-m', 'executable fixture']);
+    const commit = git(fixture.repository, ['rev-parse', 'HEAD']);
+    const materialized = fs.mkdtempSync(
+      path.join(fs.realpathSync(os.tmpdir()), 'studio-core-executable-'),
+    );
+    t.after(() => fs.rmSync(materialized, { recursive: true, force: true }));
+    materializeCommitPackage(
+      fixture.repository,
+      commit,
+      path.join('packages', 'kdna-core'),
+      materialized,
+    );
+    assert.equal(fs.statSync(path.join(materialized, 'index.js')).mode & 0o777, 0o755);
+  });
+
+  for (const [label, mode, object] of [
+    ['symlink', '120000', 'blob'],
+    ['gitlink', '160000', 'commit'],
+  ]) {
+    await t.test(label, (t) => {
+      const fixture = createSourceRepository(t);
+      let objectId = fixture.commit;
+      if (object === 'blob') {
+        const source = path.join(fixture.repository, 'special-mode-source');
+        fs.writeFileSync(source, 'target');
+        objectId = git(fixture.repository, ['hash-object', '-w', source]);
+        fs.rmSync(source);
+      }
+      git(fixture.repository, [
+        'update-index',
+        '--add',
+        '--cacheinfo',
+        mode,
+        objectId,
+        `packages/kdna-core/${label}`,
+      ]);
+      git(fixture.repository, ['commit', '--quiet', '-m', `${label} fixture`]);
+      const commit = git(fixture.repository, ['rev-parse', 'HEAD']);
+      const materialized = fs.mkdtempSync(
+        path.join(fs.realpathSync(os.tmpdir()), `studio-core-${label}-`),
+      );
+      t.after(() => fs.rmSync(materialized, { recursive: true, force: true }));
+      assert.throws(
+        () => materializeCommitPackage(
+          fixture.repository,
+          commit,
+          path.join('packages', 'kdna-core'),
+          materialized,
+        ),
+        /contains a symlink, gitlink, or unsupported mode/,
+      );
+    });
+  }
+});
+
 test('commit-tree packing ignores fake npm_execpath and never runs lifecycle scripts', (t) => {
   const marker = path.join(fs.realpathSync(os.tmpdir()), `studio-core-lifecycle-${process.pid}-${Date.now()}`);
   t.after(() => fs.rmSync(marker, { force: true }));
@@ -426,7 +535,7 @@ test('commit-tree packing ignores fake npm_execpath and never runs lifecycle scr
   const fixture = createSourceRepository(t, packageJson);
   const isolated = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-commit-tree-'));
   t.after(() => fs.rmSync(isolated, { recursive: true, force: true }));
-  extractCommitPackage(
+  materializeCommitPackage(
     fixture.repository,
     fixture.commit,
     path.join('packages', 'kdna-core'),

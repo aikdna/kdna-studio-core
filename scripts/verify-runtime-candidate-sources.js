@@ -14,6 +14,12 @@ const {
   CANDIDATE_AUTHORITIES,
   readPinnedCandidateCommits,
 } = require('./runtime-candidate-authority');
+const {
+  assertNoHiddenIndexFlags,
+  assertNoReplacementRefs,
+  authoritativeGit,
+  materializeCommitTree,
+} = require('./authoritative-git');
 
 const root = path.resolve(__dirname, '..');
 
@@ -37,35 +43,11 @@ function run(command, args, options = {}) {
   return result.stdout;
 }
 
-function sourceGitEnvironment() {
-  const environment = { ...process.env };
-  for (const key of Object.keys(environment)) {
-    if (key.startsWith('GIT_')) delete environment[key];
-  }
-  environment.GIT_CONFIG_NOSYSTEM = '1';
-  environment.GIT_NO_REPLACE_OBJECTS = '1';
-  environment.GIT_REPLACE_REF_BASE = 'refs/replace';
-  environment.GIT_TERMINAL_PROMPT = '0';
-  return environment;
-}
-
 function git(repository, args, options = {}) {
-  const output = run('git', [
-    '--no-replace-objects',
-    '--literal-pathspecs',
-    '-c',
-    'core.useReplaceRefs=false',
-    '-C',
-    repository,
-    ...args,
-  ], {
-    cwd: path.parse(repository).root,
+  return authoritativeGit(repository, args, {
     encoding: options.encoding,
-    env: sourceGitEnvironment(),
     maxBuffer: options.maxBuffer,
-    label: 'candidate source git inspection',
   });
-  return Buffer.isBuffer(output) ? output : output.trim();
 }
 
 function assertCleanPinnedRepository(repository, expectedCommit, packageSubdirectory) {
@@ -79,11 +61,7 @@ function assertCleanPinnedRepository(repository, expectedCommit, packageSubdirec
     repository,
     'candidate source repository path must be canonical',
   );
-  assert.equal(
-    git(repository, ['for-each-ref', '--format=%(refname)', 'refs/replace/']),
-    '',
-    'candidate source repository contains Git replacement refs',
-  );
+  assertNoReplacementRefs(repository);
   assert.equal(
     git(repository, ['rev-parse', 'HEAD']),
     expectedCommit,
@@ -99,16 +77,7 @@ function assertCleanPinnedRepository(repository, expectedCommit, packageSubdirec
     '',
     'candidate source worktree is not clean',
   );
-  const indexRecords = git(repository, ['ls-files', '-v', '-z'], { encoding: null })
-    .toString('utf8')
-    .split('\0')
-    .filter(Boolean);
-  const hidden = indexRecords.filter((record) => /^[a-zS] /.test(record));
-  assert.deepEqual(
-    hidden,
-    [],
-    'candidate source index contains assume-unchanged or skip-worktree flags',
-  );
+  assertNoHiddenIndexFlags(repository);
   const source = path.resolve(repository, packageSubdirectory);
   const relative = path.relative(repository, source);
   assert.ok(
@@ -125,117 +94,14 @@ function assertCleanPinnedRepository(repository, expectedCommit, packageSubdirec
   return Object.freeze({ repository, source });
 }
 
-function tarString(block, offset, length) {
-  const field = block.subarray(offset, offset + length);
-  const end = field.indexOf(0);
-  return field.subarray(0, end < 0 ? field.length : end).toString('utf8');
-}
-
-function tarOctal(block, offset, length, label) {
-  const raw = tarString(block, offset, length).trim();
-  assert.match(raw, /^[0-7]+$/, `candidate commit archive ${label} is invalid`);
-  const value = Number.parseInt(raw, 8);
-  assert.ok(Number.isSafeInteger(value) && value >= 0, `candidate commit archive ${label} is invalid`);
-  return value;
-}
-
-function extractCommitPackage(repository, expectedCommit, packageSubdirectory, destination) {
-  const archive = git(
+function materializeCommitPackage(repository, expectedCommit, packageSubdirectory, destination) {
+  return materializeCommitTree(
     repository,
-    ['archive', '--format=tar', expectedCommit, '--', packageSubdirectory],
-    { encoding: null, maxBuffer: 128 * 1024 * 1024 },
+    expectedCommit,
+    packageSubdirectory,
+    destination,
+    { requiredPath: 'package.json' },
   );
-  const normalizedPrefix = packageSubdirectory.split(path.sep).join('/');
-  const seen = new Set();
-  let offset = 0;
-  let terminated = false;
-  let regularFiles = 0;
-  while (offset + 512 <= archive.length) {
-    const header = archive.subarray(offset, offset + 512);
-    if (header.every((byte) => byte === 0)) {
-      assert.ok(
-        archive.subarray(offset).every((byte) => byte === 0),
-        'candidate commit archive has bytes after its end marker',
-      );
-      terminated = true;
-      break;
-    }
-    const storedChecksum = tarOctal(header, 148, 8, 'header checksum');
-    let actualChecksum = 0;
-    for (let index = 0; index < header.length; index += 1) {
-      actualChecksum += index >= 148 && index < 156 ? 32 : header[index];
-    }
-    assert.equal(storedChecksum, actualChecksum, 'candidate commit archive checksum mismatch');
-    const name = tarString(header, 0, 100);
-    const prefix = tarString(header, 345, 155);
-    const entryPath = prefix ? `${prefix}/${name}` : name;
-    const size = tarOctal(header, 124, 12, 'entry size');
-    const type = header[156];
-    const bodyStart = offset + 512;
-    const bodyEnd = bodyStart + size;
-    assert.ok(bodyEnd <= archive.length, `candidate commit archive entry is truncated: ${entryPath}`);
-    if (type === 103) {
-      assert.equal(offset, 0, 'candidate commit archive global header must be first');
-      assert.equal(entryPath, 'pax_global_header', 'candidate commit archive global header is invalid');
-      assert.equal(
-        archive.subarray(bodyStart, bodyEnd).toString('utf8'),
-        `52 comment=${expectedCommit}\n`,
-        'candidate commit archive is not bound to the expected commit',
-      );
-      seen.add(entryPath);
-      offset = bodyStart + Math.ceil(size / 512) * 512;
-      continue;
-    }
-    const canonicalEntry = type === 53 && entryPath.endsWith('/')
-      ? entryPath.slice(0, -1)
-      : entryPath;
-    const isAncestorDirectory =
-      type === 53 && normalizedPrefix.startsWith(`${canonicalEntry}/`);
-    assert.ok(
-      isAncestorDirectory ||
-        canonicalEntry === normalizedPrefix ||
-        canonicalEntry.startsWith(`${normalizedPrefix}/`),
-      `candidate commit archive escaped the package tree: ${entryPath}`,
-    );
-    assert.ok(
-      /^[\x21-\x7e]+$/.test(canonicalEntry) &&
-        !canonicalEntry.includes('\\') &&
-        !path.posix.isAbsolute(canonicalEntry) &&
-        path.posix.normalize(canonicalEntry) === canonicalEntry &&
-        !canonicalEntry.split('/').some((segment) => ['', '.', '..'].includes(segment)) &&
-        !seen.has(canonicalEntry),
-      `candidate commit archive path is invalid: ${entryPath}`,
-    );
-    const mode = tarOctal(header, 100, 8, 'entry mode') & 0o777;
-    assert.ok(
-      type === 0 || type === 48 || type === 53,
-      `candidate commit archive type is unsupported: ${entryPath}`,
-    );
-    const stripped = isAncestorDirectory || canonicalEntry === normalizedPrefix
-      ? ''
-      : canonicalEntry.slice(normalizedPrefix.length + 1);
-    if (stripped) {
-      const output = path.join(destination, ...stripped.split('/'));
-      const relative = path.relative(destination, output);
-      assert.ok(relative && !relative.startsWith('..') && !path.isAbsolute(relative));
-      if (type === 53) {
-        fs.mkdirSync(output, { recursive: true, mode: mode || 0o700 });
-      } else {
-        fs.mkdirSync(path.dirname(output), { recursive: true, mode: 0o700 });
-        fs.writeFileSync(output, archive.subarray(bodyStart, bodyEnd), {
-          flag: 'wx',
-          mode: mode || 0o600,
-        });
-        regularFiles += 1;
-      }
-    }
-    seen.add(canonicalEntry);
-    offset = bodyStart + Math.ceil(size / 512) * 512;
-  }
-  assert.ok(terminated, 'candidate commit archive end marker is missing');
-  assert.ok(seen.has('pax_global_header'), 'candidate commit archive commit header is missing');
-  assert.ok(regularFiles > 0, 'candidate commit package contains no files');
-  return destination;
 }
 
 function packOnce(invocation, source, destination) {
@@ -280,7 +146,7 @@ function verifyCandidateSources(options = {}) {
 
       const isolatedSource = path.join(temporary, `${authority.name.split('/').at(-1)}-source`);
       fs.mkdirSync(isolatedSource, { mode: 0o700 });
-      extractCommitPackage(
+      materializeCommitPackage(
         repository,
         expectedCommit,
         authority.sourcePackageSubdirectory,
@@ -316,8 +182,7 @@ if (require.main === module) verifyCandidateSources();
 
 module.exports = {
   assertCleanPinnedRepository,
-  extractCommitPackage,
+  materializeCommitPackage,
   packOnce,
-  sourceGitEnvironment,
   verifyCandidateSources,
 };

@@ -9,9 +9,17 @@ const os = require('node:os');
 const path = require('node:path');
 const zlib = require('node:zlib');
 
-const { validateCurrentBinding } = require('../scripts/current-release-binding');
+const {
+  readCurrentBinding,
+  validateCurrentBinding,
+} = require('../scripts/current-release-binding');
 const { parseTarFiles, validateArtifact, validatePackReport } = require('../scripts/release-evidence');
 const { validateReleaseContext } = require('../scripts/release-policy');
+const {
+  assertReproduciblePackBytes,
+  generateReleaseEvidence,
+} = require('../scripts/generate-release-evidence');
+const { assertNoHiddenIndexFlags } = require('../scripts/authoritative-git');
 const { evaluateRegistryResult, expectedE404 } = require('../scripts/registry-policy');
 const { resolveTrustedNpmInvocation } = require('../scripts/runtime-candidate-binding');
 const {
@@ -102,6 +110,34 @@ function releaseInput(overrides = {}) {
   };
 }
 
+function git(repository, args) {
+  const result = spawnSync('git', args, { cwd: repository, encoding: 'utf8', shell: false });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+function createReleaseRepository(t, marker) {
+  const repository = fs.mkdtempSync(
+    path.join(fs.realpathSync(os.tmpdir()), `studio-core-release-${marker}-`),
+  );
+  t.after(() => fs.rmSync(repository, { recursive: true, force: true }));
+  git(repository, ['init', '--quiet']);
+  git(repository, ['config', 'user.name', 'KDNA Test']);
+  git(repository, ['config', 'user.email', 'test@example.invalid']);
+  fs.writeFileSync(
+    path.join(repository, 'package.json'),
+    `${JSON.stringify({ name: '@aikdna/kdna-studio-core', version: '2.0.0' }, null, 2)}\n`,
+  );
+  fs.writeFileSync(path.join(repository, 'CHANGELOG.md'), '# Changelog\n\n## 2.0.0 (2026-07-16)\n');
+  fs.writeFileSync(path.join(repository, 'marker.txt'), `${marker}\n`);
+  git(repository, ['add', '.']);
+  git(repository, ['commit', '--quiet', '-m', marker]);
+  const commit = git(repository, ['rev-parse', 'HEAD']);
+  git(repository, ['tag', '2.0.0', commit]);
+  return { repository, commit };
+}
+
 function candidateEvidence(bytes = releaseTarball()) {
   const files = parseTarFiles(bytes);
   return {
@@ -175,6 +211,164 @@ test('publish workflow is release-only, serialized, pinned, and publishes one ve
   );
   assert.match(workflow, /kdna-studio-core-release\.tgz/g);
   assert.match(workflow, /if: always\(\)/);
+  assert.doesNotMatch(workflow, /run:\s*git\b/);
+});
+
+test('release Git authority ignores hostile environment injection and rejects replacement refs', (t) => {
+  const release = createReleaseRepository(t, 'release-authority');
+  const attacker = createReleaseRepository(t, 'attacker-authority');
+  const evidence = candidateEvidence();
+  evidence.source.commit = release.commit;
+  const environment = {
+    ...process.env,
+    ...releaseInput({ env: { GITHUB_SHA: release.commit } }).env,
+    GIT_DIR: path.join(attacker.repository, '.git'),
+    GIT_WORK_TREE: attacker.repository,
+    GIT_INDEX_FILE: path.join(attacker.repository, '.git', 'index'),
+    GIT_OBJECT_DIRECTORY: path.join(attacker.repository, '.git', 'objects'),
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: path.join(attacker.repository, '.git', 'objects'),
+    GIT_REPLACE_REF_BASE: 'refs/attacker-replacements',
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'core.useReplaceRefs',
+    GIT_CONFIG_VALUE_0: 'true',
+  };
+  const oldHead = spawnSync('git', ['rev-parse', 'HEAD'], {
+    cwd: release.repository,
+    encoding: 'utf8',
+    env: environment,
+    shell: false,
+  });
+  assert.equal(oldHead.status, 0, oldHead.stderr);
+  assert.equal(oldHead.stdout.trim(), attacker.commit);
+  assert.equal(
+    readCurrentBinding({ root: release.repository, evidence, env: environment }),
+    evidence,
+  );
+
+  fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'hidden-release-change\n');
+  git(release.repository, ['update-index', '--assume-unchanged', 'marker.txt']);
+  assert.throws(
+    () => readCurrentBinding({ root: release.repository, evidence, env: environment }),
+    /index contains assume-unchanged, skip-worktree, or non-ordinary entries/,
+  );
+  git(release.repository, ['update-index', '--no-assume-unchanged', 'marker.txt']);
+  fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'release-authority\n');
+
+  fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'replacement\n');
+  git(release.repository, ['add', 'marker.txt']);
+  git(release.repository, ['commit', '--quiet', '-m', 'replacement']);
+  const replacement = git(release.repository, ['rev-parse', 'HEAD']);
+  git(release.repository, ['checkout', '--quiet', '--detach', release.commit]);
+  git(release.repository, ['replace', release.commit, replacement]);
+  assert.throws(
+    () => readCurrentBinding({ root: release.repository, evidence, env: environment }),
+    /contains Git replacement refs/,
+  );
+});
+
+test('release evidence entry rejects hidden worktree changes and packs exact commit blobs', (t) => {
+  const release = createReleaseRepository(t, 'release-evidence-source');
+  const outputRoot = fs.mkdtempSync(
+    path.join(fs.realpathSync(os.tmpdir()), 'studio-core-release-output-'),
+  );
+  t.after(() => fs.rmSync(outputRoot, { recursive: true, force: true }));
+  const output = path.join(outputRoot, 'evidence.json');
+  const artifact = path.join(outputRoot, 'release.tgz');
+  const environment = {
+    ...process.env,
+    ...releaseInput({ env: { GITHUB_SHA: release.commit } }).env,
+  };
+  fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'hidden-release-evidence-change\n');
+  git(release.repository, ['update-index', '--assume-unchanged', 'marker.txt']);
+  assert.throws(
+    () => generateReleaseEvidence({
+      root: release.repository,
+      output,
+      artifact,
+      environment,
+    }),
+    /index contains assume-unchanged, skip-worktree, or non-ordinary entries/,
+  );
+  assert.equal(fs.existsSync(output), false);
+  assert.equal(fs.existsSync(artifact), false);
+
+  git(release.repository, ['update-index', '--no-assume-unchanged', 'marker.txt']);
+  fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'release-evidence-source\n');
+  fs.writeFileSync(
+    path.join(release.repository, '.git', 'info', 'attributes'),
+    'marker.txt export-ignore\npackage.json export-subst\n',
+  );
+  const evidence = generateReleaseEvidence({
+    root: release.repository,
+    output,
+    artifact,
+    environment,
+  });
+  assert.equal(evidence.source.commit, release.commit);
+  assert.equal(evidence.source.ref, 'refs/tags/2.0.0');
+  assert.ok(fs.existsSync(output));
+  assert.ok(fs.existsSync(artifact));
+  const files = parseTarFiles(fs.readFileSync(artifact)).map((entry) => entry.path);
+  assert.ok(files.includes('marker.txt'));
+});
+
+test('release Git index authority accepts only ordinary cached entries', (t) => {
+  const release = createReleaseRepository(t, 'ordinary-index-authority');
+  assert.doesNotThrow(() => assertNoHiddenIndexFlags(release.repository));
+
+  git(release.repository, ['switch', '--quiet', '-c', 'conflicting-index']);
+  fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'conflicting-index\n');
+  git(release.repository, ['commit', '--quiet', '-am', 'conflicting index']);
+  git(release.repository, ['switch', '--quiet', '--detach', release.commit]);
+  fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'detached-index\n');
+  git(release.repository, ['commit', '--quiet', '-am', 'detached index']);
+  const merge = spawnSync('git', ['merge', 'conflicting-index'], {
+    cwd: release.repository,
+    encoding: 'utf8',
+    shell: false,
+  });
+  assert.notEqual(merge.status, 0);
+  assert.match(git(release.repository, ['ls-files', '-v']), /^M marker\.txt/m);
+  assert.throws(
+    () => assertNoHiddenIndexFlags(release.repository),
+    /index contains assume-unchanged, skip-worktree, or non-ordinary entries/,
+  );
+});
+
+test('release evidence requires byte-identical isolated npm packs', () => {
+  const bytes = Buffer.from('authoritative release bytes');
+  assert.doesNotThrow(() => assertReproduciblePackBytes(bytes, Buffer.from(bytes)));
+  assert.throws(
+    () => assertReproduciblePackBytes(bytes, Buffer.from('different release bytes')),
+    /not byte-identical/,
+  );
+});
+
+test('every release Git consumer uses the centralized authority helper', () => {
+  for (const file of [
+    'scripts/current-release-binding.js',
+    'scripts/generate-release-evidence.js',
+    'scripts/release-check.js',
+    'scripts/verify-runtime-candidate-sources.js',
+  ]) {
+    const source = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    assert.match(source, /authoritative-git/);
+    assert.doesNotMatch(source, /execFileSync\(['"]git['"]|spawnSync\(['"]git['"]/);
+  }
+  const namingSource = fs.readFileSync(
+    path.join(ROOT, 'scripts/check-current-protocol-names.js'),
+    'utf8',
+  );
+  assert.doesNotMatch(namingSource, /execFileSync\(['"](?:npm|tar)['"]/);
+  assert.match(namingSource, /resolveTrustedNpmInvocation/);
+  assert.match(namingSource, /readTarFileEntries/);
+  const evidenceSource = fs.readFileSync(
+    path.join(ROOT, 'scripts/generate-release-evidence.js'),
+    'utf8',
+  );
+  assert.match(evidenceSource, /materializeCommitTree\(root, commit, '', source/);
+  assert.match(evidenceSource, /packIsolatedSource/);
+  assert.match(evidenceSource, /assertReproduciblePackBytes/);
 });
 
 test('release context binds package, changelog, event, tag ref, HEAD, and workflow SHA', () => {

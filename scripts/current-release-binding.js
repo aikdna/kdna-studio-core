@@ -1,8 +1,8 @@
 'use strict';
 
-const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { readAuthoritativeGitState } = require('./authoritative-git');
 const { validateEvidence } = require('./release-evidence');
 const { validateReleaseContext } = require('./release-policy');
 
@@ -17,26 +17,16 @@ function validateCurrentBinding({ evidence: rawEvidence, pkg, changelog, env, gi
 }
 
 function readCurrentBinding({ root, evidence, env = process.env }) {
-  function git(args) {
-    return execFileSync('git', args, {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-  }
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
   const tag = pkg.version;
+  const git = readAuthoritativeGitState(root, tag, { environment: env });
   return validateCurrentBinding({
     evidence,
     pkg,
     changelog,
     env,
-    git: {
-      status: git(['status', '--porcelain', '--untracked-files=all']),
-      head: git(['rev-parse', 'HEAD']),
-      tagCommit: git(['rev-parse', `${tag}^{commit}`]),
-    },
+    git,
   });
 }
 
