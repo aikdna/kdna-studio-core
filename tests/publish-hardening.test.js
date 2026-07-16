@@ -21,6 +21,8 @@ const {
 } = require('../scripts/generate-release-evidence');
 const {
   assertNoHiddenIndexFlags,
+  authoritativeGitEnvironment,
+  authoritativeGitNullDevice,
   resolveTrustedSystemGit,
 } = require('../scripts/authoritative-git');
 const { evaluateRegistryResult, expectedE404 } = require('../scripts/registry-policy');
@@ -39,6 +41,16 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 const HASH = 'a'.repeat(40);
+
+test('authoritative Git selects a Git-compatible null device on every platform', () => {
+  assert.equal(authoritativeGitNullDevice('win32'), 'NUL');
+  assert.equal(authoritativeGitNullDevice('linux'), '/dev/null');
+  assert.equal(authoritativeGitNullDevice('darwin'), '/dev/null');
+  assert.equal(
+    authoritativeGitEnvironment({}).GIT_CONFIG_GLOBAL,
+    authoritativeGitNullDevice(process.platform),
+  );
+});
 
 function writeTarString(header, offset, length, value) {
   const bytes = Buffer.from(value);

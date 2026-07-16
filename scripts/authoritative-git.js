@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -15,12 +14,16 @@ const TRUSTED_GIT_CANDIDATES = Object.freeze(
     : ['/usr/bin/git', '/bin/git'],
 );
 
+function authoritativeGitNullDevice(platform = process.platform) {
+  return platform === 'win32' ? 'NUL' : '/dev/null';
+}
+
 function authoritativeGitEnvironment(baseEnvironment = process.env) {
   const environment = { ...baseEnvironment };
   for (const key of Object.keys(environment)) {
     if (key.toUpperCase().startsWith('GIT_')) delete environment[key];
   }
-  environment.GIT_CONFIG_GLOBAL = os.devNull;
+  environment.GIT_CONFIG_GLOBAL = authoritativeGitNullDevice();
   environment.GIT_CONFIG_NOSYSTEM = '1';
   environment.GIT_NO_REPLACE_OBJECTS = '1';
   environment.GIT_REPLACE_REF_BASE = 'refs/replace';
@@ -265,6 +268,7 @@ module.exports = {
   assertNoReplacementRefs,
   authoritativeGit,
   authoritativeGitEnvironment,
+  authoritativeGitNullDevice,
   canonicalRepository,
   materializeCommitTree,
   readAuthoritativeGitState,
