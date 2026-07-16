@@ -53,9 +53,8 @@ test('release dependency graph binds the exact Core candidate and has no Runtime
       '556f8cec37c94fc9c006035b0bdeefc80d04d9c2',
     ]],
   );
-  assert.throws(
+  assert.doesNotThrow(
     () => assertRegistryReleaseReady(path.resolve(__dirname, '..')),
-    /registry dependency gate blocked.*0\.19\.0/i,
   );
 });
 

@@ -141,7 +141,7 @@ test('candidate binding completeness rejects omissions, duplicates, extras, and 
         lock.packages[topLevelPath];
       delete lock.packages[topLevelPath];
     },
-    /bound AIKDNA lock package must be top-level.*kdna-core/,
+    /bound AIKDNA lock package must be top-level.*kdna-core|AIKDNA lock resolution\/path mismatch.*kdna-core/,
   );
   rejects(
     'package-lock.json',

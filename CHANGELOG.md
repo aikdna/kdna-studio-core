@@ -2,10 +2,10 @@
 
 ## 2.0.0 (2026-07-16)
 
-- Rebind the Core 0.19.0 source candidate to the accepted final source commit
-  and its exact reproducible package bytes. This remains source-candidate
-  evidence; the registry release gate stays closed until that identical Core
-  artifact is formally published.
+- Rebind the Core 0.19.0 dependency to the published registry artifact
+  `@aikdna/kdna-core@0.19.0`. The package lock, runtime-candidate binding, and
+  candidate evidence now point to the official registry tarball and its
+  verified integrity; the registry release gate is open.
 - Emit current responsibility-specific report types with independent `0.1.0`
   schema coordinates and ship schemas for all five report contracts.
 - Emit the current manifest, payload, digest, encryption, LoadPlan, and Runtime
@@ -16,13 +16,12 @@
   the current Core.
 - Depend directly on KDNA Core 0.19.0. The authoring library no longer installs
   the separate Runtime CLI as a transitive application dependency.
-- Bind the unpublished Core candidate to its exact checked-in tar digests and
+- Bind the published Core 0.19.0 artifact to its exact registry tar digests and
   require exactly one top-level Core copy across the complete lock graph.
-  The recorded commit is an audit source reference, not a cryptographic
-  identity claim; the tar integrity and SHA-256 digest are authoritative.
-  Clean installs use that candidate artifact until the identical package
-  exists in the public registry, and the release gate rejects publication
-  while that registry prerequisite is open.
+  The recorded commit remains an audit source reference, not a cryptographic
+  identity claim; the registry tar integrity and SHA-256 digest are
+  authoritative. Clean installs now fetch the published artifact from the
+  official registry, and the release gate accepts that registry resolution.
 - Make the shipped Studio project Schema the single card-type authority for
   all 16 authoring card types; both project validation and card creation read
   that exact packaged schema instead of maintaining parallel enums.
