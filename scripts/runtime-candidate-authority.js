@@ -9,6 +9,8 @@ const CANDIDATE_AUTHORITIES = Object.freeze([
     name: '@aikdna/kdna-core',
     version: '0.19.0',
     repository: 'aikdna/kdna',
+    repositoryEnvironment: 'KDNA_CORE_CANDIDATE_REPOSITORY',
+    commitEnvironment: 'KDNA_CORE_CANDIDATE_COMMIT',
     evidencePath: path.join(
       'fixtures',
       'runtime-candidates',
@@ -23,16 +25,21 @@ function readPinnedCandidateCommits(root) {
   const workflow = fs.readFileSync(path.join(root, CANDIDATE_WORKFLOW_PATH), 'utf8');
   return new Map(
     CANDIDATE_AUTHORITIES.map((authority) => {
+      const escapedRepositoryEnvironment = authority.repositoryEnvironment
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedCommitEnvironment = authority.commitEnvironment
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const escapedRepository = authority.repository.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const pattern = new RegExp(
-        `repository:\\s*${escapedRepository}\\s*\\r?\\n\\s*ref:\\s*([a-f0-9]{40})(?:\\s|$)`,
+        `${escapedRepositoryEnvironment}:\\s*${escapedRepository}\\s*\\r?\\n` +
+          `\\s*${escapedCommitEnvironment}:\\s*([a-f0-9]{40})(?:\\s|$)`,
         'gi',
       );
       const refs = [...workflow.matchAll(pattern)].map((match) => match[1].toLowerCase());
       const distinct = [...new Set(refs)];
       if (refs.length === 0 || distinct.length !== 1) {
         throw new Error(
-          `CI must pin every ${authority.name} candidate checkout to one full commit.`,
+          `CI must pin every ${authority.name} candidate source to one repository and full commit.`,
         );
       }
       return [authority.name, distinct[0]];

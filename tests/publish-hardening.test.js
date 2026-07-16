@@ -50,6 +50,7 @@ test('authoritative Git selects a Git-compatible null device on every platform',
     authoritativeGitEnvironment({}).GIT_CONFIG_GLOBAL,
     authoritativeGitNullDevice(process.platform),
   );
+  assert.equal(authoritativeGitEnvironment({}).GIT_REPLACE_REF_BASE, 'refs/replace/');
 });
 
 function writeTarString(header, offset, length, value) {
@@ -256,7 +257,7 @@ test('release Git authority ignores hostile environment injection and rejects re
     GIT_INDEX_FILE: path.join(attacker.repository, '.git', 'index'),
     GIT_OBJECT_DIRECTORY: path.join(attacker.repository, '.git', 'objects'),
     GIT_ALTERNATE_OBJECT_DIRECTORIES: path.join(attacker.repository, '.git', 'objects'),
-    GIT_REPLACE_REF_BASE: 'refs/attacker-replacements',
+    GIT_REPLACE_REF_BASE: 'refs/attacker-replacements/',
     GIT_CONFIG_COUNT: '1',
     GIT_CONFIG_KEY_0: 'core.useReplaceRefs',
     GIT_CONFIG_VALUE_0: 'true',

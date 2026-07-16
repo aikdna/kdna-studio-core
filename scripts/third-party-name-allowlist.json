@@ -2,7 +2,7 @@
   {
     "file": ".github/workflows/ci.yml",
     "text": "actions/checkout@v7",
-    "count": 2,
+    "count": 1,
     "reason": "GitHub Actions release selector owned by actions/checkout."
   },
   {

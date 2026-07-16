@@ -239,6 +239,14 @@ test('candidate CI acquires verified npm bytes and has no PATH npm downgrade', (
   assert.match(workflow, /run-trusted-npm\.js ci --ignore-scripts/);
   assert.match(workflow, /run-trusted-npm\.js run verify:candidate-sources\s*$/m);
   assert.match(workflow, /run-trusted-npm\.js test/);
+  assert.match(workflow, /candidate_source="\$runner_temp\/kdna-core-candidate"/);
+  assert.match(
+    workflow,
+    /echo "KDNA_CORE_CANDIDATE_SOURCE=\$candidate_source" >> "\$GITHUB_ENV"/,
+  );
+  assert.match(workflow, /"\$workspace"\/\*\) exit 1 ;;/);
+  assert.doesNotMatch(workflow, /KDNA_CORE_CANDIDATE_SOURCE:\s*\$\{\{\s*github\.workspace/);
+  assert.doesNotMatch(workflow, /path:\s*\.candidate-sources/);
   assert.equal(
     scripts['verify:candidate-sources'],
     'node scripts/verify-runtime-candidate-sources.js',
@@ -644,7 +652,7 @@ test('candidate source authority rejects replace refs and archives the original 
     ['GIT_REPLACE_REF_BASE', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0']
       .map((key) => [key, process.env[key]]),
   );
-  process.env.GIT_REPLACE_REF_BASE = 'refs/alternate-replacements';
+  process.env.GIT_REPLACE_REF_BASE = 'refs/alternate-replacements/';
   process.env.GIT_CONFIG_COUNT = '1';
   process.env.GIT_CONFIG_KEY_0 = 'core.useReplaceRefs';
   process.env.GIT_CONFIG_VALUE_0 = 'true';
