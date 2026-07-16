@@ -2,6 +2,10 @@
 
 ## 2.0.0 (2026-07-16)
 
+- Rebind the Core 0.19.0 source candidate to the accepted final source commit
+  and its exact reproducible package bytes. This remains source-candidate
+  evidence; the registry release gate stays closed until that identical Core
+  artifact is formally published.
 - Emit current responsibility-specific report types with independent `0.1.0`
   schema coordinates and ship schemas for all five report contracts.
 - Emit the current manifest, payload, digest, encryption, LoadPlan, and Runtime

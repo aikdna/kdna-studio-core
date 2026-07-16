@@ -3,12 +3,17 @@ on: [pull_request, push]
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18.20.8, 22.23.1]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - name: Check out the exact Core candidate outside the Studio workspace
         env:
           KDNA_CORE_CANDIDATE_REPOSITORY: aikdna/kdna
-          KDNA_CORE_CANDIDATE_COMMIT: a257b92345af57e6fb20215576bc976a5291b297
+          KDNA_CORE_CANDIDATE_COMMIT: 556f8cec37c94fc9c006035b0bdeefc80d04d9c2
         run: |
           set -euo pipefail
           runner_temp="$(realpath "$RUNNER_TEMP")"
@@ -33,12 +38,36 @@ jobs:
             "$workspace"/*) exit 1 ;;
           esac
           echo "KDNA_CORE_CANDIDATE_SOURCE=$candidate_source" >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v6
-        with: { node-version: 22 }
+      - name: Set up the trusted npm host
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22.23.1
+          check-latest: false
+      - run: node --version | grep -Fx "$(printf 'v%s' '22.23.1')"
       - name: Acquire and verify the audited npm release bytes
         run: |
           node scripts/acquire-trusted-npm-release.js --out "$RUNNER_TEMP/npm-11.17.0.tgz"
           echo "KDNA_TRUSTED_NPM_TARBALL=$RUNNER_TEMP/npm-11.17.0.tgz" >> "$GITHUB_ENV"
       - run: node scripts/run-trusted-npm.js ci --ignore-scripts --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
       - run: node scripts/run-trusted-npm.js run verify:candidate-sources
-      - run: node scripts/run-trusted-npm.js test
+      - name: Set up the tested Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: ${{ matrix.node }}
+          check-latest: false
+      - run: node --version | grep -Fx "$(printf 'v%s' '${{ matrix.node }}')"
+      - name: Run the complete suite on the audited npm runtime
+        if: matrix.node == '22.23.1'
+        run: node scripts/run-test-all.js
+      - name: Run the product/runtime suite on the minimum supported Node
+        if: matrix.node == '18.20.8'
+        shell: bash
+        run: |
+          tests=()
+          for file in tests/*.test.js; do
+            case "$file" in
+              tests/publish-hardening.test.js|tests/runtime-candidate-binding-completeness.test.js|tests/runtime-candidate-hardening.test.js) ;;
+              *) tests+=("$file") ;;
+            esac
+          done
+          node --test "${tests[@]}"

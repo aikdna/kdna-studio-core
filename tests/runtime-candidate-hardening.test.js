@@ -226,19 +226,40 @@ test('candidate commits are bound to canonical CI pins and evidence', (t) => {
   assert.deepEqual(evidence.pack.source_equivalence, STRICT_PACKAGE_INSTALL_EQUIVALENCE);
 });
 
-test('candidate CI acquires verified npm bytes and has no PATH npm downgrade', () => {
+test('candidate CI pins immutable actions, exact Node runtimes, and verified npm bytes', () => {
   const workflow = fs.readFileSync(path.join(ROOT, CANDIDATE_WORKFLOW_PATH), 'utf8');
+  const codeql = fs.readFileSync(
+    path.join(ROOT, '.github/workflows/codeql-js.yml'),
+    'utf8',
+  );
   const verifier = fs.readFileSync(
     path.join(ROOT, 'scripts/verify-runtime-candidate-sources.js'),
     'utf8',
   );
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
+  assert.match(workflow, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
+  assert.equal(
+    workflow.match(/actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38/g)?.length,
+    2,
+  );
+  assert.match(workflow, /node:\s*\[18\.20\.8, 22\.23\.1\]/);
+  assert.match(workflow, /node-version:\s*22\.23\.1/);
+  assert.match(workflow, /node-version:\s*\$\{\{ matrix\.node \}\}/);
+  assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node)@v[0-9]+/);
+  assert.match(codeql, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
+  assert.equal(
+    codeql.match(/github\/codeql-action\/(?:init|autobuild|analyze)@99df26d4f13ea111d4ec1a7dddef6063f76b97e9/g)?.length,
+    3,
+  );
+  assert.doesNotMatch(codeql, /@v[0-9]+/);
   assert.doesNotMatch(workflow, /npm install --global|npm_execpath/);
   assert.match(workflow, /acquire-trusted-npm-release\.js --out/);
   assert.match(workflow, /KDNA_TRUSTED_NPM_TARBALL=/);
   assert.match(workflow, /run-trusted-npm\.js ci --ignore-scripts/);
   assert.match(workflow, /run-trusted-npm\.js run verify:candidate-sources\s*$/m);
-  assert.match(workflow, /run-trusted-npm\.js test/);
+  assert.match(workflow, /node scripts\/run-test-all\.js/);
+  assert.match(workflow, /if: matrix\.node == '18\.20\.8'/);
+  assert.match(workflow, /node --test "\$\{tests\[@\]\}"/);
   assert.match(workflow, /candidate_source="\$runner_temp\/kdna-core-candidate"/);
   assert.match(
     workflow,

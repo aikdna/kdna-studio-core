@@ -208,6 +208,12 @@ test('publish workflow is release-only, serialized, pinned, and publishes one ve
   assert.match(workflow, /cancel-in-progress: false/);
   assert.match(workflow, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
   assert.match(workflow, /actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38/);
+  assert.match(workflow, /node-version:\s*22\.23\.1/);
+  assert.match(
+    workflow,
+    new RegExp(`node --version \\| grep -Fx .*${['22', '23', '1'].join('\\.')}`),
+  );
+  assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node)@v[0-9]+/);
   assert.doesNotMatch(workflow, /npm install --global|npm_execpath/);
   assert.match(workflow, /acquire-trusted-npm-release\.js --out/);
   assert.match(workflow, /KDNA_TRUSTED_NPM_TARBALL=/);
