@@ -65,37 +65,41 @@ function main() {
   const artifactPath = path.resolve(process.argv[artifactIndex + 1] || '');
   const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
   const npmInvocation = resolveTrustedNpmInvocation(root);
-  const bindCurrent = (candidate) => readCurrentBinding({ root, evidence: candidate });
-  const decision = releaseDecision({
-    evidence,
-    tarball: fs.readFileSync(artifactPath),
-    bindCurrent,
-    lookup: (args) =>
-      spawnSync(npmInvocation.command, [...npmInvocation.prefixArgs, ...args], {
-        encoding: 'utf8',
-        maxBuffer: 1024 * 1024,
-        shell: false,
-        timeout: 30_000,
-      }),
-  });
-  if (!decision.shouldPublish) {
-    console.log(`Registry publication policy: ${decision.decision}`);
-    return;
-  }
+  try {
+    const bindCurrent = (candidate) => readCurrentBinding({ root, evidence: candidate });
+    const decision = releaseDecision({
+      evidence,
+      tarball: fs.readFileSync(artifactPath),
+      bindCurrent,
+      lookup: (args) =>
+        spawnSync(npmInvocation.command, [...npmInvocation.prefixArgs, ...args], {
+          encoding: 'utf8',
+          maxBuffer: 1024 * 1024,
+          shell: false,
+          timeout: 30_000,
+        }),
+    });
+    if (!decision.shouldPublish) {
+      console.log(`Registry publication policy: ${decision.decision}`);
+      return;
+    }
 
-  publishCandidate({
-    evidence,
-    tarball: fs.readFileSync(artifactPath),
-    artifactPath,
-    bindCurrent,
-    publish: (args) =>
-      spawnSync(npmInvocation.command, [...npmInvocation.prefixArgs, ...args], {
-        encoding: 'utf8',
-        maxBuffer: 16 * 1024 * 1024,
-        shell: false,
-        stdio: 'inherit',
-      }),
-  });
+    publishCandidate({
+      evidence,
+      tarball: fs.readFileSync(artifactPath),
+      artifactPath,
+      bindCurrent,
+      publish: (args) =>
+        spawnSync(npmInvocation.command, [...npmInvocation.prefixArgs, ...args], {
+          encoding: 'utf8',
+          maxBuffer: 16 * 1024 * 1024,
+          shell: false,
+          stdio: 'inherit',
+        }),
+    });
+  } finally {
+    npmInvocation.cleanup();
+  }
 }
 
 if (require.main === module) {

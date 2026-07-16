@@ -35,23 +35,23 @@ jobs:
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
-      - name: Pin the audited npm release client
+      - name: Acquire and verify the audited npm release bytes
         run: |
-          npm install --global npm@11.17.0 --ignore-scripts --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
-          npm --version | grep -Fx 11.17.0
-      - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
+          node scripts/acquire-trusted-npm-release.js --out "$RUNNER_TEMP/npm-11.17.0.tgz"
+          echo "KDNA_TRUSTED_NPM_TARBALL=$RUNNER_TEMP/npm-11.17.0.tgz" >> "$GITHUB_ENV"
+      - run: node scripts/run-trusted-npm.js ci --ignore-scripts --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
       - name: Verify release event, tag, commit, package, and changelog
-        run: npm run release:check
+        run: node scripts/run-trusted-npm.js run release:check
       - name: Run the complete release test suite
-        run: npm run test:all
+        run: node scripts/run-trusted-npm.js run test:all
       - name: Build independently verified pack evidence
         run: >-
-          npm run release:generate-evidence --
+          node scripts/run-trusted-npm.js run release:generate-evidence --
           --out "$RUNNER_TEMP/kdna-studio-core-release-evidence.json"
           --artifact "$RUNNER_TEMP/kdna-studio-core-release.tgz"
       - name: Publish or idempotently skip the verified package
         run: >-
-          npm run release:publish-verified --
+          node scripts/run-trusted-npm.js run release:publish-verified --
           --evidence "$RUNNER_TEMP/kdna-studio-core-release-evidence.json"
           --artifact "$RUNNER_TEMP/kdna-studio-core-release.tgz"
         env:

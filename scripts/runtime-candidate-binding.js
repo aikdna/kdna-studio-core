@@ -10,6 +10,13 @@ const {
   CANDIDATE_WORKFLOW_PATH,
   readPinnedCandidateCommits,
 } = require('./runtime-candidate-authority');
+const {
+  TRUSTED_NPM_INTEGRITY,
+  TRUSTED_NPM_URL,
+  TRUSTED_NPM_VERSION,
+  extractTrustedNpmRelease,
+  trustedTarballPath,
+} = require('./trusted-npm-release');
 
 const BINDING_PATH = 'fixtures/runtime-candidates/binding.json';
 const AIKDNA_PACKAGE_RE = /^@aikdna\/[a-z0-9][a-z0-9._-]*$/;
@@ -42,74 +49,65 @@ function isWithin(parent, candidate) {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-function resolveTrustedNpmInvocation(
-  root,
-  npmExecPath = process.env.npm_execpath,
-  nodeExecPath = process.execPath,
-) {
+function resolveTrustedNpmInvocation(root, options = {}) {
   assert(
-    typeof npmExecPath === 'string' && path.isAbsolute(npmExecPath),
-    'trusted npm_execpath must be absolute',
+    options && typeof options === 'object' && !Array.isArray(options),
+    'trusted npm options must be an object',
   );
+  const nodeExecPath = path.resolve(options.nodeExecPath || process.execPath);
   assert(path.isAbsolute(nodeExecPath), 'trusted Node executable path must be absolute');
-  for (const [file, label] of [
-    [npmExecPath, 'npm CLI'],
-    [nodeExecPath, 'Node executable'],
-  ]) {
-    const stat = fs.lstatSync(file);
-    assert(stat.isFile() && !stat.isSymbolicLink(), `${label} must be a regular non-symlink file`);
-    assert(fs.realpathSync(file) === file, `${label} path must be canonical`);
-  }
+  const nodeStat = fs.lstatSync(nodeExecPath);
+  assert(
+    nodeStat.isFile() && !nodeStat.isSymbolicLink(),
+    'trusted Node executable must be a regular non-symlink file',
+  );
+  assert(fs.realpathSync(nodeExecPath) === nodeExecPath, 'trusted Node executable path must be canonical');
   const rootReal = fs.realpathSync(root);
-  assert(!isWithin(rootReal, npmExecPath), 'trusted npm CLI must be outside the repository');
-  assert(path.basename(npmExecPath) === 'npm-cli.js', 'trusted npm CLI filename is invalid');
-  const npmRoot = path.resolve(path.dirname(npmExecPath), '..');
-  const npmManifestPath = path.join(npmRoot, 'package.json');
-  const npmManifestStat = fs.lstatSync(npmManifestPath);
+  const tarball = trustedTarballPath(options.tarballPath);
   assert(
-    npmManifestStat.isFile() && !npmManifestStat.isSymbolicLink(),
-    'trusted npm package manifest must be a regular non-symlink file',
+    tarball !== rootReal && !isWithin(rootReal, tarball),
+    'trusted npm release tarball must be outside the repository',
   );
-  assert(
-    fs.realpathSync(npmManifestPath) === npmManifestPath,
-    'trusted npm package manifest path must be canonical',
-  );
-  const npmManifest = readJson(npmManifestPath);
-  assert(
-    npmManifest.name === 'npm' && npmManifest.version === '11.17.0',
-    'trusted npm release client must be npm 11.17.0',
-  );
-  return Object.freeze({ command: nodeExecPath, prefixArgs: Object.freeze([npmExecPath]) });
+  const extracted = extractTrustedNpmRelease(tarball);
+  return Object.freeze({
+    command: nodeExecPath,
+    prefixArgs: Object.freeze([extracted.cliPath]),
+    cleanup: extracted.cleanup,
+  });
 }
 
 function strictRegistryLookup(name, version, options = {}) {
   const runner = options.runner || spawnSync;
-  const invocation = resolveTrustedNpmInvocation(
-    options.root || path.resolve(__dirname, '..'),
-    options.npmExecPath,
-    options.nodeExecPath,
-  );
-  const result = runner(
-    invocation.command,
-    [
-      ...invocation.prefixArgs,
-      'view',
-      `${name}@${version}`,
-      'name',
-      'version',
-      'dist.integrity',
-      '--json',
-      '--loglevel=silent',
-      '--registry=https://registry.npmjs.org/',
-      '--@aikdna:registry=https://registry.npmjs.org/',
-    ],
-    {
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024,
-      shell: false,
-      timeout: 30_000,
-    },
-  );
+  const invocation = resolveTrustedNpmInvocation(options.root || path.resolve(__dirname, '..'), {
+    tarballPath: options.tarballPath,
+    nodeExecPath: options.nodeExecPath,
+  });
+  let result;
+  try {
+    result = runner(
+      invocation.command,
+      [
+        ...invocation.prefixArgs,
+        'view',
+        `${name}@${version}`,
+        'name',
+        'version',
+        'dist.integrity',
+        '--json',
+        '--loglevel=silent',
+        '--registry=https://registry.npmjs.org/',
+        '--@aikdna:registry=https://registry.npmjs.org/',
+      ],
+      {
+        encoding: 'utf8',
+        maxBuffer: 1024 * 1024,
+        shell: false,
+        timeout: 30_000,
+      },
+    );
+  } finally {
+    invocation.cleanup();
+  }
   assert(result && !result.error, 'registry dependency lookup failed');
   assert(
     result.status === 0 && result.signal == null,
@@ -565,6 +563,7 @@ function verifyCandidateBinding(root) {
         candidateEvidence.package === entry.name &&
         candidateEvidence.version === entry.version &&
         candidateEvidence.git_head === pinnedCommit &&
+        candidateEvidence.source_authority === 'exact_git_commit_tree' &&
         candidateEvidence.source_worktree_clean === true &&
         candidateEvidence.registry_artifact === null,
       `candidate source evidence mismatch: ${entry.name}`,
@@ -615,7 +614,9 @@ function verifyCandidateBinding(root) {
       `${entry.name.slice(1).replace('/', '-')}-${entry.version}.tgz`;
     assert(
       candidateEvidence.pack?.status === 'candidate_source_pack_not_registry_artifact' &&
-        candidateEvidence.pack?.npm_client === '11.17.0' &&
+        candidateEvidence.pack?.npm_client === TRUSTED_NPM_VERSION &&
+        candidateEvidence.pack?.npm_release_url === TRUSTED_NPM_URL &&
+        candidateEvidence.pack?.npm_release_integrity === TRUSTED_NPM_INTEGRITY &&
         candidateEvidence.pack?.filename === expectedFilename &&
         candidateEvidence.pack?.size === bytes.length &&
         candidateEvidence.pack?.unpacked_size === unpackedSize &&

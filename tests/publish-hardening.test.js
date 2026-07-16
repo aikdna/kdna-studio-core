@@ -15,6 +15,11 @@ const { validateReleaseContext } = require('../scripts/release-policy');
 const { evaluateRegistryResult, expectedE404 } = require('../scripts/registry-policy');
 const { resolveTrustedNpmInvocation } = require('../scripts/runtime-candidate-binding');
 const {
+  TRUSTED_NPM_INTEGRITY,
+  TRUSTED_NPM_URL,
+  TRUSTED_NPM_VERSION,
+} = require('../scripts/trusted-npm-release');
+const {
   lookupArguments,
   publishArguments,
   publishCandidate,
@@ -151,13 +156,23 @@ test('publish workflow is release-only, serialized, pinned, and publishes one ve
   assert.match(workflow, /cancel-in-progress: false/);
   assert.match(workflow, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
   assert.match(workflow, /actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38/);
-  assert.match(workflow, /npm@11\.17\.0/);
-  assert.match(workflow, /npm ci --ignore-scripts/);
-  assert.match(workflow, /npm run release:generate-evidence --/);
-  assert.match(workflow, /npm run release:publish-verified --/);
+  assert.doesNotMatch(workflow, /npm install --global|npm_execpath/);
+  assert.match(workflow, /acquire-trusted-npm-release\.js --out/);
+  assert.match(workflow, /KDNA_TRUSTED_NPM_TARBALL=/);
+  assert.match(workflow, /run-trusted-npm\.js ci --ignore-scripts/);
+  assert.match(workflow, /run-trusted-npm\.js run release:generate-evidence --/);
+  assert.match(workflow, /run-trusted-npm\.js run release:publish-verified --/);
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
   assert.equal(scripts['release:generate-evidence'], 'node scripts/generate-release-evidence.js');
   assert.equal(scripts['release:publish-verified'], 'node scripts/publish-verified-artifact.js');
+  assert.doesNotMatch(scripts['test:all'], /(?:^|\s)npm(?:\s|$)/);
+  assert.doesNotMatch(scripts.prepublishOnly, /(?:^|\s)npm(?:\s|$)/);
+  assert.equal(TRUSTED_NPM_VERSION, '11.17.0');
+  assert.equal(TRUSTED_NPM_URL, 'https://registry.npmjs.org/npm/-/npm-11.17.0.tgz');
+  assert.equal(
+    TRUSTED_NPM_INTEGRITY,
+    'sha512-PurxiZexEHDTE4SSaLI3ZrnbAGiZfeyUcQcxcP5D+hfytNAze/D1IzDuInTn9XVLIbAQUnQuSPXJx02LHjLvQw==',
+  );
   assert.match(workflow, /kdna-studio-core-release\.tgz/g);
   assert.match(workflow, /if: always\(\)/);
 });
@@ -207,6 +222,7 @@ test('pack evidence independently parses a real npm tgz and rejects changed byte
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-release-pack-test-'));
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
   const npmInvocation = resolveTrustedNpmInvocation(ROOT);
+  t.after(() => npmInvocation.cleanup());
   const packed = spawnSync(
     npmInvocation.command,
     [

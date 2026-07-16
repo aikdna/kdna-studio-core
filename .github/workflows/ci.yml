@@ -12,12 +12,12 @@ jobs:
           path: .candidate-sources/kdna
       - uses: actions/setup-node@v6
         with: { node-version: 22 }
-      - name: Pin the candidate pack npm client
+      - name: Acquire and verify the audited npm release bytes
         run: |
-          npm install --global npm@11.17.0 --ignore-scripts --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
-          npm --version | grep -Fx 11.17.0
-      - run: npm ci --ignore-scripts --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
-      - run: npm run verify:candidate-sources
+          node scripts/acquire-trusted-npm-release.js --out "$RUNNER_TEMP/npm-11.17.0.tgz"
+          echo "KDNA_TRUSTED_NPM_TARBALL=$RUNNER_TEMP/npm-11.17.0.tgz" >> "$GITHUB_ENV"
+      - run: node scripts/run-trusted-npm.js ci --ignore-scripts --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
+      - run: node scripts/run-trusted-npm.js run verify:candidate-sources
         env:
           KDNA_CORE_CANDIDATE_SOURCE: ${{ github.workspace }}/.candidate-sources/kdna
-      - run: npm test
+      - run: node scripts/run-trusted-npm.js test

@@ -7,6 +7,10 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { test } = require('node:test');
 const {
+  acquire,
+  destinationFromArguments,
+} = require('../scripts/acquire-trusted-npm-release');
+const {
   BINDING_PATH,
   resolveTrustedNpmInvocation,
   strictRegistryLookup,
@@ -17,6 +21,15 @@ const {
   CANDIDATE_AUTHORITIES,
   CANDIDATE_WORKFLOW_PATH,
 } = require('../scripts/runtime-candidate-authority');
+const {
+  assertCleanPinnedRepository,
+  extractCommitPackage,
+  packOnce,
+} = require('../scripts/verify-runtime-candidate-sources');
+const {
+  trustedTarballPath,
+  verifyTrustedNpmTarball,
+} = require('../scripts/trusted-npm-release');
 
 const ROOT = path.resolve(__dirname, '..');
 const CORE = '@aikdna/kdna-core';
@@ -57,15 +70,26 @@ function writeInstalledPackage(root, installPath, name, version) {
   return directory;
 }
 
-function createTrustedNpmFixture(t, manifest = { name: 'npm', version: '11.17.0' }) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-core-trusted-npm-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const npmRoot = path.join(root, 'npm');
-  const npmExecPath = path.join(npmRoot, 'bin', 'npm-cli.js');
-  fs.mkdirSync(path.dirname(npmExecPath), { recursive: true });
-  fs.writeFileSync(npmExecPath, '#!/usr/bin/env node\n');
-  fs.writeFileSync(path.join(npmRoot, 'package.json'), `${JSON.stringify(manifest)}\n`);
-  return fs.realpathSync(npmExecPath);
+function git(repository, args) {
+  const result = spawnSync('git', args, { cwd: repository, encoding: 'utf8', shell: false });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+function createSourceRepository(t, packageJson = { name: CORE, version: '0.19.0' }) {
+  const repository = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-source-repo-'));
+  t.after(() => fs.rmSync(repository, { recursive: true, force: true }));
+  git(repository, ['init', '--quiet']);
+  git(repository, ['config', 'user.name', 'KDNA Test']);
+  git(repository, ['config', 'user.email', 'test@example.invalid']);
+  const source = path.join(repository, 'packages', 'kdna-core');
+  fs.mkdirSync(source, { recursive: true });
+  fs.writeFileSync(path.join(source, 'package.json'), `${JSON.stringify(packageJson, null, 2)}\n`);
+  fs.writeFileSync(path.join(source, 'index.js'), "'use strict';\nmodule.exports = true;\n");
+  git(repository, ['add', '.']);
+  git(repository, ['commit', '--quiet', '-m', 'fixture']);
+  return { repository, source, commit: git(repository, ['rev-parse', 'HEAD']) };
 }
 
 test('static graph rejects the reproduced npm alias even when locked.name is omitted', (t) => {
@@ -129,6 +153,29 @@ test('candidate commits are bound to canonical CI pins and evidence', (t) => {
   assert.throws(() => verifyCandidateBinding(evidenceRoot), /source evidence mismatch/);
 });
 
+test('candidate CI acquires verified npm bytes and has no PATH npm downgrade', () => {
+  const workflow = fs.readFileSync(path.join(ROOT, CANDIDATE_WORKFLOW_PATH), 'utf8');
+  assert.doesNotMatch(workflow, /npm install --global|npm_execpath/);
+  assert.match(workflow, /acquire-trusted-npm-release\.js --out/);
+  assert.match(workflow, /KDNA_TRUSTED_NPM_TARBALL=/);
+  assert.match(workflow, /run-trusted-npm\.js ci --ignore-scripts/);
+  assert.match(workflow, /run-trusted-npm\.js run verify:candidate-sources/);
+  assert.match(workflow, /run-trusted-npm\.js test/);
+});
+
+test('trusted npm wrapper binds execution to the repository root', (t) => {
+  const foreign = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-foreign-cwd-'));
+  t.after(() => fs.rmSync(foreign, { recursive: true, force: true }));
+  const result = spawnSync(
+    process.execPath,
+    [path.join(ROOT, 'scripts', 'run-trusted-npm.js'), 'prefix'],
+    { cwd: foreign, encoding: 'utf8', shell: false },
+  );
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), ROOT);
+});
+
 test('every candidate authority rejects symlinks and hard links', async (t) => {
   const files = [
     ['package.json', 'package manifest'],
@@ -190,14 +237,26 @@ test('installed graph rejects aliases, descendants, vendored identities, symlink
   });
 });
 
-test('registry lookup uses only the pinned absolute npm client and both canonical registries', (t) => {
-  const npmExecPath = createTrustedNpmFixture(t);
+test('registry lookup uses only the integrity-anchored npm release and canonical registries', (t) => {
+  const fakeRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-fake-npm-'));
+  t.after(() => fs.rmSync(fakeRoot, { recursive: true, force: true }));
+  const fakeExecPath = path.join(fakeRoot, 'npm', 'bin', 'npm-cli.js');
+  fs.mkdirSync(path.dirname(fakeExecPath), { recursive: true });
+  fs.writeFileSync(fakeExecPath, "require('node:fs').writeFileSync(process.env.FAKE_NPM_MARKER, 'ran');\n");
+  fs.writeFileSync(
+    path.join(fakeRoot, 'npm', 'package.json'),
+    `${JSON.stringify({ name: 'npm', version: '11.17.0' })}\n`,
+  );
+  const previousNpmExecPath = process.env.npm_execpath;
+  process.env.npm_execpath = fakeExecPath;
+  t.after(() => {
+    if (previousNpmExecPath === undefined) delete process.env.npm_execpath;
+    else process.env.npm_execpath = previousNpmExecPath;
+  });
   let invocation;
   const integrity = `sha512-${Buffer.alloc(64).toString('base64')}`;
   const metadata = strictRegistryLookup(CORE, '0.19.0', {
     root: ROOT,
-    npmExecPath,
-    nodeExecPath: process.execPath,
     runner: (command, args, options) => {
       invocation = { command, args, options };
       return {
@@ -210,15 +269,132 @@ test('registry lookup uses only the pinned absolute npm client and both canonica
   });
   assert.equal(metadata.name, CORE);
   assert.equal(invocation.command, process.execPath);
-  assert.equal(invocation.args[0], npmExecPath);
+  assert.notEqual(invocation.args[0], fakeExecPath);
+  assert.equal(path.basename(invocation.args[0]), 'npm-cli.js');
   assert.ok(invocation.args.includes('--registry=https://registry.npmjs.org/'));
   assert.ok(invocation.args.includes('--@aikdna:registry=https://registry.npmjs.org/'));
   assert.equal(invocation.options.shell, false);
-  assert.throws(() => resolveTrustedNpmInvocation(ROOT, 'npm', process.execPath), /must be absolute/);
-  const wrongVersion = createTrustedNpmFixture(t, { name: 'npm', version: '11.16.0' });
+  const falseTar = path.join(fakeRoot, 'npm-11.17.0.tgz');
+  fs.writeFileSync(falseTar, fs.readFileSync(path.join(ROOT, BINDING_PATH.replace('binding.json', 'kdna-core-0.19.0.tgz'))));
   assert.throws(
-    () => resolveTrustedNpmInvocation(ROOT, wrongVersion, process.execPath),
-    /must be npm 11\.17\.0/,
+    () => resolveTrustedNpmInvocation(ROOT, { tarballPath: falseTar }),
+    /integrity must equal the audited npm 11\.17\.0 release/,
+  );
+});
+
+test('trusted npm cache paths canonicalize parent aliases and replace invalid bytes', async (t) => {
+  const temporary = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-npm-path-'));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const realParent = path.join(temporary, 'real');
+  const aliasParent = path.join(temporary, 'alias');
+  fs.mkdirSync(realParent);
+  fs.symlinkSync(realParent, aliasParent, 'dir');
+  const requested = path.join(aliasParent, 'cache', 'npm-11.17.0.tgz');
+  const canonical = trustedTarballPath(requested);
+  assert.equal(canonical, path.join(realParent, 'cache', 'npm-11.17.0.tgz'));
+  assert.equal(destinationFromArguments(['--out', requested]), canonical);
+  fs.mkdirSync(path.dirname(canonical), { recursive: true });
+  fs.writeFileSync(canonical, 'invalid-cache');
+  const officialBytes = fs.readFileSync(trustedTarballPath());
+  await acquire(canonical, { download: async () => officialBytes });
+  assert.deepEqual(verifyTrustedNpmTarball(canonical), officialBytes);
+
+  const symlinkTar = path.join(realParent, 'npm-symlink.tgz');
+  fs.symlinkSync(canonical, symlinkTar);
+  assert.throws(() => verifyTrustedNpmTarball(symlinkTar), /regular non-symlink/);
+});
+
+test('candidate source inspection rejects status-hidden index changes', async (t) => {
+  for (const flag of ['--assume-unchanged', '--skip-worktree']) {
+    await t.test(flag, (t) => {
+      const fixture = createSourceRepository(t);
+      fs.appendFileSync(path.join(fixture.source, 'package.json'), ' ');
+      git(fixture.repository, ['update-index', flag, 'packages/kdna-core/package.json']);
+      assert.equal(git(fixture.repository, ['status', '--porcelain', '--untracked-files=all']), '');
+      assert.throws(
+        () => assertCleanPinnedRepository(
+          fixture.repository,
+          fixture.commit,
+          path.join('packages', 'kdna-core'),
+        ),
+        /index contains assume-unchanged or skip-worktree flags/,
+      );
+    });
+  }
+});
+
+test('commit-tree packing ignores fake npm_execpath and never runs lifecycle scripts', (t) => {
+  const marker = path.join(fs.realpathSync(os.tmpdir()), `studio-core-lifecycle-${process.pid}-${Date.now()}`);
+  t.after(() => fs.rmSync(marker, { force: true }));
+  const packageJson = {
+    name: CORE,
+    version: '0.19.0',
+    files: ['index.js'],
+    scripts: {
+      prepack: "node -e \"require('node:fs').writeFileSync(process.env.FAKE_NPM_MARKER,'ran')\"",
+    },
+  };
+  const fixture = createSourceRepository(t, packageJson);
+  const isolated = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-commit-tree-'));
+  t.after(() => fs.rmSync(isolated, { recursive: true, force: true }));
+  extractCommitPackage(
+    fixture.repository,
+    fixture.commit,
+    path.join('packages', 'kdna-core'),
+    isolated,
+  );
+
+  const fakeRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-copy-npm-'));
+  t.after(() => fs.rmSync(fakeRoot, { recursive: true, force: true }));
+  const fakeExec = path.join(fakeRoot, 'npm', 'bin', 'npm-cli.js');
+  fs.mkdirSync(path.dirname(fakeExec), { recursive: true });
+  fs.writeFileSync(
+    fakeExec,
+    [
+      "const fs = require('node:fs');",
+      "const path = require('node:path');",
+      "fs.writeFileSync(process.env.FAKE_NPM_MARKER, 'copy-tar-ran');",
+      "const destination = process.argv[process.argv.indexOf('--pack-destination') + 1];",
+      "const filename = 'aikdna-kdna-core-0.19.0.tgz';",
+      "fs.copyFileSync(process.env.FAKE_COPY_ARTIFACT, path.join(destination, filename));",
+      "process.stdout.write(JSON.stringify([{ filename }]));",
+    ].join('\n'),
+  );
+  fs.writeFileSync(path.join(fakeRoot, 'npm', 'package.json'), JSON.stringify({ name: 'npm', version: '11.17.0' }));
+  const priorNpmExecPath = process.env.npm_execpath;
+  const priorMarker = process.env.FAKE_NPM_MARKER;
+  const priorCopyArtifact = process.env.FAKE_COPY_ARTIFACT;
+  process.env.npm_execpath = fakeExec;
+  process.env.FAKE_NPM_MARKER = marker;
+  process.env.FAKE_COPY_ARTIFACT = path.join(
+    ROOT,
+    'fixtures/runtime-candidates/kdna-core-0.19.0.tgz',
+  );
+  t.after(() => {
+    if (priorNpmExecPath === undefined) delete process.env.npm_execpath;
+    else process.env.npm_execpath = priorNpmExecPath;
+    if (priorMarker === undefined) delete process.env.FAKE_NPM_MARKER;
+    else process.env.FAKE_NPM_MARKER = priorMarker;
+    if (priorCopyArtifact === undefined) delete process.env.FAKE_COPY_ARTIFACT;
+    else process.env.FAKE_COPY_ARTIFACT = priorCopyArtifact;
+  });
+
+  const invocation = resolveTrustedNpmInvocation(ROOT);
+  t.after(() => invocation.cleanup());
+  assert.notEqual(invocation.prefixArgs[0], fakeExec);
+  const first = path.join(isolated, '..', `pack-first-${Date.now()}`);
+  const second = path.join(isolated, '..', `pack-second-${Date.now()}`);
+  fs.mkdirSync(first);
+  fs.mkdirSync(second);
+  t.after(() => fs.rmSync(first, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(second, { recursive: true, force: true }));
+  const firstBytes = packOnce(invocation, isolated, first);
+  const secondBytes = packOnce(invocation, isolated, second);
+  assert.deepEqual(firstBytes, secondBytes);
+  assert.equal(fs.existsSync(marker), false);
+  assert.notDeepEqual(
+    firstBytes,
+    fs.readFileSync(path.join(ROOT, 'fixtures/runtime-candidates/kdna-core-0.19.0.tgz')),
   );
 });
 
@@ -226,20 +402,17 @@ test('published package contains no candidate tar, binding, or evidence files', 
   const output = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-core-public-pack-'));
   t.after(() => fs.rmSync(output, { recursive: true, force: true }));
   const invocation = resolveTrustedNpmInvocation(ROOT);
-  const result = spawnSync(
-    invocation.command,
-    [
-      ...invocation.prefixArgs,
-      'pack',
-      '--json',
-      '--ignore-scripts',
-      '--pack-destination',
-      output,
-      '--registry=https://registry.npmjs.org/',
-      '--@aikdna:registry=https://registry.npmjs.org/',
-    ],
-    { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, shell: false },
-  );
+  t.after(() => invocation.cleanup());
+  const result = spawnSync(invocation.command, [
+    ...invocation.prefixArgs,
+    'pack',
+    '--json',
+    '--ignore-scripts',
+    '--pack-destination',
+    output,
+    '--registry=https://registry.npmjs.org/',
+    '--@aikdna:registry=https://registry.npmjs.org/',
+  ], { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, shell: false });
   assert.equal(result.status, 0, result.stderr);
   const [report] = JSON.parse(result.stdout);
   assert.deepEqual(

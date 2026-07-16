@@ -86,6 +86,7 @@ function main() {
     if (git(['status', '--porcelain', '--untracked-files=all'])) fail('npm pack changed the repository');
     complete = true;
   } finally {
+    npmInvocation.cleanup();
     fs.rmSync(temp, { recursive: true, force: true });
     if (!complete) {
       if (evidenceCreated) fs.rmSync(output, { force: true });
