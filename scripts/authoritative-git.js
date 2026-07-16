@@ -6,17 +6,69 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+const TRUSTED_GIT_CANDIDATES = Object.freeze(
+  process.platform === 'win32'
+    ? [
+        'C:\\Program Files\\Git\\cmd\\git.exe',
+        'C:\\Program Files\\Git\\bin\\git.exe',
+      ]
+    : ['/usr/bin/git', '/bin/git'],
+);
+
 function authoritativeGitEnvironment(baseEnvironment = process.env) {
   const environment = { ...baseEnvironment };
   for (const key of Object.keys(environment)) {
-    if (key.startsWith('GIT_')) delete environment[key];
+    if (key.toUpperCase().startsWith('GIT_')) delete environment[key];
   }
   environment.GIT_CONFIG_GLOBAL = os.devNull;
   environment.GIT_CONFIG_NOSYSTEM = '1';
   environment.GIT_NO_REPLACE_OBJECTS = '1';
   environment.GIT_REPLACE_REF_BASE = 'refs/replace';
   environment.GIT_TERMINAL_PROMPT = '0';
+  environment.LANG = 'C';
+  environment.LC_ALL = 'C';
+  environment.PATH = process.platform === 'win32' ? '' : '/usr/bin:/bin';
   return environment;
+}
+
+let trustedSystemGit;
+
+function resolveTrustedSystemGit() {
+  if (trustedSystemGit) return trustedSystemGit;
+  const failures = [];
+  for (const candidate of TRUSTED_GIT_CANDIDATES) {
+    try {
+      const resolved = fs.realpathSync(candidate);
+      const stat = fs.lstatSync(resolved);
+      assert.ok(path.isAbsolute(resolved), 'trusted Git path must be absolute');
+      assert.ok(
+        stat.isFile() && !stat.isSymbolicLink(),
+        'trusted Git must resolve to a regular non-symlink file',
+      );
+      if (process.platform !== 'win32') {
+        assert.ok((stat.mode & 0o111) !== 0, 'trusted Git must be executable');
+        assert.equal(stat.uid, 0, 'trusted Git must be owned by root');
+        assert.equal(stat.mode & 0o022, 0, 'trusted Git must not be group- or world-writable');
+      }
+      const result = spawnSync(resolved, ['--version'], {
+        cwd: path.parse(resolved).root,
+        encoding: 'utf8',
+        env: authoritativeGitEnvironment({}),
+        maxBuffer: 1024 * 1024,
+        shell: false,
+      });
+      assert.equal(result.error, undefined, 'trusted Git version probe failed to start');
+      assert.equal(result.signal, null, 'trusted Git version probe was interrupted');
+      assert.equal(result.status, 0, 'trusted Git version probe failed');
+      assert.equal(result.stderr, '', 'trusted Git version probe wrote unexpected stderr');
+      assert.match(result.stdout.trim(), /^git version \d+(?:\.\d+)+(?:[.\s-].*)?$/);
+      trustedSystemGit = resolved;
+      return trustedSystemGit;
+    } catch (error) {
+      failures.push(`${candidate}: ${error.message}`);
+    }
+  }
+  throw new Error(`no trusted system Git executable is available (${failures.join('; ')})`);
 }
 
 function canonicalRepository(repository) {
@@ -37,7 +89,7 @@ function canonicalRepository(repository) {
 function authoritativeGit(repository, args, options = {}) {
   const canonical = canonicalRepository(repository);
   const encoding = options.encoding === null ? null : 'utf8';
-  const result = spawnSync('git', [
+  const result = spawnSync(resolveTrustedSystemGit(), [
     '--no-replace-objects',
     '--literal-pathspecs',
     '-c',
@@ -216,4 +268,5 @@ module.exports = {
   canonicalRepository,
   materializeCommitTree,
   readAuthoritativeGitState,
+  resolveTrustedSystemGit,
 };

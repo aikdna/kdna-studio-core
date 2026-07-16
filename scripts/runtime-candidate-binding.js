@@ -2,9 +2,11 @@
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const zlib = require('node:zlib');
+const { resolveTrustedSystemGit } = require('./authoritative-git');
 const {
   CANDIDATE_AUTHORITIES,
   CANDIDATE_WORKFLOW_PATH,
@@ -49,6 +51,59 @@ function isWithin(parent, candidate) {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
+function createTrustedNodeEntry(nodeExecPath) {
+  const directory = fs.mkdtempSync(
+    path.join(fs.realpathSync(os.tmpdir()), 'aikdna-trusted-node-'),
+  );
+  try {
+    if (process.platform === 'win32') {
+      const entry = path.join(directory, 'node.cmd');
+      assert(!nodeExecPath.includes('"'), 'trusted Node executable path cannot contain quotes');
+      fs.writeFileSync(entry, `@echo off\r\n"${nodeExecPath}" %*\r\n`, {
+        flag: 'wx',
+        mode: 0o700,
+      });
+      return Object.freeze({ directory, entry });
+    }
+    const entry = path.join(directory, 'node');
+    fs.symlinkSync(nodeExecPath, entry, 'file');
+    assert(
+      fs.realpathSync(entry) === nodeExecPath,
+      'trusted Node entry must resolve to the current Node executable',
+    );
+    return Object.freeze({ directory, entry });
+  } catch (error) {
+    fs.rmSync(directory, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+function trustedNpmEnvironment({ baseEnvironment, nodeExecPath, nodeEntry, npmCliPath }) {
+  const environment = { ...baseEnvironment };
+  for (const key of Object.keys(environment)) {
+    const normalized = key.toLowerCase();
+    if (
+      normalized === 'node_options' ||
+      normalized === 'node_path' ||
+      normalized === 'npm_execpath' ||
+      normalized === 'npm_node_execpath' ||
+      normalized === 'npm_command' ||
+      normalized.startsWith('npm_config_') ||
+      normalized.startsWith('npm_lifecycle_') ||
+      normalized.startsWith('npm_package_')
+    ) {
+      delete environment[key];
+    }
+  }
+  const executableDirectories = [nodeEntry.directory, path.dirname(resolveTrustedSystemGit())];
+  if (process.platform !== 'win32') executableDirectories.push('/usr/bin', '/bin');
+  environment.PATH = [...new Set(executableDirectories)].join(path.delimiter);
+  environment.NODE = nodeExecPath;
+  environment.npm_execpath = npmCliPath;
+  environment.npm_node_execpath = nodeExecPath;
+  return Object.freeze(environment);
+}
+
 function resolveTrustedNpmInvocation(root, options = {}) {
   assert(
     options && typeof options === 'object' && !Array.isArray(options),
@@ -69,11 +124,27 @@ function resolveTrustedNpmInvocation(root, options = {}) {
     'trusted npm release tarball must be outside the repository',
   );
   const extracted = extractTrustedNpmRelease(tarball);
-  return Object.freeze({
-    command: nodeExecPath,
-    prefixArgs: Object.freeze([extracted.cliPath]),
-    cleanup: extracted.cleanup,
-  });
+  let nodeEntry;
+  try {
+    nodeEntry = createTrustedNodeEntry(nodeExecPath);
+    return Object.freeze({
+      command: nodeExecPath,
+      prefixArgs: Object.freeze([extracted.cliPath]),
+      environment: trustedNpmEnvironment({
+        baseEnvironment: options.environment || process.env,
+        nodeExecPath,
+        nodeEntry,
+        npmCliPath: extracted.cliPath,
+      }),
+      cleanup: () => {
+        fs.rmSync(nodeEntry.directory, { recursive: true, force: true });
+        extracted.cleanup();
+      },
+    });
+  } catch (error) {
+    extracted.cleanup();
+    throw error;
+  }
 }
 
 function strictRegistryLookup(name, version, options = {}) {
@@ -81,6 +152,7 @@ function strictRegistryLookup(name, version, options = {}) {
   const invocation = resolveTrustedNpmInvocation(options.root || path.resolve(__dirname, '..'), {
     tarballPath: options.tarballPath,
     nodeExecPath: options.nodeExecPath,
+    environment: options.environment,
   });
   let result;
   try {
@@ -100,6 +172,7 @@ function strictRegistryLookup(name, version, options = {}) {
       ],
       {
         encoding: 'utf8',
+        env: invocation.environment,
         maxBuffer: 1024 * 1024,
         shell: false,
         timeout: 30_000,

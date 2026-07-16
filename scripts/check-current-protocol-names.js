@@ -140,7 +140,13 @@ function scanPackedArtifact(root) {
         '--registry=https://registry.npmjs.org/',
         '--@aikdna:registry=https://registry.npmjs.org/',
       ],
-      { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, shell: false },
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: invocation.environment,
+        maxBuffer: 16 * 1024 * 1024,
+        shell: false,
+      },
     );
     if (result.error || result.status !== 0 || result.signal) {
       throw new Error('trusted npm public-surface pack failed');

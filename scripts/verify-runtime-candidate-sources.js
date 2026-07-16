@@ -117,7 +117,11 @@ function packOnce(invocation, source, destination) {
       '--registry=https://registry.npmjs.org/',
       '--@aikdna:registry=https://registry.npmjs.org/',
     ],
-    { cwd: source, label: 'candidate source pack' },
+    {
+      cwd: source,
+      env: invocation.environment,
+      label: 'candidate source pack',
+    },
   );
   const reports = JSON.parse(stdout);
   assert.equal(reports.length, 1, 'candidate source pack must emit one artifact');

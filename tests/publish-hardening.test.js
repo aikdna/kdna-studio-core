@@ -19,7 +19,10 @@ const {
   assertReproduciblePackBytes,
   generateReleaseEvidence,
 } = require('../scripts/generate-release-evidence');
-const { assertNoHiddenIndexFlags } = require('../scripts/authoritative-git');
+const {
+  assertNoHiddenIndexFlags,
+  resolveTrustedSystemGit,
+} = require('../scripts/authoritative-git');
 const { evaluateRegistryResult, expectedE404 } = require('../scripts/registry-policy');
 const { resolveTrustedNpmInvocation } = require('../scripts/runtime-candidate-binding');
 const {
@@ -215,8 +218,22 @@ test('publish workflow is release-only, serialized, pinned, and publishes one ve
 });
 
 test('release Git authority ignores hostile environment injection and rejects replacement refs', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('POSIX fake executable fixture');
+    return;
+  }
   const release = createReleaseRepository(t, 'release-authority');
   const attacker = createReleaseRepository(t, 'attacker-authority');
+  const hostileBin = fs.mkdtempSync(
+    path.join(fs.realpathSync(os.tmpdir()), 'studio-release-hostile-path-'),
+  );
+  t.after(() => fs.rmSync(hostileBin, { recursive: true, force: true }));
+  const fakeGit = path.join(hostileBin, 'git');
+  fs.writeFileSync(
+    fakeGit,
+    '#!/bin/sh\ncase "$*" in *rev-parse*) printf "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\n";; esac\nexit 0\n',
+    { mode: 0o700 },
+  );
   const evidence = candidateEvidence();
   evidence.source.commit = release.commit;
   const environment = {
@@ -231,11 +248,12 @@ test('release Git authority ignores hostile environment injection and rejects re
     GIT_CONFIG_COUNT: '1',
     GIT_CONFIG_KEY_0: 'core.useReplaceRefs',
     GIT_CONFIG_VALUE_0: 'true',
+    PATH: `${hostileBin}${path.delimiter}${process.env.PATH}`,
   };
   const oldHead = spawnSync('git', ['rev-parse', 'HEAD'], {
     cwd: release.repository,
     encoding: 'utf8',
-    env: environment,
+    env: { ...environment, PATH: process.env.PATH },
     shell: false,
   });
   assert.equal(oldHead.status, 0, oldHead.stderr);
@@ -244,6 +262,14 @@ test('release Git authority ignores hostile environment injection and rejects re
     readCurrentBinding({ root: release.repository, evidence, env: environment }),
     evidence,
   );
+  assert.notEqual(resolveTrustedSystemGit(), fakeGit);
+
+  fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'visible-release-change\n');
+  assert.throws(
+    () => readCurrentBinding({ root: release.repository, evidence, env: environment }),
+    /worktree must be clean/,
+  );
+  fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'release-authority\n');
 
   fs.writeFileSync(path.join(release.repository, 'marker.txt'), 'hidden-release-change\n');
   git(release.repository, ['update-index', '--assume-unchanged', 'marker.txt']);
@@ -355,6 +381,12 @@ test('every release Git consumer uses the centralized authority helper', () => {
     assert.match(source, /authoritative-git/);
     assert.doesNotMatch(source, /execFileSync\(['"]git['"]|spawnSync\(['"]git['"]/);
   }
+  const authoritySource = fs.readFileSync(
+    path.join(ROOT, 'scripts/authoritative-git.js'),
+    'utf8',
+  );
+  assert.match(authoritySource, /resolveTrustedSystemGit\(\)/);
+  assert.doesNotMatch(authoritySource, /spawnSync\(['"]git['"]/);
   const namingSource = fs.readFileSync(
     path.join(ROOT, 'scripts/check-current-protocol-names.js'),
     'utf8',
@@ -369,6 +401,21 @@ test('every release Git consumer uses the centralized authority helper', () => {
   assert.match(evidenceSource, /materializeCommitTree\(root, commit, '', source/);
   assert.match(evidenceSource, /packIsolatedSource/);
   assert.match(evidenceSource, /assertReproduciblePackBytes/);
+});
+
+test('every audited npm child receives the controlled execution environment', () => {
+  const consumers = new Map([
+    ['scripts/run-trusted-npm.js', ['env: invocation.environment', 1]],
+    ['scripts/generate-release-evidence.js', ['env: npmInvocation.environment', 1]],
+    ['scripts/check-current-protocol-names.js', ['env: invocation.environment', 1]],
+    ['scripts/publish-verified-artifact.js', ['env: npmInvocation.environment', 2]],
+    ['scripts/verify-runtime-candidate-sources.js', ['env: invocation.environment', 1]],
+    ['scripts/runtime-candidate-binding.js', ['env: invocation.environment', 1]],
+  ]);
+  for (const [file, [needle, expected]] of consumers) {
+    const source = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    assert.equal(source.split(needle).length - 1, expected, file);
+  }
 });
 
 test('release context binds package, changelog, event, tag ref, HEAD, and workflow SHA', () => {
@@ -429,7 +476,13 @@ test('pack evidence independently parses a real npm tgz and rejects changed byte
       '--registry=https://registry.npmjs.org/',
       '--@aikdna:registry=https://registry.npmjs.org/',
     ],
-    { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, shell: false },
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: npmInvocation.environment,
+      maxBuffer: 16 * 1024 * 1024,
+      shell: false,
+    },
   );
   assert.equal(packed.status, 0, packed.stderr);
   const [report] = JSON.parse(packed.stdout);

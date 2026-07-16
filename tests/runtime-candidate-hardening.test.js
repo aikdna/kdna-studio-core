@@ -176,6 +176,98 @@ test('trusted npm wrapper binds execution to the repository root', (t) => {
   assert.equal(result.stdout.trim(), ROOT);
 });
 
+test('trusted npm lifecycle resolves node from the current process executable', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('POSIX fake executable fixture');
+    return;
+  }
+  const temporary = fs.mkdtempSync(
+    path.join(fs.realpathSync(os.tmpdir()), 'studio-core-node-lifecycle-'),
+  );
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const hostileBin = path.join(temporary, 'hostile-bin');
+  const project = path.join(temporary, 'project');
+  fs.mkdirSync(hostileBin);
+  fs.mkdirSync(project);
+  fs.writeFileSync(path.join(hostileBin, 'node'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  fs.writeFileSync(
+    path.join(project, 'package.json'),
+    `${JSON.stringify(
+      {
+        name: 'trusted-node-lifecycle-fixture',
+        version: '1.0.0',
+        scripts: { 'must-fail': 'node -e "process.exit(23)"' },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const invocation = resolveTrustedNpmInvocation(ROOT, {
+    environment: {
+      ...process.env,
+      PATH: `${hostileBin}${path.delimiter}${process.env.PATH}`,
+      NODE_OPTIONS: '--invalid-hostile-option',
+      npm_config_script_shell: path.join(hostileBin, 'node'),
+      npm_execpath: path.join(hostileBin, 'fake-npm'),
+      npm_lifecycle_event: 'forged',
+    },
+  });
+  t.after(() => invocation.cleanup());
+  const controlledNode = path.join(
+    invocation.environment.PATH.split(path.delimiter)[0],
+    'node',
+  );
+  assert.equal(fs.realpathSync(controlledNode), process.execPath);
+  assert.equal(invocation.environment.NODE, process.execPath);
+  assert.equal(invocation.environment.npm_node_execpath, process.execPath);
+  assert.equal(invocation.environment.npm_execpath, invocation.prefixArgs[0]);
+  assert.equal(invocation.environment.NODE_OPTIONS, undefined);
+  assert.equal(invocation.environment.npm_config_script_shell, undefined);
+  assert.equal(invocation.environment.npm_lifecycle_event, undefined);
+  const result = spawnSync(
+    invocation.command,
+    [...invocation.prefixArgs, 'run', 'must-fail'],
+    {
+      cwd: project,
+      encoding: 'utf8',
+      env: invocation.environment,
+      shell: false,
+    },
+  );
+  assert.notEqual(result.status, 0, result.stderr);
+  assert.match(result.stdout, /node -e "process\.exit\(23\)"/);
+});
+
+test('trusted npm wrapper forwards the controlled lifecycle environment', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('POSIX fake executable fixture');
+    return;
+  }
+  const hostileBin = fs.mkdtempSync(
+    path.join(fs.realpathSync(os.tmpdir()), 'studio-core-wrapper-hostile-path-'),
+  );
+  t.after(() => fs.rmSync(hostileBin, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(hostileBin, 'node'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const result = spawnSync(
+    process.execPath,
+    [path.join(ROOT, 'scripts', 'run-trusted-npm.js'), 'run', 'release:check'],
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${hostileBin}${path.delimiter}${process.env.PATH}`,
+        GITHUB_EVENT_NAME: 'not-a-release',
+        npm_execpath: path.join(hostileBin, 'fake-npm'),
+        npm_lifecycle_event: 'forged',
+      },
+      shell: false,
+    },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /Release context rejected:/);
+});
+
 test('every candidate authority rejects symlinks and hard links', async (t) => {
   const files = [
     ['package.json', 'package manifest'],
@@ -274,6 +366,9 @@ test('registry lookup uses only the integrity-anchored npm release and canonical
   assert.ok(invocation.args.includes('--registry=https://registry.npmjs.org/'));
   assert.ok(invocation.args.includes('--@aikdna:registry=https://registry.npmjs.org/'));
   assert.equal(invocation.options.shell, false);
+  assert.equal(invocation.options.env.NODE, process.execPath);
+  assert.equal(invocation.options.env.npm_node_execpath, process.execPath);
+  assert.equal(invocation.options.env.npm_execpath, invocation.args[0]);
   const falseTar = path.join(fakeRoot, 'npm-11.17.0.tgz');
   fs.writeFileSync(falseTar, fs.readFileSync(path.join(ROOT, BINDING_PATH.replace('binding.json', 'kdna-core-0.19.0.tgz'))));
   assert.throws(
@@ -601,16 +696,26 @@ test('published package contains no candidate tar, binding, or evidence files', 
   t.after(() => fs.rmSync(output, { recursive: true, force: true }));
   const invocation = resolveTrustedNpmInvocation(ROOT);
   t.after(() => invocation.cleanup());
-  const result = spawnSync(invocation.command, [
-    ...invocation.prefixArgs,
-    'pack',
-    '--json',
-    '--ignore-scripts',
-    '--pack-destination',
-    output,
-    '--registry=https://registry.npmjs.org/',
-    '--@aikdna:registry=https://registry.npmjs.org/',
-  ], { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, shell: false });
+  const result = spawnSync(
+    invocation.command,
+    [
+      ...invocation.prefixArgs,
+      'pack',
+      '--json',
+      '--ignore-scripts',
+      '--pack-destination',
+      output,
+      '--registry=https://registry.npmjs.org/',
+      '--@aikdna:registry=https://registry.npmjs.org/',
+    ],
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: invocation.environment,
+      maxBuffer: 16 * 1024 * 1024,
+      shell: false,
+    },
+  );
   assert.equal(result.status, 0, result.stderr);
   const [report] = JSON.parse(result.stdout);
   assert.deepEqual(

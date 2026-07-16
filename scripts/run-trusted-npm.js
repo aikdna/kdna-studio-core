@@ -18,7 +18,12 @@ async function main() {
     const result = spawnSync(
       invocation.command,
       [...invocation.prefixArgs, ...process.argv.slice(2)],
-      { cwd: root, stdio: 'inherit', shell: false },
+      {
+        cwd: root,
+        env: invocation.environment,
+        stdio: 'inherit',
+        shell: false,
+      },
     );
     if (result.error) throw result.error;
     if (result.signal) throw new Error(`trusted npm was interrupted by ${result.signal}`);

@@ -31,7 +31,13 @@ function packIsolatedSource(npmInvocation, source, destination) {
       '--registry=https://registry.npmjs.org/',
       '--@aikdna:registry=https://registry.npmjs.org/',
     ],
-    { cwd: source, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, shell: false },
+    {
+      cwd: source,
+      encoding: 'utf8',
+      env: npmInvocation.environment,
+      maxBuffer: 16 * 1024 * 1024,
+      shell: false,
+    },
   );
   if (packed.error) fail(`npm pack failed: ${packed.error.message}`);
   if (packed.status !== 0) {
