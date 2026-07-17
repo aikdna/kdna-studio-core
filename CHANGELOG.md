@@ -2,12 +2,13 @@
 
 ## 2.0.0 (2026-07-16)
 
-- Bind the Core 0.20.0 dependency to the exact candidate source pack built
-  from Core commit `1e77e3e0d486c330fe9f9262b514ef24c859d469`. The package
-  lock, runtime-candidate binding, and candidate evidence point to that
-  strict-install-equivalent tarball and its verified integrity; the registry
-  release gate stays fail-closed until `@aikdna/kdna-core@0.20.0` is formally
-  published and the lock is cut to the registry artifact.
+- Bind the Core 0.20.0 dependency to the published registry artifact
+  `@aikdna/kdna-core@0.20.0` (registry tarball SHA-256
+  `b1614d14b77d6b8eac1c0a3902e2270a46cb0f52708e524b12b3990256ff8dee`,
+  uncompressed tar byte-identical to the accepted source candidate). The
+  package lock, runtime-candidate binding, and candidate evidence now point
+  to the official registry tarball and its verified integrity; the registry
+  release gate is open.
 - Emit current responsibility-specific report types with independent `0.1.0`
   schema coordinates and ship schemas for all five report contracts.
 - Emit the current manifest, payload, digest, encryption, LoadPlan, and Runtime
@@ -18,11 +19,12 @@
   the current Core.
 - Depend directly on KDNA Core 0.20.0. The authoring library no longer installs
   the separate Runtime CLI as a transitive application dependency.
-- Bind the Core candidate artifact to its exact tar digests and
-  require exactly one top-level Core copy across the complete lock graph.
+- Bind the published Core 0.20.0 artifact to its exact registry tar digests
+  and require exactly one top-level Core copy across the complete lock graph.
   The recorded commit remains an audit source reference, not a cryptographic
-  identity claim; the candidate tar integrity and SHA-256 digest are
-  authoritative until the registry artifact replaces them at publication.
+  identity claim; the registry tar integrity and SHA-256 digest are
+  authoritative. Clean installs now fetch the published artifact from the
+  official registry, and the release gate accepts that registry resolution.
 - Make the shipped Studio project Schema the single card-type authority for
   all 16 authoring card types; both project validation and card creation read
   that exact packaged schema instead of maintaining parallel enums.
