@@ -219,7 +219,7 @@ test('publish workflow is release-only, serialized, pinned, and publishes one ve
   assert.match(workflow, /KDNA_TRUSTED_NPM_TARBALL=/);
   assert.match(workflow, /run-trusted-npm\.js ci --ignore-scripts/);
   assert.match(workflow, /run-trusted-npm\.js run release:generate-evidence --/);
-  assert.match(workflow, /run-trusted-npm\.js run release:publish-verified --/);
+  assert.match(workflow, /node scripts\/publish-verified-artifact\.js/);
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
   assert.equal(scripts['release:generate-evidence'], 'node scripts/generate-release-evidence.js');
   assert.equal(scripts['release:publish-verified'], 'node scripts/publish-verified-artifact.js');
@@ -437,7 +437,7 @@ test('every audited npm child receives the controlled execution environment', ()
     ['scripts/run-trusted-npm.js', ['env: invocation.environment', 1]],
     ['scripts/generate-release-evidence.js', ['env: npmInvocation.environment', 1]],
     ['scripts/check-current-protocol-names.js', ['env: invocation.environment', 1]],
-    ['scripts/publish-verified-artifact.js', ['env: npmInvocation.environment', 2]],
+    ['scripts/publish-verified-artifact.js', ['env: npmInvocation.environment', 1]],
     ['scripts/verify-runtime-candidate-sources.js', ['env: invocation.environment', 1]],
     ['scripts/runtime-candidate-binding.js', ['env: invocation.environment', 1]],
   ]);

@@ -52,7 +52,7 @@ jobs:
           --artifact "$RUNNER_TEMP/kdna-studio-core-release.tgz"
       - name: Publish or idempotently skip the verified package
         run: >-
-          node scripts/run-trusted-npm.js run release:publish-verified --
+          node scripts/publish-verified-artifact.js
           --evidence "$RUNNER_TEMP/kdna-studio-core-release-evidence.json"
           --artifact "$RUNNER_TEMP/kdna-studio-core-release.tgz"
         env:
