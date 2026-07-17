@@ -138,7 +138,7 @@ function git(repository, args) {
   return result.stdout.trim();
 }
 
-function createSourceRepository(t, packageJson = { name: CORE, version: '0.19.0' }) {
+function createSourceRepository(t, packageJson = { name: CORE, version: '0.20.0' }) {
   const repository = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'studio-core-source-repo-'));
   t.after(() => fs.rmSync(repository, { recursive: true, force: true }));
   git(repository, ['init', '--quiet']);
@@ -504,17 +504,17 @@ test('every candidate authority rejects symlinks and hard links', async (t) => {
 });
 
 test('installed graph rejects aliases, descendants, vendored identities, symlinks, and hard links', async (t) => {
-  const canonical = (root) => writeInstalledPackage(root, CORE, CORE, '0.19.0');
+  const canonical = (root) => writeInstalledPackage(root, CORE, CORE, '0.20.0');
   await t.test('canonical graph', (t) => {
     const root = copyAuthorityRoot(t);
     canonical(root);
-    assert.deepEqual(verifyInstalledAikdnaGraph(root), { [CORE]: '0.19.0' });
+    assert.deepEqual(verifyInstalledAikdnaGraph(root), { [CORE]: '0.20.0' });
   });
   for (const [name, mutation, pattern] of [
     ['alias', (root) => writeInstalledPackage(root, 'shadow-core', CORE, '0.18.0'), /canonical top-level/],
-    ['descendant', (root) => writeInstalledPackage(root, 'foreign/dist/node_modules/shadow-core', CORE, '0.19.0'), /canonical top-level/],
-    ['vendored', (root) => writeInstalledPackage(root, 'foreign/vendor/deep/shadow-core', CORE, '0.19.0'), /canonical top-level/],
-    ['bin descendant', (root) => writeInstalledPackage(root, '.bin/node_modules/shadow-core', CORE, '0.19.0'), /\.bin must not contain directories/],
+    ['descendant', (root) => writeInstalledPackage(root, 'foreign/dist/node_modules/shadow-core', CORE, '0.20.0'), /canonical top-level/],
+    ['vendored', (root) => writeInstalledPackage(root, 'foreign/vendor/deep/shadow-core', CORE, '0.20.0'), /canonical top-level/],
+    ['bin descendant', (root) => writeInstalledPackage(root, '.bin/node_modules/shadow-core', CORE, '0.20.0'), /\.bin must not contain directories/],
   ]) {
     await t.test(name, (t) => {
       const root = copyAuthorityRoot(t);
@@ -555,14 +555,14 @@ test('registry lookup uses only the integrity-anchored npm release and canonical
   });
   let invocation;
   const integrity = `sha512-${Buffer.alloc(64).toString('base64')}`;
-  const metadata = strictRegistryLookup(CORE, '0.19.0', {
+  const metadata = strictRegistryLookup(CORE, '0.20.0', {
     root: ROOT,
     runner: (command, args, options) => {
       invocation = { command, args, options };
       return {
         status: 0,
         signal: null,
-        stdout: JSON.stringify({ name: CORE, version: '0.19.0', 'dist.integrity': integrity }),
+        stdout: JSON.stringify({ name: CORE, version: '0.20.0', 'dist.integrity': integrity }),
         stderr: '',
       };
     },
@@ -578,7 +578,7 @@ test('registry lookup uses only the integrity-anchored npm release and canonical
   assert.equal(invocation.options.env.npm_node_execpath, process.execPath);
   assert.equal(invocation.options.env.npm_execpath, invocation.args[0]);
   const falseTar = path.join(fakeRoot, 'npm-11.17.0.tgz');
-  fs.writeFileSync(falseTar, fs.readFileSync(path.join(ROOT, BINDING_PATH.replace('binding.json', 'kdna-core-0.19.0.tgz'))));
+  fs.writeFileSync(falseTar, fs.readFileSync(path.join(ROOT, BINDING_PATH.replace('binding.json', 'kdna-core-0.20.0.tgz'))));
   assert.throws(
     () => resolveTrustedNpmInvocation(ROOT, { tarballPath: falseTar }),
     /integrity must equal the audited npm 11\.17\.0 release/,
@@ -829,7 +829,7 @@ test('formal candidate evidence keeps two byte-identical trusted npm packs', (t)
   t.after(() => fs.rmSync(marker, { force: true }));
   const packageJson = {
     name: CORE,
-    version: '0.19.0',
+    version: '0.20.0',
     files: ['index.js'],
     scripts: {
       prepack: "node -e \"require('node:fs').writeFileSync(process.env.FAKE_NPM_MARKER,'ran')\"",
@@ -856,7 +856,7 @@ test('formal candidate evidence keeps two byte-identical trusted npm packs', (t)
       "const path = require('node:path');",
       "fs.writeFileSync(process.env.FAKE_NPM_MARKER, 'copy-tar-ran');",
       "const destination = process.argv[process.argv.indexOf('--pack-destination') + 1];",
-      "const filename = 'aikdna-kdna-core-0.19.0.tgz';",
+      "const filename = 'aikdna-kdna-core-0.20.0.tgz';",
       "fs.copyFileSync(process.env.FAKE_COPY_ARTIFACT, path.join(destination, filename));",
       "process.stdout.write(JSON.stringify([{ filename }]));",
     ].join('\n'),
@@ -869,7 +869,7 @@ test('formal candidate evidence keeps two byte-identical trusted npm packs', (t)
   process.env.FAKE_NPM_MARKER = marker;
   process.env.FAKE_COPY_ARTIFACT = path.join(
     ROOT,
-    'fixtures/runtime-candidates/kdna-core-0.19.0.tgz',
+    'fixtures/runtime-candidates/kdna-core-0.20.0.tgz',
   );
   t.after(() => {
     if (priorNpmExecPath === undefined) delete process.env.npm_execpath;
@@ -895,7 +895,7 @@ test('formal candidate evidence keeps two byte-identical trusted npm packs', (t)
   assert.equal(fs.existsSync(marker), false);
   assert.notDeepEqual(
     firstBytes,
-    fs.readFileSync(path.join(ROOT, 'fixtures/runtime-candidates/kdna-core-0.19.0.tgz')),
+    fs.readFileSync(path.join(ROOT, 'fixtures/runtime-candidates/kdna-core-0.20.0.tgz')),
   );
 });
 

@@ -347,7 +347,7 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     created_at: createdAt,
     updated_at: updatedAt,
     compatibility: {
-      min_loader_version: '0.19.0',
+      min_loader_version: '0.20.0',
       profile: PAYLOAD_PROFILE,
       profile_version: PAYLOAD_PROFILE_VERSION,
     },

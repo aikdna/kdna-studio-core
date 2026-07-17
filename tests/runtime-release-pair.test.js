@@ -29,13 +29,13 @@ function writeFiles(directory, files) {
 }
 
 test('release dependency graph binds the exact Core candidate and has no Runtime CLI dependency', () => {
-  assert.equal(studioPackage.dependencies['@aikdna/kdna-core'], '0.19.0');
+  assert.equal(studioPackage.dependencies['@aikdna/kdna-core'], '0.20.0');
   assert.equal(studioPackage.dependencies['@aikdna/kdna-cli'], undefined);
-  assert.equal(packageLock.packages[''].dependencies['@aikdna/kdna-core'], '0.19.0');
+  assert.equal(packageLock.packages[''].dependencies['@aikdna/kdna-core'], '0.20.0');
   assert.equal(packageLock.packages[''].dependencies['@aikdna/kdna-cli'], undefined);
-  assert.equal(packageLock.packages['node_modules/@aikdna/kdna-core'].version, '0.19.0');
+  assert.equal(packageLock.packages['node_modules/@aikdna/kdna-core'].version, '0.20.0');
   assert.equal(packageLock.packages['node_modules/@aikdna/kdna-cli'], undefined);
-  assert.equal(corePackage.version, '0.19.0');
+  assert.equal(corePackage.version, '0.20.0');
 
   const coreEntries = Object.keys(packageLock.packages).filter((entry) =>
     entry.endsWith('node_modules/@aikdna/kdna-core'),
@@ -49,12 +49,13 @@ test('release dependency graph binds the exact Core candidate and has no Runtime
     evidence.packages.map((entry) => [entry.name, entry.version, entry.commit]),
     [[
       '@aikdna/kdna-core',
-      '0.19.0',
-      '556f8cec37c94fc9c006035b0bdeefc80d04d9c2',
+      '0.20.0',
+      '1e77e3e0d486c330fe9f9262b514ef24c859d469',
     ]],
   );
-  assert.doesNotThrow(
+  assert.throws(
     () => assertRegistryReleaseReady(path.resolve(__dirname, '..')),
+    /registry dependency gate blocked.*0\.20\.0/i,
   );
 });
 
