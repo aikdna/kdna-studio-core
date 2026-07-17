@@ -1,6 +1,18 @@
 # Changelog
 
-## 2.0.0 (2026-07-16)
+## 2.0.1 (2026-07-17)
+
+### Fixed
+
+- Restore the npm auth chain for the release-publish step so the
+  `setup-node` NPM_CONFIG_USERCONFIG reaches the publish command.
+  Version 2.0.0 never formed a Registry artifact because the
+  trusted-npm environment scrubbed the custom userconfig file injected
+  by `actions/setup-node`; the publish now inherits the workflow step
+  environment as the sibling CLI, MCP, and Remote Server publisher
+  already do. No product content changed relative to 2.0.0.
+
+## 2.0.0 (2026-07-16) — NOT PUBLISHED TO npm
 
 - Bind the Core 0.20.0 dependency to the published registry artifact
   `@aikdna/kdna-core@0.20.0` (registry tarball SHA-256

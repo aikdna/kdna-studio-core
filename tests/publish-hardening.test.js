@@ -108,7 +108,7 @@ function releaseTarball() {
 }
 
 function releaseInput(overrides = {}) {
-  const version = overrides.pkg?.version || '2.0.0';
+  const version = overrides.pkg?.version || '2.0.1';
   return {
     pkg: { name: '@aikdna/kdna-studio-core', version, ...overrides.pkg },
     changelog: overrides.changelog ?? `# Changelog\n\n## ${version} (2026-07-15)\n`,
@@ -143,14 +143,14 @@ function createReleaseRepository(t, marker) {
   git(repository, ['config', 'user.email', 'test@example.invalid']);
   fs.writeFileSync(
     path.join(repository, 'package.json'),
-    `${JSON.stringify({ name: '@aikdna/kdna-studio-core', version: '2.0.0' }, null, 2)}\n`,
+    `${JSON.stringify({ name: '@aikdna/kdna-studio-core', version: '2.0.1' }, null, 2)}\n`,
   );
-  fs.writeFileSync(path.join(repository, 'CHANGELOG.md'), '# Changelog\n\n## 2.0.0 (2026-07-16)\n');
+  fs.writeFileSync(path.join(repository, 'CHANGELOG.md'), '# Changelog\n\n## 2.0.1 (2026-07-17)\n');
   fs.writeFileSync(path.join(repository, 'marker.txt'), `${marker}\n`);
   git(repository, ['add', '.']);
   git(repository, ['commit', '--quiet', '-m', marker]);
   const commit = git(repository, ['rev-parse', 'HEAD']);
-  git(repository, ['tag', '2.0.0', commit]);
+  git(repository, ['tag', '2.0.1', commit]);
   return { repository, commit };
 }
 
@@ -159,10 +159,10 @@ function candidateEvidence(bytes = releaseTarball()) {
   return {
     schema: 'kdna.studio-core.release-evidence',
     version: '1.0',
-    source: { ref: 'refs/tags/2.0.0', commit: HASH },
-    package: { name: '@aikdna/kdna-studio-core', version: '2.0.0' },
+    source: { ref: 'refs/tags/2.0.1', commit: HASH },
+    package: { name: '@aikdna/kdna-studio-core', version: '2.0.1' },
     artifact: {
-      filename: 'aikdna-kdna-studio-core-2.0.0.tgz',
+      filename: 'aikdna-kdna-studio-core-2.0.1.tgz',
       integrity: `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`,
       shasum: crypto.createHash('sha1').update(bytes).digest('hex'),
       packed_size: bytes.length,
@@ -176,8 +176,8 @@ function candidateEvidence(bytes = releaseTarball()) {
 function packReport(bytes, files = parseTarFiles(bytes)) {
   return [{
     name: '@aikdna/kdna-studio-core',
-    version: '2.0.0',
-    filename: 'aikdna-kdna-studio-core-2.0.0.tgz',
+    version: '2.0.1',
+    filename: 'aikdna-kdna-studio-core-2.0.1.tgz',
     integrity: `sha512-${crypto.createHash('sha512').update(bytes).digest('base64')}`,
     shasum: crypto.createHash('sha1').update(bytes).digest('hex'),
     size: bytes.length,
@@ -350,7 +350,7 @@ test('release evidence entry rejects hidden worktree changes and packs exact com
     environment,
   });
   assert.equal(evidence.source.commit, release.commit);
-  assert.equal(evidence.source.ref, 'refs/tags/2.0.0');
+  assert.equal(evidence.source.ref, 'refs/tags/2.0.1');
   assert.ok(fs.existsSync(output));
   assert.ok(fs.existsSync(artifact));
   const files = parseTarFiles(fs.readFileSync(artifact)).map((entry) => entry.path);
@@ -450,9 +450,9 @@ test('every audited npm child receives the controlled execution environment', ()
 test('release context binds package, changelog, event, tag ref, HEAD, and workflow SHA', () => {
   assert.deepEqual(validateReleaseContext(releaseInput()), {
     name: '@aikdna/kdna-studio-core',
-    version: '2.0.0',
-    tag: '2.0.0',
-    ref: 'refs/tags/2.0.0',
+    version: '2.0.1',
+    tag: '2.0.1',
+    ref: 'refs/tags/2.0.1',
     commit: HASH,
   });
   for (const input of [
@@ -519,8 +519,8 @@ test('pack evidence independently parses a real npm tgz and rejects changed byte
   const evidence = validatePackReport({
     reportText: packed.stdout,
     tarball: bytes,
-    pkg: { name: '@aikdna/kdna-studio-core', version: '2.0.0' },
-    source: { ref: 'refs/tags/2.0.0', commit: HASH },
+    pkg: { name: '@aikdna/kdna-studio-core', version: '2.0.1' },
+    source: { ref: 'refs/tags/2.0.1', commit: HASH },
   });
   assert.equal(validateArtifact(evidence, bytes), evidence);
   assert.throws(() => validateArtifact(evidence, Buffer.from('changed')), /size|integrity|shasum/);
@@ -596,8 +596,8 @@ test('pack JSON and retained evidence must exactly match the independently parse
       validatePackReport({
         reportText: JSON.stringify(report),
         tarball: bytes,
-        pkg: { name: '@aikdna/kdna-studio-core', version: '2.0.0' },
-        source: { ref: 'refs/tags/2.0.0', commit: HASH },
+        pkg: { name: '@aikdna/kdna-studio-core', version: '2.0.1' },
+        source: { ref: 'refs/tags/2.0.1', commit: HASH },
       }),
     /file report/,
   );
