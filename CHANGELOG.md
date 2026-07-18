@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- Document the verified source-migration boundary from the historical
+  `@aikdna/studio-core@1.2.1` package to
+  `@aikdna/kdna-studio-core@2.0.2`, including immutable card operations,
+  project validation, current Runtime export, and explicit non-promises.
+- Correct the Quick Start card-review example so it keeps immutable state
+  transition results before adding the card to a project.
+
+### Verification
+
+- Add a public-registry cold-install smoke for both exact package coordinates.
+  The smoke records the historical package's missing-schema main-entry failure
+  and exercises the maintained package main through project creation, card
+  review, validation, compile, and canonical Runtime export.
+
 ## 2.0.2 (2026-07-18)
 
 ### Fixed
