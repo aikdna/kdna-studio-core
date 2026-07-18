@@ -103,6 +103,11 @@ sidecars; they do not belong in the runtime asset export.
 npm install @aikdna/kdna-studio-core
 ```
 
+Migrating from `@aikdna/studio-core@1.2.1` is a source migration, not a
+drop-in package rename. Follow the
+[package migration guide](https://github.com/aikdna/kdna-studio-core/blob/main/docs/migration-from-studio-core.md)
+for the verified registry boundary and required code changes.
+
 ## Studio CLI
 
 The command-line authoring entry is a separate package:
@@ -174,7 +179,7 @@ const target = distillation.createDistillationTarget({
 project.distillation_target = target;
 
 // 2. Create judgment cards
-const card = cardApi.createCard('axiom', {
+let card = cardApi.createCard('axiom', {
   one_sentence: 'Most writing problems are structural, not language-level.',
   full_statement: 'When reviewing content, diagnose structure before language.',
   why: 'Surface polishing on structurally weak content wastes effort.',
@@ -182,14 +187,16 @@ const card = cardApi.createCard('axiom', {
   does_not_apply_when: ['User explicitly asks for grammar check only'],
   failure_risk: 'May over-diagnose structural problems in content that only needs polish.'
 });
-project.cards.push(card);
 
-// 3. Optional review provenance for this Studio project
-const locked = cardApi.lockCard(card, {
+// 3. This example records optional review provenance for the card.
+// Card state operations are immutable, so keep each returned card.
+card = cardApi.transitionCard(card, 'revised', { by: 'writer_001' });
+card = cardApi.lockCard(card, {
   by: 'writer_001',
   statement: 'This represents my professional writing judgment.',
   checked: { applies_when: true, does_not_apply_when: true, failure_risk: true }
 });
+project.cards.push(card);
 
 // 4. Check readiness
 const gate = projectApi.checkHumanLockGate(project); // optional review report
