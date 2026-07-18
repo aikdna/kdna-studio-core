@@ -90,6 +90,72 @@ test('runtime export emits only canonical runtime entries', () => {
   assert.equal(Object.hasOwn(checksums, 'asset_digest'), false);
 });
 
+test('runtime export keeps authored evolution and excludes Studio lock audit projections', () => {
+  const project = createRuntimeProject();
+  project.cards.push(makeLockedCard('evolution_stage', {
+    name: 'Source Reviewed',
+    level: 2,
+    description: 'The authored judgment reached its reviewed stage.',
+    indicators: ['content reviewed'],
+  }, 'stage_source_reviewed'));
+
+  const exported = exportRuntimeAsset(project, {
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000322',
+    timestamp: '2026-07-18T00:00:00.000Z',
+  });
+  const payload = cbor.decode(exported.files['payload.kdnab']);
+
+  assert.deepEqual(
+    payload.evolution.stages.map((stage) => stage.id),
+    ['stage_source_reviewed'],
+  );
+  assert.equal(payload.evolution.stages[0].source_authored, true);
+  assert.deepEqual(payload.evolution.evolution_layers, []);
+  assert.deepEqual(payload.evolution.measurement, []);
+  assert.equal(
+    payload.evolution.stages.some((stage) => stage.id === 'stage_ax_runtime_001'),
+    false,
+    'authoring lock events must not become Runtime judgment evolution',
+  );
+});
+
+test('runtime export preserves declared core relations and extended reasoning semantics', () => {
+  const project = createRuntimeProject();
+  project.source_core_structure = [{
+    id: 'relation_runtime_001',
+    from: 'ax_runtime_001',
+    to: 'sc_runtime_001',
+    relation: 'verified_by',
+    via: { mode: 'explicit_self_check' },
+  }];
+  project.cards.push(makeLockedCard('reasoning', {
+    axiom: 'ax_runtime_001',
+    one_sentence: 'Validate before loading.',
+    chain: ['inspect', 'validate', 'load'],
+    principle: 'Validation precedes execution.',
+    concrete_action: 'Reject invalid assets.',
+    tradeoffs: ['Additional startup work'],
+    conflict_resolution: { rule: 'Prefer declared protocol constraints.' },
+    when_not_to_use: ['Already rejected input'],
+    evidence_required: ['validation_receipt'],
+    uncertainty_handling: { unknown: 'fail_closed' },
+  }, 'reasoning_runtime_001'));
+
+  const exported = exportRuntimeAsset(project, {
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000323',
+    timestamp: '2026-07-18T00:00:00.000Z',
+  });
+  const payload = cbor.decode(exported.files['payload.kdnab']);
+
+  assert.deepEqual(payload.core.core_structure, project.source_core_structure);
+  const chain = payload.reasoning.reasoning_chains.find((entry) => entry.id === 'reasoning_runtime_001');
+  assert.deepEqual(chain.tradeoffs, ['Additional startup work']);
+  assert.deepEqual(chain.conflict_resolution, { rule: 'Prefer declared protocol constraints.' });
+  assert.deepEqual(chain.when_not_to_use, ['Already rejected input']);
+  assert.deepEqual(chain.evidence_required, ['validation_receipt']);
+  assert.deepEqual(chain.uncertainty_handling, { unknown: 'fail_closed' });
+});
+
 test('runtime export normalizes every accepted timestamp source to an ISO date-time', () => {
   const project = createRuntimeProject();
   project.created = '2026-07-01';

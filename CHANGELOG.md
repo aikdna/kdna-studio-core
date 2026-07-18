@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.0.2 (2026-07-18)
+
+### Fixed
+
+- Preserve every authored axiom, relation, pattern, scenario, case, reasoning,
+  and source-evolution field through Studio compile and Runtime export instead
+  of projecting judgment through incomplete field allow-lists.
+- Preserve `core_structure` relations and the public reasoning extensions
+  `tradeoffs`, `conflict_resolution`, `when_not_to_use`,
+  `evidence_required`, and `uncertainty_handling` in the Runtime payload.
+- Treat Studio card-lock audit events as authoring provenance only. Runtime
+  evolution now contains source-authored stages, layers, and measurements,
+  without synthesizing one judgment-evolution stage per locked card.
+- Bind Human Lock fingerprints to the complete, recursively canonicalized
+  `card.fields` object. Changes to source references, relations, nested
+  extensions, or future judgment fields now invalidate the prior lock.
+- Preserve imported public manifest semantics such as summary, language,
+  license, and keywords when a project is exported again.
+
 ## 2.0.1 (2026-07-17)
 
 ### Fixed

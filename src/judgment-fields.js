@@ -18,10 +18,9 @@ const JUDGMENT_CARD_TYPES = new Set([
   'term', 'banned_term', 'evolution_stage',
 ]);
 
-// All judgment-field names that may appear on any judgment card type.
-// The fingerprint is computed across all of these so that a Human Lock
-// signature cannot be reused against a card whose only non-axiom fields
-// were silently changed.
+// Historical list retained as a public export for consumers that use it to
+// render review UIs. Human Lock fingerprinting intentionally does not use an
+// allow-list: every value inside card.fields is authored judgment content.
 //
 // Bug: prior version was missing `name`, `description`, and `mitigation`,
 // which are the primary required fields for `risk` and `aesthetic` cards.
@@ -41,12 +40,18 @@ const crypto = require('crypto');
 
 function cardJudgmentFingerprint(card) {
   const fields = card.fields || {};
-  const relevant = {};
-  for (const key of JUDGMENT_FIELDS) {
-    if (key in fields) relevant[key] = fields[key];
+  function canonicalJson(value) {
+    if (value === undefined) return undefined;
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) {
+      return `[${value.map((entry) => canonicalJson(entry) ?? 'null').join(',')}]`;
+    }
+    return `{${Object.keys(value).filter((key) => value[key] !== undefined).sort().map((key) => (
+      `${JSON.stringify(key)}:${canonicalJson(value[key])}`
+    )).join(',')}}`;
   }
   return crypto.createHash('sha256')
-    .update(card.type + ':' + JSON.stringify(relevant, Object.keys(relevant).sort()))
+    .update(card.type + ':' + canonicalJson(fields))
     .digest('hex');
 }
 

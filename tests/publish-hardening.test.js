@@ -41,6 +41,7 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 const HASH = 'a'.repeat(40);
+const CURRENT_PACKAGE = require('../package.json');
 
 test('authoritative Git selects a Git-compatible null device on every platform', () => {
   assert.equal(authoritativeGitNullDevice('win32'), 'NUL');
@@ -519,8 +520,8 @@ test('pack evidence independently parses a real npm tgz and rejects changed byte
   const evidence = validatePackReport({
     reportText: packed.stdout,
     tarball: bytes,
-    pkg: { name: '@aikdna/kdna-studio-core', version: '2.0.1' },
-    source: { ref: 'refs/tags/2.0.1', commit: HASH },
+    pkg: { name: CURRENT_PACKAGE.name, version: CURRENT_PACKAGE.version },
+    source: { ref: `refs/tags/${CURRENT_PACKAGE.version}`, commit: HASH },
   });
   assert.equal(validateArtifact(evidence, bytes), evidence);
   assert.throws(() => validateArtifact(evidence, Buffer.from('changed')), /size|integrity|shasum/);

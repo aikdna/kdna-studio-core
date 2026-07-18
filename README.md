@@ -64,6 +64,10 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
   (`highest_question`, `worldview`, ordered `value_order`, and bounded
   `judgment_role`) are preserved verbatim from project source through compile
   and runtime payload. They are scoped judgment data, not facts or policy.
+- **Semantic Fidelity** — source references, `core_structure` relations,
+  extended reasoning fields, generic pattern subtypes, and source-authored
+  evolution survive Runtime export without being reduced to a field
+  allow-list. Human Lock fingerprints cover the complete authored field tree.
 - **Test Lab** — A/B comparison (No KDNA vs Best Prompt vs KDNA)
 - **Provenance** — content fingerprinting, build tracking, audit trail
 

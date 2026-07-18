@@ -295,6 +295,7 @@ function buildPayload(compiled) {
       // judgment field intact.
       failure_modes: Array.isArray(patterns.misunderstandings)
         ? patterns.misunderstandings.map((m) => ({
+            ...m,
             id: m.id,
             mode: m.wrong,
             correct: m.correct,
@@ -308,9 +309,20 @@ function buildPayload(compiled) {
       reasoning_chains: Array.isArray(reasoning.reasoning_chains) ? reasoning.reasoning_chains : [],
     },
     evolution: {
-      stages: Array.isArray(evolution.stages) ? evolution.stages : [],
-      evolution_layers: Array.isArray(evolution.evolution_layers) ? evolution.evolution_layers : [],
-      measurement: Array.isArray(evolution.measurement) ? evolution.measurement : [],
+      // Studio compile reports include authoring audit projections (for
+      // example, one synthetic stage per card lock). Those records explain
+      // how the Studio project was reviewed; they are not authored judgment
+      // evolution and must not enter the Runtime payload. Only entries that
+      // compileEvolution marks as source-authored cross this boundary.
+      stages: Array.isArray(evolution.stages)
+        ? evolution.stages.filter((entry) => entry?.source_authored === true)
+        : [],
+      evolution_layers: Array.isArray(evolution.evolution_layers)
+        ? evolution.evolution_layers.filter((entry) => entry?.source_authored === true)
+        : [],
+      measurement: Array.isArray(evolution.measurement)
+        ? evolution.measurement.filter((entry) => entry?.source_authored === true)
+        : [],
       changelog: Array.isArray(evolution.changelog) ? evolution.changelog : [],
       version_notes: Array.isArray(evolution.version_notes) ? evolution.version_notes : [],
     },
@@ -319,6 +331,9 @@ function buildPayload(compiled) {
 
 function buildManifest(project, compiled, payloadBytes, options = {}) {
   const sourceManifest = parseJsonFile(compiled.files, 'kdna.json', {});
+  const importedManifest = project.source_manifest && typeof project.source_manifest === 'object'
+    ? project.source_manifest
+    : {};
   const packageVersion = require('../../package.json').version;
   const access = canonicalAccess(options.access || project.release?.access || sourceManifest.access);
   const domainId = sourceManifest.domain_id || domainIdFromName(project.name);
@@ -342,8 +357,8 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     asset_uid: options.asset_uid || `urn:uuid:${sourceManifest.asset_uid || compiled.identity?.asset_uid}`,
     asset_type: 'domain',
     title: options.title || project.title || project.name,
-    version: semverValue(sourceManifest.version || project.release?.version, '0.1.0'),
-    judgment_version: semverValue(sourceManifest.judgment_version || project.release?.judgment_version || project.release?.version, '0.1.0'),
+    version: semverValue(project.release?.version || importedManifest.version || sourceManifest.version, '0.1.0'),
+    judgment_version: semverValue(project.release?.judgment_version || importedManifest.judgment_version || sourceManifest.judgment_version || project.release?.version, '0.1.0'),
     created_at: createdAt,
     updated_at: updatedAt,
     compatibility: {
@@ -358,11 +373,11 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
       digest: `sha256:${sha256Hex(payloadBytes)}`,
     },
     access,
-    summary: sourceManifest.description || project.release?.description || project.name,
-    language: project.default_language || sourceManifest.default_language || 'en',
-    languages: project.languages || sourceManifest.languages || ['en'],
-    license: project.license || sourceManifest.license || { type: 'CC-BY-4.0' },
-    keywords: sourceManifest.keywords || [],
+    summary: importedManifest.summary || importedManifest.description || project.release?.description || sourceManifest.description || project.name,
+    language: project.default_language || importedManifest.language || importedManifest.default_language || sourceManifest.default_language || 'en',
+    languages: project.languages || importedManifest.languages || sourceManifest.languages || ['en'],
+    license: project.license || importedManifest.license || sourceManifest.license || { type: 'CC-BY-4.0' },
+    keywords: importedManifest.keywords || sourceManifest.keywords || [],
     lineage: canonicalLineage(project.lineage || sourceManifest.lineage),
     load_contract: {
       // Must stay in sync with the spec (specs/load-profiles.md) and with
@@ -453,6 +468,7 @@ function exportRuntimeAsset(project, options = {}) {
       patterns: project.source_patterns || null,
       reasoning: project.source_reasoning || null,
       evolution: project.source_evolution || null,
+      core_structure: project.source_core_structure || null,
     },
   };
   const compiled = options.compiled || compileDomain(project, compileOptions);

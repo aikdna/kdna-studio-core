@@ -166,7 +166,7 @@ function makeMeta(project) {
   };
 }
 
-function compileCore(cards, project) {
+function compileCore(cards, project, sourceCoreStructure = null) {
   const judgmentCore = copyDeclaredJudgmentCore(project.judgment_core);
   const lockedAxioms = cards
     .filter(c => c.type === 'axiom' && c.locked)
@@ -194,8 +194,11 @@ function compileCore(cards, project) {
     // as ontology / stances and surface in the runtime payload.
     frameworks: lockedFrameworks,
     stances: lockedStances,
-    core_structure: [],
+    core_structure: Array.isArray(sourceCoreStructure)
+      ? JSON.parse(JSON.stringify(sourceCoreStructure))
+      : [],
     boundaries: lockedBoundaries.map(c => ({
+      ...JSON.parse(JSON.stringify(c.fields || {})),
       id: c.id,
       scope: c.fields?.scope || '',
       out_of_scope: c.fields?.out_of_scope || '',
@@ -208,6 +211,7 @@ function compileCore(cards, project) {
 
 function compilePatterns(cards, project) {
   const lockedMisunderstandings = cards.filter(c => c.type === 'misunderstanding' && c.locked).map(c => ({
+    ...JSON.parse(JSON.stringify(c.fields || {})),
     id: c.id,
     wrong: c.fields?.wrong || '',
     correct: c.fields?.correct || '',
@@ -217,17 +221,28 @@ function compilePatterns(cards, project) {
     applies_when: stringList(c.fields?.applies_when),
     does_not_apply_when: stringList(c.fields?.does_not_apply_when),
   }));
-  const lockedSelfChecks = cards.filter(c => c.type === 'self_check' && c.locked).map(c => c.fields?.question || '');
+  const lockedSelfChecks = cards.filter(c => c.type === 'self_check' && c.locked).map(c => {
+    const fields = JSON.parse(JSON.stringify(c.fields || {}));
+    const keys = Object.keys(fields);
+    return keys.length === 1 && keys[0] === 'question'
+      ? (fields.question || '')
+      : { ...fields, question: fields.question || '' };
+  });
   const lockedAesthetics = cards.filter(c => c.type === 'aesthetic' && c.locked).map(c => ({ id: c.id, ...c.fields }));
-  const lockedPatterns = cards.filter(c => c.type === 'pattern' && c.locked).map(c => ({
-    type: c.fields?.type || 'pattern',
-    id: c.id,
-    name: c.fields?.name || '',
-    one_sentence: c.fields?.one_sentence || '',
-    what_it_looks_like: c.fields?.what_it_looks_like || '',
-    how_to_fix: c.fields?.how_to_fix || '',
-    failure_risk: c.fields?.failure_risk || '',
-  }));
+  const lockedPatterns = cards.filter(c => c.type === 'pattern' && c.locked).map(c => {
+    const fields = JSON.parse(JSON.stringify(c.fields || {}));
+    delete fields.legacy_subtype;
+    return {
+      ...fields,
+      type: fields.type || 'pattern',
+      id: c.id,
+      name: fields.name || '',
+      one_sentence: fields.one_sentence || '',
+      what_it_looks_like: fields.what_it_looks_like || '',
+      how_to_fix: fields.how_to_fix || '',
+      failure_risk: fields.failure_risk || '',
+    };
+  });
 
   // FIX 1 (2026-06-25 audit, kdna-assets #15 follow-up):
   // Source's `terminology.standard_terms` and `terminology.banned_terms`
@@ -238,10 +253,12 @@ function compilePatterns(cards, project) {
   // cards into the structured terminology, so the source's
   // banned_terms identity is preserved end-to-end.
   const lockedStandardTerms = cards.filter(c => c.type === 'term' && c.locked).map(c => ({
+    ...JSON.parse(JSON.stringify(c.fields || {})),
     term: c.fields?.term || c.id,
     definition: c.fields?.definition || '',
   }));
   const lockedBannedTerms = cards.filter(c => c.type === 'banned_term' && c.locked).map(c => ({
+    ...JSON.parse(JSON.stringify(c.fields || {})),
     term: c.fields?.term || c.id,
     why: c.fields?.why || '',
     replace_with: c.fields?.replace_with || '',
@@ -297,23 +314,29 @@ function compileReasoning(cards, project, sourceReasoning = null) {
   if (lockedReasoningChains.length > 0) {
     return {
       meta: makeMeta(project),
-      reasoning_chains: lockedReasoningChains.map(c => ({
-        id: c.id,
-        axiom: c.fields?.axiom,
-        one_sentence: c.fields?.one_sentence || '',
+      reasoning_chains: lockedReasoningChains.map(c => {
+        const sourceFields = c.fields && typeof c.fields === 'object'
+          ? JSON.parse(JSON.stringify(c.fields))
+          : {};
+        return {
+          ...sourceFields,
+          id: c.id,
+          axiom: c.fields?.axiom,
+          one_sentence: c.fields?.one_sentence || '',
         // Source's KDNA_Reasoning.json typically has 'principle' (the
         // "what the chain says") and 'concrete_action' (the "so what
         // to do"). Map to the build's expected fields. Preserve
         // additional fields as-is so the source's chain structure
         // round-trips through the compile step.
-        so_what: c.fields?.concrete_action
-                || c.fields?.so_what
-                || '',
-        logic: Array.isArray(c.fields?.chain) ? c.fields.chain
-                : (c.fields?.logic || []),
-        principle: c.fields?.principle,
-        concrete_action: c.fields?.concrete_action,
-      })),
+          so_what: c.fields?.concrete_action
+                  || c.fields?.so_what
+                  || '',
+          logic: Array.isArray(c.fields?.chain) ? c.fields.chain
+                  : (c.fields?.logic || []),
+          principle: c.fields?.principle,
+          concrete_action: c.fields?.concrete_action,
+        };
+      }),
     };
   }
 
@@ -327,6 +350,7 @@ function compileReasoning(cards, project, sourceReasoning = null) {
     return {
       meta: makeMeta(project),
       reasoning_chains: sourceReasoning.reasoning_chains.map((c) => ({
+        ...JSON.parse(JSON.stringify(c)),
         id: c.id || `chain_source_${Math.random().toString(36).slice(2, 8)}`,
         axiom: c.axiom,
         one_sentence: c.one_sentence || c.conclusion || '',
@@ -702,7 +726,7 @@ function compileDomain(project, options = {}) {
   // compile-only view so existing field shaping stays stable while Human Lock
   // remains optional provenance on the original project cards.
   const compileInputCards = compiledCards.map(c => ({ ...c, locked: true }));
-  const core = compileCore(compileInputCards, project);
+  const core = compileCore(compileInputCards, project, options.source?.core_structure || null);
   const patterns = compilePatterns(compileInputCards, project);
   const scenarios = compileScenarios(compileInputCards, project);
   const cases = compileCases(compileInputCards, project);

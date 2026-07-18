@@ -172,10 +172,41 @@ test('cardJudgmentFingerprint: different content produces different hash', () =>
   assert.notEqual(cardJudgmentFingerprint(card1), cardJudgmentFingerprint(card2));
 });
 
-test('cardJudgmentFingerprint: ignores non-judgment fields', () => {
-  const card1 = createCard('axiom', { one_sentence: 'A', notes: 'extra info', metadata: 'ignored' });
-  const card2 = createCard('axiom', { one_sentence: 'A', notes: 'different', metadata: 'still ignored' });
-  assert.equal(cardJudgmentFingerprint(card1), cardJudgmentFingerprint(card2));
+test('cardJudgmentFingerprint: covers every authored field, including nested protocol extensions', () => {
+  const card1 = createCard('axiom', {
+    one_sentence: 'A',
+    source_refs: ['source:chapter-1'],
+    protocol_extension: { relation: { from: 'ax_01', to: 'ax_02' } },
+  });
+  const changedReference = createCard('axiom', {
+    one_sentence: 'A',
+    source_refs: ['source:chapter-2'],
+    protocol_extension: { relation: { from: 'ax_01', to: 'ax_02' } },
+  });
+  const changedRelation = createCard('axiom', {
+    one_sentence: 'A',
+    source_refs: ['source:chapter-1'],
+    protocol_extension: { relation: { from: 'ax_02', to: 'ax_01' } },
+  });
+  assert.notEqual(cardJudgmentFingerprint(card1), cardJudgmentFingerprint(changedReference));
+  assert.notEqual(cardJudgmentFingerprint(card1), cardJudgmentFingerprint(changedRelation));
+});
+
+test('cardJudgmentFingerprint: canonicalizes nested object keys without changing array order', () => {
+  const card1 = createCard('reasoning', {
+    tradeoffs: { reversibility: 'high', cost: 'low' },
+    evidence_required: ['source:a', 'source:b'],
+  });
+  const sameContent = createCard('reasoning', {
+    evidence_required: ['source:a', 'source:b'],
+    tradeoffs: { cost: 'low', reversibility: 'high' },
+  });
+  const changedOrder = createCard('reasoning', {
+    tradeoffs: { cost: 'low', reversibility: 'high' },
+    evidence_required: ['source:b', 'source:a'],
+  });
+  assert.equal(cardJudgmentFingerprint(card1), cardJudgmentFingerprint(sameContent));
+  assert.notEqual(cardJudgmentFingerprint(card1), cardJudgmentFingerprint(changedOrder));
 });
 
 test('checkHumanLockGate: detects judgment content changed after lock', () => {
