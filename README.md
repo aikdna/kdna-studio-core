@@ -1,3 +1,9 @@
+> **Development snapshot — release reset in progress**
+>
+> This repository is not currently a stable, beta, or production-ready
+> release. Published packages and documentation may describe an earlier
+> development snapshot. A new Development Preview has not been released.
+
 # KDNA Studio Core
 
 **KDNA Studio Core is the JS authoring kernel for `.kdna` files.** It turns scattered notes, documents, works, and feedback into loadable judgment assets by distilling stable judgment patterns into a declared domain and loading scope.
