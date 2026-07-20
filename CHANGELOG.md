@@ -18,6 +18,17 @@
   and exercises the maintained package main through project creation, card
   review, validation, compile, and canonical Runtime export.
 
+## 2.0.3 (2026-07-20)
+
+### Fixed
+
+- Require an explicit entitlement contract for licensed Runtime export instead
+  of silently turning legacy `protected` input into a fabricated local receipt.
+  Password export continues to declare the password entitlement explicitly.
+
+This is an unpublished Development Preview candidate. No existing registry
+version or package bytes are changed.
+
 ## 2.0.2 (2026-07-18)
 
 ### Fixed

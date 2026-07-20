@@ -1,6 +1,6 @@
 {
   "name": "@aikdna/kdna-studio-core",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Official KDNA Studio Core SDK for authoring, reviewing, compiling, and exporting .kdna judgment assets through the KDNA toolchain.",
   "type": "commonjs",
   "main": "src/index.js",
@@ -30,7 +30,7 @@
     "validate"
   ],
   "dependencies": {
-    "@aikdna/kdna-core": "0.20.0",
+    "@aikdna/kdna-core": "0.21.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "cbor-x": "^1.6.4"

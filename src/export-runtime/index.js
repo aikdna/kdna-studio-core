@@ -437,7 +437,14 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
   }
 
   if (access === 'licensed') {
-    manifest.entitlement = options.entitlement || { profile: 'local_receipt', offline: true, revocable: true };
+    const entitlement = options.entitlement || importedManifest.entitlement || sourceManifest.entitlement;
+    if (!entitlement) {
+      throw new Error(
+        'Licensed export requires an explicit entitlement contract. ' +
+        'Legacy protected access is ambiguous; provide a password or an explicit entitlement.'
+      );
+    }
+    manifest.entitlement = entitlement;
   }
   if (options.encryptionMeta) {
     manifest.encryption = options.encryptionMeta;
