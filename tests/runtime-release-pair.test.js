@@ -50,7 +50,7 @@ test('release dependency graph binds the exact Core candidate and has no Runtime
     [[
       '@aikdna/kdna-core',
       '0.21.0',
-      '5f7ccad07758b7766237590e5b9ba47301036f6b',
+      'f13390916c0b6a71aed8a62c458b5c440985ad98',
     ]],
   );
   assert.throws(

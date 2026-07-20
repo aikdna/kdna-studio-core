@@ -34,8 +34,8 @@
 - Stop labeling a newly created generic card as AI-authored when its source has
   not been declared.
 - Bind the candidate to exact Core commit
-  `5f7ccad07758b7766237590e5b9ba47301036f6b`, including explicit compact
-  projection omission disclosure.
+  `f13390916c0b6a71aed8a62c458b5c440985ad98`, including explicit compact
+  projection omission disclosure and bundle-safe Core Schema imports.
 
 This is an unpublished Development Preview candidate. No existing registry
 version or package bytes are changed.
