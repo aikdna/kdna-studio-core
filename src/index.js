@@ -18,6 +18,7 @@
  */
 
 const cards = require('./cards');
+const authoring = require('./authoring');
 const compile = require('./compile');
 const creatorIdentity = require('./creator-identity');
 const evidence = require('./evidence');
@@ -41,6 +42,7 @@ const protocolContract = require('./protocol-contract');
 
 module.exports = {
   // Stable
+  authoring,
   project,
   cards,
   compile,

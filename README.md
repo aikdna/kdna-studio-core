@@ -27,6 +27,14 @@ Runtime export must validate with `@aikdna/kdna-core` and must plan through the
 LoadPlan contract in `aikdna/kdna`. Studio products must not create app-private
 `.kdna` shapes that KDNA Core or CLI cannot inspect, validate, or plan-load.
 
+The additive `authoring` API provides the minimum explicit path
+`source -> review -> confirm -> export` without removing the existing project,
+card, evidence, compile, distillation, provenance, or Runtime export primitives.
+Every judgment on this path declares whether its source is human,
+organizational, AI, Agent, or mixed. If synthesized content claims to represent
+a named person or organization, export fails until the matching subject is
+recorded as confirmed.
+
 Current exports keep responsibility names separate from compatibility
 coordinates: the container uses `format_version: 0.1.0`, the payload declares
 `profile: kdna.payload.judgment` with `profile_version: 0.1.0`, checksums use
@@ -205,6 +213,32 @@ const gate = projectApi.checkHumanLockGate(project); // optional review report
 const compiled = compile.compileDomain(project, { strictAuthority: false });
 const runtimeAsset = exportRuntime.exportRuntimeAsset(project, { compiled });
 console.log(Object.keys(runtimeAsset.files), gate.lockedJudgmentCards);
+```
+
+For a smaller source-integrity-first flow, use the additive facade:
+
+```js
+const { authoring } = require('@aikdna/kdna-studio-core');
+
+const project = authoring.createProject('@example/writing-judgment');
+const card = authoring.addSourceJudgment(project, {
+  sourceType: 'human',
+  sourceLabel: 'Author interview, 2026-07-20',
+  statement: 'Diagnose structural problems before editing individual sentences.',
+  rationale: 'Sentence polishing cannot repair a missing argument or an incoherent sequence.',
+  appliesWhen: ['Reviewing a long-form article'],
+  doesNotApplyWhen: ['The request is limited to spelling'],
+  failureRisk: 'The review may exceed the requested scope.'
+});
+authoring.reviewJudgment(project, card.id, {
+  by: 'reviewer-01',
+  statement: 'I checked the source, judgment, scope, boundary, and risk.'
+});
+authoring.confirmJudgment(project, card.id, {
+  by: 'reviewer-01',
+  statement: 'I confirm this judgment for the declared scope.'
+});
+const runtimeAsset = authoring.exportRuntimeAsset(project);
 ```
 
 ## Runtime Export Contract

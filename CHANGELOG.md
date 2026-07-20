@@ -18,6 +18,27 @@
   and exercises the maintained package main through project creation, card
   review, validation, compile, and canonical Runtime export.
 
+## 2.0.4 (2026-07-20)
+
+### Added
+
+- Add an explicit `source -> review -> confirm -> export` facade while
+  preserving every existing Studio public primitive and the complete project
+  Schema.
+- Record source type and source label for every facade-authored judgment, and
+  require matching subject confirmation before synthesized content can claim
+  to represent a person or organization.
+
+### Fixed
+
+- Stop labeling a newly created generic card as AI-authored when its source has
+  not been declared.
+- Bind the candidate to exact Core commit
+  `644269e8971ed14e94e322b5d3bfc85e1ed69bb6`.
+
+This is an unpublished Development Preview candidate. No existing registry
+version or package bytes are changed.
+
 ## 2.0.3 (2026-07-20)
 
 ### Fixed

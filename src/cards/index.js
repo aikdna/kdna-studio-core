@@ -36,7 +36,7 @@ function createCard(type, fields = {}, id = null) {
     human_lock: null,
     feynman_restatement: null,
     audit_log: [
-      { at: new Date().toISOString(), event: 'created', by: 'ai' }
+      { at: new Date().toISOString(), event: 'created', by: 'unspecified-source' }
     ],
   };
   return card;
