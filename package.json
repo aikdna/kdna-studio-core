@@ -1,12 +1,29 @@
 {
   "name": "@aikdna/kdna-studio-core",
-  "version": "2.0.2",
+  "version": "3.0.0",
   "description": "Official KDNA Studio Core SDK for authoring, reviewing, compiling, and exporting .kdna judgment assets through the KDNA toolchain.",
   "type": "commonjs",
   "main": "src/index.js",
   "files": [
-    "src/",
-    "schemas/",
+    "src/index.js",
+    "src/authoring/",
+    "src/cards/index.js",
+    "src/compile/",
+    "src/creator-identity.js",
+    "src/distillation/",
+    "src/evidence/",
+    "src/export-runtime/",
+    "src/i18n/",
+    "src/judgment-core.js",
+    "src/judgment-fields.js",
+    "src/project/",
+    "src/project-schema.js",
+    "src/protocol-contract.js",
+    "src/provenance/",
+    "schemas/human-lock-report.schema.json",
+    "schemas/studio-build-receipt.schema.json",
+    "schemas/studio-build-report.schema.json",
+    "schemas/studio.project.schema.json",
     "LICENSE",
     "NOTICE",
     "README.md"
@@ -30,7 +47,7 @@
     "validate"
   ],
   "dependencies": {
-    "@aikdna/kdna-core": "0.20.0",
+    "@aikdna/kdna-core": "0.21.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "cbor-x": "^1.6.4"

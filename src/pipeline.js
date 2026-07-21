@@ -1,10 +1,9 @@
 /**
- * createStudioPipeline(project, options) — Official convenience API.
+ * createStudioPipeline(project, options) — retired 2.x compatibility surface.
  *
- * Provides the recommended Studio workflow as a single callable pipeline.
- * Third-party apps should use this instead of manually calling individual modules.
- *
- * Stable API (semver guaranteed).
+ * This was a semver-stable root export in the published 2.x line. It remains
+ * in the repository for historical regression coverage, but is not exported
+ * or packaged by 3.x. New integrations use the admitted authoring primitives.
  */
 
 const { validateProject } = require('./project');

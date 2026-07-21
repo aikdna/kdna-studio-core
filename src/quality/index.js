@@ -123,7 +123,7 @@ function computeReadiness(project) {
   const withKdnaBetter = ratedTests.filter(t => t.result === 'with_kdna_better').length;
   const withoutKdnaBetter = ratedTests.filter(t => t.result === 'without_kdna_better').length;
   if (ratedTests.length > 0 && withoutKdnaBetter > 0) {
-    warnings.push(`${withoutKdnaBetter} test(s) favored response WITHOUT KDNA — domain may not improve judgment`);
+    warnings.push(`${withoutKdnaBetter} test(s) were preferred by the named evaluator without KDNA; this is scoped assessment evidence, not intrinsic asset quality`);
   }
   if (ratedTests.length > 0 && withKdnaBetter < 3 && ratedTests.length >= 5) {
     warnings.push(`Only ${withKdnaBetter} tests favor KDNA — recommend ≥3 for confidence`);

@@ -16,8 +16,6 @@ const ROOT = path.resolve(__dirname, '..');
 const REPORT_SCHEMAS = Object.freeze({
   'reports/build-report.json': 'schemas/studio-build-report.schema.json',
   'reports/human-lock-report.json': 'schemas/human-lock-report.schema.json',
-  'reports/quality-gate-report.json': 'schemas/quality-gate-report.schema.json',
-  'reports/eval-report.json': 'schemas/evaluation-report.schema.json',
   'build-receipt.json': 'schemas/studio-build-receipt.schema.json',
 });
 
@@ -66,6 +64,8 @@ test('Studio compile reports validate against responsibility-specific schemas', 
   assert.equal(receipt.encryption_profile, 'kdna.encryption.licensed-entry');
   assert.equal(receipt.encryption_profile_version, '0.1.0');
   const manifest = JSON.parse(compiled.files['kdna.json']);
+  assert.equal('reports/quality-gate-report.json' in compiled.files, false);
+  assert.equal('reports/eval-report.json' in compiled.files, false);
   assert.deepEqual(manifest.runtime, {
     min_runtime_version: '0.3.0',
     load_contract: 'kdna.runtime-capsule',

@@ -4,66 +4,34 @@
  * This is the canonical open-source implementation of the Studio authoring
  * workflow. Every exported function is pure logic — no UI dependencies.
  *
- * Modules:
- *   project/      Studio Project CRUD, validation, lifecycle
- *   evidence/     Evidence import, span extraction, card linkage
- *   cards/        Card state machine, human lock, Feynman restatement
- *   quality/      Quality gates, readiness scoring
- *   compile/      Locked cards → KDNA JSON files
- *   testlab/      Test case model, comparison runner
- *   provenance/   Build metadata, content fingerprinting
- *   packaging/    runtime CLI adapters for dev diagnostics and verification
- *   versioning/   Judgment diff, changelog generation
+ * The package root exposes the supported source → review → confirm → export
+ * path. Experimental workshops remain in the repository for research and
+ * full regression coverage, but are not part of the public package contract.
  *   cli-bridge/   Adapter to kdna-cli subprocess calls
  */
 
 const cards = require('./cards');
+const authoring = require('./authoring');
 const compile = require('./compile');
 const creatorIdentity = require('./creator-identity');
 const evidence = require('./evidence');
 const exportRuntime = require('./export-runtime');
-const governance = require('./governance');
 const i18n = require('./i18n');
-const packaging = require('./packaging');
-const pipeline = require('./pipeline');
 const project = require('./project');
 const provenance = require('./provenance');
-const quality = require('./quality');
-const testlab = require('./testlab');
-const versioning = require('./versioning');
 const distillation = require('./distillation');
-const feynman = require('./cards/feynman');
-const contradiction = require('./quality/contradiction');
-const validateCards = require('./quality/validate-cards');
-const delta = require('./testlab/delta');
-const granularity = require('./granularity');
 const protocolContract = require('./protocol-contract');
 
 module.exports = {
-  // Stable
+  authoring,
   project,
   cards,
   compile,
-  quality,
   provenance,
-  pipeline,
-  governance,
   exportRuntime,
   i18n,
   creator: creatorIdentity,
   distillation,
-
-  // Experimental
   evidence,
-  testlab,
-  delta,
-  feynman,
-  contradiction,
-  validateCards,
-  versioning,
-  granularity,
   protocolContract,
-
-  // Internal
-  packaging,
 };

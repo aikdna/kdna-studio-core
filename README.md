@@ -27,6 +27,14 @@ Runtime export must validate with `@aikdna/kdna-core` and must plan through the
 LoadPlan contract in `aikdna/kdna`. Studio products must not create app-private
 `.kdna` shapes that KDNA Core or CLI cannot inspect, validate, or plan-load.
 
+The 3.x `authoring` API provides the minimum explicit path
+`source -> review -> confirm -> export` while retaining the admitted project,
+card, evidence, compile, distillation, provenance, and Runtime export primitives.
+Every judgment on this path declares whether its source is human,
+organizational, AI, Agent, or mixed. If synthesized content claims to represent
+a named person or organization, export fails until the matching subject is
+recorded as confirmed.
+
 Current exports keep responsibility names separate from compatibility
 coordinates: the container uses `format_version: 0.1.0`, the payload declares
 `profile: kdna.payload.judgment` with `profile_version: 0.1.0`, checksums use
@@ -54,9 +62,7 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
 - **Authoring Provenance** — every compiled manifest records Studio-compatible
   compiler metadata, project digest, review counts, and confirmation status.
 - **Asset Build Reports** — every compile emits build, provenance, review,
-  readiness, evaluation, and receipt artifacts for audit.
-- **Feynman Restatement** — verify understanding, not just agreement
-- **Readiness Gates** — readiness check: draft → structurally_ready → judgment_ready → publish_ready
+  and receipt artifacts for audit.
 - **Compiler** — complete, non-deprecated cards → authoring compile output; optional Human Lock provenance is preserved
 - **Runtime Export** — compiled judgment → canonical `mimetype` +
   `kdna.json` + `payload.kdnab` + `checksums.json`
@@ -68,7 +74,6 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
   extended reasoning fields, generic pattern subtypes, and source-authored
   evolution survive Runtime export without being reduced to a field
   allow-list. Human Lock fingerprints cover the complete authored field tree.
-- **Test Lab** — A/B comparison (No KDNA vs Best Prompt vs KDNA)
 - **Provenance** — content fingerprinting, build tracking, audit trail
 
 ## What it is not
@@ -81,7 +86,7 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
 ## Authoring Flow
 
 ```
-Evidence Room → Judgment Cards → Review/Provenance → Quality Gate → Compile → Validate → Export
+Evidence Room → Judgment Cards → Review/Provenance → Compile → Validate → Export
 ```
 
 For distillation-first authoring, the flow starts with an explicit target:
@@ -93,15 +98,33 @@ Declare Domain + Scope → Import Evidence → Classify Relevance → Distill Ca
 
 A single `.kdna` asset should stay scoped to one domain and loading condition.
 If a task needs several judgment domains, create multiple domain assets and
-compose them through an explicit consumption policy rather than making one
-broad file. Route cards and consumer indexes are separate, disabled-by-default
-sidecars; they do not belong in the runtime asset export.
+use an explicit, separately admitted Host contract rather than making one broad
+file. Route cards and consumer indexes are historical advanced sidecars under
+recertification; they do not belong in the runtime asset export.
+
+## Public package boundary
+
+The npm package exposes the supported authoring path and its project, card,
+evidence, compile, provenance, distillation, and Runtime export primitives.
+Test Lab, Feynman, Quality, and Governance workshop implementations remain in
+the repository for research and regression coverage. They are not exported
+from the package root and are not included in the release tarball. Their code
+retention is not a compatibility promise.
+
+This boundary begins at `3.0.0` because it removes root exports and deep-import
+paths that existed in the published 2.x package. Consumers of the published
+`2.0.2` contract must not be silently moved to 3.x. See the changelog for the
+complete breaking-export and packaged-path inventory.
 
 ## Install
 
 ```bash
-npm install @aikdna/kdna-studio-core
+npm install @aikdna/kdna-studio-core@2.0.2
 ```
+
+That command installs the published incumbent. The `3.0.0` contract described
+above is an unreleased source candidate and must not be inferred from the npm
+`latest` tag.
 
 Migrating from `@aikdna/studio-core@1.2.1` is a source migration, not a
 drop-in package rename. Follow the
@@ -113,7 +136,7 @@ for the verified registry boundary and required code changes.
 The command-line authoring entry is a separate package:
 
 ```bash
-npm install -g @aikdna/kdna-studio-cli
+npm install -g @aikdna/kdna-studio-cli@0.10.2
 kdna-studio create my_domain --name @yourscope/my_domain
 kdna-studio import my_domain ./notes.md
 kdna-studio target declare my_domain \
@@ -205,6 +228,32 @@ const gate = projectApi.checkHumanLockGate(project); // optional review report
 const compiled = compile.compileDomain(project, { strictAuthority: false });
 const runtimeAsset = exportRuntime.exportRuntimeAsset(project, { compiled });
 console.log(Object.keys(runtimeAsset.files), gate.lockedJudgmentCards);
+```
+
+For a smaller source-integrity-first flow, use the additive facade:
+
+```js
+const { authoring } = require('@aikdna/kdna-studio-core');
+
+const project = authoring.createProject('@example/writing-judgment');
+const card = authoring.addSourceJudgment(project, {
+  sourceType: 'human',
+  sourceLabel: 'Author interview, 2026-07-20',
+  statement: 'Diagnose structural problems before editing individual sentences.',
+  rationale: 'Sentence polishing cannot repair a missing argument or an incoherent sequence.',
+  appliesWhen: ['Reviewing a long-form article'],
+  doesNotApplyWhen: ['The request is limited to spelling'],
+  failureRisk: 'The review may exceed the requested scope.'
+});
+authoring.reviewJudgment(project, card.id, {
+  by: 'reviewer-01',
+  statement: 'I checked the source, judgment, scope, boundary, and risk.'
+});
+authoring.confirmJudgment(project, card.id, {
+  by: 'reviewer-01',
+  statement: 'I confirm this judgment for the declared scope.'
+});
+const runtimeAsset = authoring.exportRuntimeAsset(project);
 ```
 
 ## Runtime Export Contract

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Breaking
+
+- Set the corrective package coordinate to `3.0.0`. The published `2.0.2`
+  package exposed `pipeline` as a semver-stable convenience API, so removing
+  it cannot be represented by a `2.0.4` patch candidate.
+- Remove these 2.x root exports from the 3.x package contract: `quality`,
+  `pipeline`, `governance`, `testlab`, `delta`, `feynman`, `contradiction`,
+  `validateCards`, `versioning`, `granularity`, and `packaging`.
+- Remove these 2.x deep-import paths from the 3.x npm tarball:
+  `src/cards/feynman.js`, `src/cli-bridge/`, `src/granularity.js`,
+  `src/governance/`, `src/packaging/`, `src/pipeline.js`,
+  `src/product-runtime/`, `src/quality/`, `src/testlab/`, and
+  `src/versioning/`. Their repository sources may remain for regression and
+  historical reference, but are not 3.x compatibility surfaces.
+
+### Changed
+
+- Limit the public package root and release tarball to the supported
+  `source -> review -> confirm -> export` authoring path. Test Lab, Feynman,
+  Quality, and Governance workshop sources remain in the repository but are
+  not part of the package compatibility surface.
+- Remove workshop-derived quality/evaluation reports and governance cards from
+  the default compile output. Build, provenance, review, and receipt evidence
+  remain available.
+
 ### Documentation
 
 - Document the verified source-migration boundary from the historical
@@ -11,12 +36,50 @@
 - Correct the Quick Start card-review example so it keeps immutable state
   transition results before adding the card to a project.
 
+The earlier unpublished `2.0.4` candidate coordinate is superseded by the
+`3.0.0` breaking candidate. No `2.0.4` package was published and no registry
+bytes are changed by this source correction.
+
 ### Verification
 
 - Add a public-registry cold-install smoke for both exact package coordinates.
   The smoke records the historical package's missing-schema main-entry failure
   and exercises the maintained package main through project creation, card
   review, validation, compile, and canonical Runtime export.
+
+## 2.0.4 (2026-07-20)
+
+### Added
+
+- Add an explicit `source -> review -> confirm -> export` facade while
+  preserving every existing Studio public primitive and the complete project
+  Schema.
+- Record source type and source label for every facade-authored judgment, and
+  require matching subject confirmation before synthesized content can claim
+  to represent a person or organization.
+
+### Fixed
+
+- Stop labeling a newly created generic card as AI-authored when its source has
+  not been declared.
+- Bind the candidate to exact Core commit
+  `3676ab0e4b54b83c4193eef3519b19cc6d0cd245`, which is reachable on current
+  kdna history with an installable lockfile; the package tree differs from the
+  previous pin only in README narrative.
+
+This is an unpublished Development Preview candidate. No existing registry
+version or package bytes are changed.
+
+## 2.0.3 (2026-07-20)
+
+### Fixed
+
+- Require an explicit entitlement contract for licensed Runtime export instead
+  of silently turning legacy `protected` input into a fabricated local receipt.
+  Password export continues to declare the password entitlement explicitly.
+
+This is an unpublished Development Preview candidate. No existing registry
+version or package bytes are changed.
 
 ## 2.0.2 (2026-07-18)
 

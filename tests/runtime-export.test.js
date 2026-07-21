@@ -331,33 +331,31 @@ test('runtime export validates with KDNA Core and plans ready when planLoad is a
   }
 });
 
-test('runtime export maps protected legacy access to licensed receipt profile', () => {
+test('runtime export rejects ambiguous protected access without authorization material', () => {
   const project = createRuntimeProject('protected');
+  assert.throws(
+    () => exportRuntimeAsset(project, {
+      asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000323',
+      timestamp: '2026-06-19T00:00:00.000Z',
+    }),
+    /explicit entitlement|protected access is ambiguous|provide a password/i,
+  );
+});
+
+test('runtime export preserves an explicit licensed entitlement contract', () => {
+  const project = createRuntimeProject('licensed');
   const exported = exportRuntimeAsset(project, {
-    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000323',
+    asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000324',
     timestamp: '2026-06-19T00:00:00.000Z',
+    entitlement: { profile: 'account', offline: false, revocable: true },
   });
 
   assert.equal(exported.manifest.access, 'licensed');
-  assert.equal(exported.manifest.entitlement.profile, 'local_receipt');
-
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-runtime-'));
-  try {
-    writeFiles(dir, exported.files);
-    const validation = kdnaCore.validate(dir);
-    assert.equal(validation.overall_valid, true, validation.problems.join('\n'));
-
-    const assetPath = `${dir}.kdna`;
-    kdnaCore.pack(dir, assetPath);
-    const plan = kdnaCore.planLoad(assetPath);
-    assert.equal(plan.access, 'licensed');
-    assert.equal(plan.entitlement_profile, 'local_receipt');
-    assert.equal(plan.state, 'needs_license');
-    assert.equal(plan.required_action, 'install_receipt');
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-    fs.rmSync(`${dir}.kdna`, { force: true });
-  }
+  assert.deepEqual(exported.manifest.entitlement, {
+    profile: 'account',
+    offline: false,
+    revocable: true,
+  });
 });
 
 test('password export uses a CBOR envelope and loads only with the password', () => {

@@ -488,7 +488,6 @@ function compileManifest(project, files, identity = null) {
     c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== 'deprecated',
   );
   const lockedCards = compiledCards.filter(hasHumanLock);
-  const tests = project.tests || [];
   const version = require('../../package.json').version;
   const assetIdentity = identity || buildAssetIdentity(project, files);
   const projectDigest = crypto
@@ -511,7 +510,6 @@ function compileManifest(project, files, identity = null) {
     judgment_version: assetIdentity.judgment_version,
     content_digest: assetIdentity.content_digest,
     status: (project.release && project.release.status) || 'experimental',
-    quality_badge: tests.filter(t => t.result === 'with_kdna_better').length >= 10 ? 'tested' : 'untested',
     access: (project.release && project.release.access) || 'open',
     languages: project.languages || ['en'],
     default_language: project.default_language || 'en',
@@ -585,9 +583,6 @@ function buildReports(project, files, identity, provenance, stats) {
   // domain that contained only those types compiled to an empty judgment
   // payload even when every card was Human Locked.
   const judgmentCards = cards.filter(c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type));
-  const tests = project.tests || [];
-  const ratedTests = tests.filter(t => t.result);
-  const qualityBadge = tests.filter(t => t.result === 'with_kdna_better').length >= 10 ? 'tested' : 'untested';
   const packageVersion = require('../../package.json').version;
 
   const buildReport = {
@@ -629,41 +624,6 @@ function buildReports(project, files, identity, provenance, stats) {
     })),
   };
 
-  const qualityGateReport = {
-    ...REPORT_CONTRACTS.qualityGate,
-    build_id: identity.build_id,
-    quality_badge: qualityBadge,
-    eval_count: tests.length,
-    rated_eval_count: ratedTests.length,
-    gates: {
-      untested: {
-        passed: true,
-        evidence: ['schema-compatible compile output', 'provenance report', 'human-lock report'],
-      },
-      tested: {
-        passed: qualityBadge === 'tested',
-        required: '>=10 eval cases where KDNA improves judgment with manual verification',
-      },
-      validated: {
-        passed: false,
-        required: 'reproducible scoring, raw outputs, and published eval evidence',
-      },
-    },
-  };
-
-  const evalReport = {
-    ...REPORT_CONTRACTS.evaluation,
-    build_id: identity.build_id,
-    total: tests.length,
-    rated: ratedTests.length,
-    cases: tests.map(t => ({
-      id: t.id || null,
-      title: t.title || t.name || null,
-      result: t.result || null,
-      linked_cards: t.linked_cards || [],
-    })),
-  };
-
   const buildReceipt = {
     ...REPORT_CONTRACTS.receipt,
     asset_uid: identity.asset_uid,
@@ -689,8 +649,6 @@ function buildReports(project, files, identity, provenance, stats) {
     'reports/build-report.json': JSON.stringify(buildReport, null, 2),
     'reports/provenance-report.json': JSON.stringify(provenance, null, 2),
     'reports/human-lock-report.json': JSON.stringify(humanLockReport, null, 2),
-    'reports/quality-gate-report.json': JSON.stringify(qualityGateReport, null, 2),
-    'reports/eval-report.json': JSON.stringify(evalReport, null, 2),
     'build-receipt.json': JSON.stringify(buildReceipt, null, 2),
   };
 }
@@ -786,13 +744,8 @@ function compileDomain(project, options = {}) {
   if (evolution) payload.judgment.evolution = evolution;
   files['payload.kdnab'] = cbor.encode(payload);
 
-  // ── KDNA Card (governance metadata) ─────────────────────────────
-  // Must be added BEFORE digest computation so it is included in content_digest.
   const identity = buildAssetIdentity(project, files);
   const provenance = require('../provenance').buildProvenance(project, files, identity);
-  const { generateKdnaCard } = require('../governance');
-  const kdnaCard = generateKdnaCard(project, {}, provenance, gates);
-  files['KDNA_CARD.json'] = JSON.stringify(kdnaCard, null, 2);
 
   const excludedCount = cards.length - compiledCards.length;
   const stats = {
@@ -835,8 +788,6 @@ function generateReadme(project, options = {}) {
   const misunderstandings = judgmentCards.filter(c => c.type === 'misunderstanding');
   const selfChecks = judgmentCards.filter(c => c.type === 'self_check');
   const boundaries = judgmentCards.filter(c => c.type === 'boundary');
-  const tests = project.tests || [];
-
   const lines = [];
   lines.push(`# ${project.name}`);
   lines.push('');
@@ -855,7 +806,6 @@ function generateReadme(project, options = {}) {
 
   lines.push('## How it is verified');
   lines.push('');
-  lines.push(`- ${tests.length} eval cases (${tests.filter(t => t.result).length} rated)`);
   lines.push(`- ${axioms.length} authored axioms with applies_when / does_not_apply_when / failure_risk`);
   lines.push(`- ${selfChecks.length} self-check questions`);
   lines.push(`- ${misunderstandings.length} misunderstanding patterns`);
@@ -886,13 +836,6 @@ function generateReadme(project, options = {}) {
       lines.push(`- WRONG: ${ms.fields?.wrong}`);
       lines.push(`  CORRECT: ${ms.fields?.correct}`);
     });
-    lines.push('');
-  }
-
-  if (selfChecks.length > 0) {
-    lines.push('## Eval Score'); lines.push('');
-    lines.push(`- quality_badge: ${tests.filter(t => t.result === 'with_kdna_better').length >= 3 ? 'tested' : 'untested'}`);
-    lines.push(`- eval cases: ${tests.length}`);
     lines.push('');
   }
 

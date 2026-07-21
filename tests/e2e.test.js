@@ -15,7 +15,8 @@ const path = require('path');
 const os = require('os');
 
 const { createProject } = require('../src/project');
-const { createCard, lockCard, transitionCard, createFeynmanRestatement, attachRestatementToLock } = require('../src/cards');
+const { createCard, lockCard, transitionCard } = require('../src/cards');
+const { createFeynmanRestatement, attachRestatementToLock } = require('../src/cards/feynman');
 const { compileDomain } = require('../src/compile');
 const { exportRuntimeAsset } = require('../src/export-runtime');
 const { buildProvenance } = require('../src/provenance');
