@@ -2,7 +2,8 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createProject } = require('../src/project');
-const { createCard, lockCard, transitionCard, createFeynmanRestatement, attachRestatementToLock } = require('../src/cards');
+const { createCard, lockCard, transitionCard } = require('../src/cards');
+const { createFeynmanRestatement, attachRestatementToLock } = require('../src/cards/feynman');
 const { computeReadiness } = require('../src/quality');
 const { detectContradictions } = require('../src/quality/contradiction');
 const { validateCard, validateAllCards } = require('../src/quality/validate-cards');
@@ -451,7 +452,8 @@ describe('README Generation', () => {
     assert.ok(readme.includes('## How it is verified'));
     assert.ok(readme.includes('## When it does NOT apply'));
     assert.ok(readme.includes('15 years'));
-    assert.ok(readme.includes('quality_badge: tested'));
+    assert.ok(readme.includes('authored axioms with applies_when / does_not_apply_when / failure_risk'));
+    assert.equal(readme.includes('quality_badge'), false);
   });
 
   test('unreviewed cards are documented without fabricated Human Lock provenance', () => {

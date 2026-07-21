@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Changed
+
+- Limit the public package root and release tarball to the supported
+  `source -> review -> confirm -> export` authoring path. Test Lab, Feynman,
+  Quality, and Governance workshop sources remain in the repository but are
+  not part of the package compatibility surface.
+- Remove workshop-derived quality/evaluation reports and governance cards from
+  the default compile output. Build, provenance, review, and receipt evidence
+  remain available.
+
 ### Documentation
 
 - Document the verified source-migration boundary from the historical

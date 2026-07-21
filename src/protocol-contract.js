@@ -17,14 +17,6 @@ const REPORT_CONTRACTS = Object.freeze({
     type: 'kdna.studio.human-lock-report',
     schema_version: '0.1.0',
   }),
-  qualityGate: Object.freeze({
-    type: 'kdna.studio.quality-gate-report',
-    schema_version: '0.1.0',
-  }),
-  evaluation: Object.freeze({
-    type: 'kdna.studio.evaluation-report',
-    schema_version: '0.1.0',
-  }),
   receipt: Object.freeze({
     type: 'kdna.studio.build-receipt',
     schema_version: '0.1.0',

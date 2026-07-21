@@ -20,19 +20,28 @@ function addJudgment(project, overrides = {}) {
   });
 }
 
-test('the admitted authoring path is additive and preserves existing Studio primitives', () => {
+test('the public package root exposes the admitted authoring primitives', () => {
   for (const name of [
     'project',
     'cards',
     'compile',
     'evidence',
-    'quality',
     'distillation',
     'exportRuntime',
     'protocolContract',
     'authoring',
   ]) {
     assert.ok(studio[name], `missing Studio public primitive: ${name}`);
+  }
+  for (const name of [
+    'quality',
+    'governance',
+    'testlab',
+    'feynman',
+    'pipeline',
+    'packaging',
+  ]) {
+    assert.equal(studio[name], undefined, `experimental workshop leaked from package root: ${name}`);
   }
 });
 

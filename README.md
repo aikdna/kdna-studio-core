@@ -62,9 +62,7 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
 - **Authoring Provenance** — every compiled manifest records Studio-compatible
   compiler metadata, project digest, review counts, and confirmation status.
 - **Asset Build Reports** — every compile emits build, provenance, review,
-  readiness, evaluation, and receipt artifacts for audit.
-- **Feynman Restatement** — verify understanding, not just agreement
-- **Readiness Gates** — readiness check: draft → structurally_ready → judgment_ready → publish_ready
+  and receipt artifacts for audit.
 - **Compiler** — complete, non-deprecated cards → authoring compile output; optional Human Lock provenance is preserved
 - **Runtime Export** — compiled judgment → canonical `mimetype` +
   `kdna.json` + `payload.kdnab` + `checksums.json`
@@ -76,7 +74,6 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
   extended reasoning fields, generic pattern subtypes, and source-authored
   evolution survive Runtime export without being reduced to a field
   allow-list. Human Lock fingerprints cover the complete authored field tree.
-- **Test Lab** — A/B comparison (No KDNA vs Best Prompt vs KDNA)
 - **Provenance** — content fingerprinting, build tracking, audit trail
 
 ## What it is not
@@ -89,7 +86,7 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
 ## Authoring Flow
 
 ```
-Evidence Room → Judgment Cards → Review/Provenance → Quality Gate → Compile → Validate → Export
+Evidence Room → Judgment Cards → Review/Provenance → Compile → Validate → Export
 ```
 
 For distillation-first authoring, the flow starts with an explicit target:
@@ -104,6 +101,15 @@ If a task needs several judgment domains, create multiple domain assets and
 compose them through an explicit consumption policy rather than making one
 broad file. Route cards and consumer indexes are separate, disabled-by-default
 sidecars; they do not belong in the runtime asset export.
+
+## Public package boundary
+
+The npm package exposes the supported authoring path and its project, card,
+evidence, compile, provenance, distillation, and Runtime export primitives.
+Test Lab, Feynman, Quality, and Governance workshop implementations remain in
+the repository for research and regression coverage. They are not exported
+from the package root and are not included in the release tarball. Their code
+retention is not a compatibility promise.
 
 ## Install
 

@@ -5,7 +5,6 @@
  *   - Card CRUD operations
  *   - State machine enforcement (Draft → Revised → Locked → Tested → Published → Deprecated)
  *   - Human Lock protocol
- *   - Feynman Restatement
  *   - Audit trail management
  */
 
@@ -158,9 +157,4 @@ module.exports = {
   getLockedCards,
   getPublishableCards,
   cardJudgmentFingerprint,
-  // Feynman restatement (re-exported from feynman.js)
-  createFeynmanRestatement: require('./feynman').createFeynmanRestatement,
-  evaluateRestatementQuality: require('./feynman').evaluateRestatementQuality,
-  attachRestatementToLock: require('./feynman').attachRestatementToLock,
-  validateRestatementCard: require('./feynman').validateRestatementCard,
 };

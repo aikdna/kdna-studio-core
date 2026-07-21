@@ -2,8 +2,13 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createProject, validateProject } = require('../src/project');
-const { createCard, lockCard, transitionCard, createFeynmanRestatement, attachRestatementToLock, validateRestatementCard } = require('../src/cards');
-const { evaluateRestatementQuality } = require('../src/cards/feynman');
+const { createCard, lockCard, transitionCard } = require('../src/cards');
+const {
+  createFeynmanRestatement,
+  attachRestatementToLock,
+  validateRestatementCard,
+  evaluateRestatementQuality,
+} = require('../src/cards/feynman');
 const { detectContradictions, summarizeContradictions } = require('../src/quality/contradiction');
 const { computeReadiness } = require('../src/quality');
 const { compileDomain } = require('../src/compile');

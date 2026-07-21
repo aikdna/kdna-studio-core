@@ -99,11 +99,7 @@ test('compileDomain includes non-deprecated cards and reports review provenance 
 
   const result = compileDomain(project);
   assert.ok('KDNA_Core.json' in result.files);
-  assert.ok('KDNA_CARD.json' in result.files);
-  const kdnaCard = JSON.parse(result.files['KDNA_CARD.json']);
-  assert.equal(kdnaCard.name, 'test');
-  assert.equal(kdnaCard.human_lock_summary.locked_cards, 1);
-  assert.equal(kdnaCard.migration_status, 'not_declared');
+  assert.equal('KDNA_CARD.json' in result.files, false);
   assert.equal(result.stats.locked_cards, 1);
   assert.equal(result.stats.compiled_cards, 2);
   assert.equal(result.stats.excluded_cards, 0);
@@ -125,10 +121,9 @@ test('compileDomain preserves explicit AI authorship without inventing human pro
 
   const result = compileDomain(project);
   const manifest = JSON.parse(result.files['kdna.json']);
-  const kdnaCard = JSON.parse(result.files['KDNA_CARD.json']);
   assert.equal(manifest.authoring.human_lock_count, 0);
   assert.equal(manifest.authoring.human_confirmed, false);
-  assert.equal(kdnaCard.migration_status, 'ai_authored');
+  assert.equal('KDNA_CARD.json' in result.files, false);
   assert.equal(result.files['KDNA_Evolution.json'].includes('Human judgment confirmed'), false);
 });
 
