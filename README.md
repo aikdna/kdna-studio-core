@@ -348,6 +348,13 @@ lockCard(card, {
 });
 ```
 
+Human Lock signatures are defined in the format layer (Core verifies them when
+`manifest.author.public_key_pem` is present), but the current Studio pipeline
+does not attach signatures to exported assets and does not write a public key
+into the manifest. Runtime signature verification is therefore inert for
+Studio exports: unsigned assets are valid, and no signature claim should be
+made for them. Wiring signing end-to-end is planned post-Preview work.
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
