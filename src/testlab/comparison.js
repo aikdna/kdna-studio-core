@@ -22,7 +22,7 @@ const COMPARISON_ARMS = {
   },
   correct_single_kdna: {
     label: 'Correct KDNA',
-    description: 'Runner receives the correct KDNA asset loaded with default projection. Tests whether the asset improves judgment over raw model output.',
+    description: 'Runner receives the selected KDNA asset with the declared projection. Records a named evaluator comparison without treating preference as an intrinsic asset property.',
     prompt_template: null, // Uses kdna load --profile=compact --as=prompt
     budget_profile: 'code-review',
   },
@@ -113,7 +113,7 @@ function scoreComparisonResult(result, expected, armId) {
     return { score: 1, passed: false, notes: ['No answer produced'] };
   }
 
-  // For no-KDNA and best-prompt: we want to see the asset improves judgment
+  // For comparison-only conditions, record evaluator-scoped differences.
   if (armId === 'no_kdna' || armId === 'best_ordinary_prompt') {
     // Baseline: raw model may miss domain-specific nuance
     if (result?.reasoning?.length > 0) {

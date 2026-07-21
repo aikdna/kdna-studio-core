@@ -98,9 +98,9 @@ Declare Domain + Scope → Import Evidence → Classify Relevance → Distill Ca
 
 A single `.kdna` asset should stay scoped to one domain and loading condition.
 If a task needs several judgment domains, create multiple domain assets and
-compose them through an explicit consumption policy rather than making one
-broad file. Route cards and consumer indexes are separate, disabled-by-default
-sidecars; they do not belong in the runtime asset export.
+use an explicit, separately admitted Host contract rather than making one broad
+file. Route cards and consumer indexes are historical advanced sidecars under
+recertification; they do not belong in the runtime asset export.
 
 ## Public package boundary
 
@@ -119,8 +119,12 @@ complete breaking-export and packaged-path inventory.
 ## Install
 
 ```bash
-npm install @aikdna/kdna-studio-core
+npm install @aikdna/kdna-studio-core@2.0.2
 ```
+
+That command installs the published incumbent. The `3.0.0` contract described
+above is an unreleased source candidate and must not be inferred from the npm
+`latest` tag.
 
 Migrating from `@aikdna/studio-core@1.2.1` is a source migration, not a
 drop-in package rename. Follow the
@@ -132,7 +136,7 @@ for the verified registry boundary and required code changes.
 The command-line authoring entry is a separate package:
 
 ```bash
-npm install -g @aikdna/kdna-studio-cli
+npm install -g @aikdna/kdna-studio-cli@0.10.2
 kdna-studio create my_domain --name @yourscope/my_domain
 kdna-studio import my_domain ./notes.md
 kdna-studio target declare my_domain \
