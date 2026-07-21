@@ -63,8 +63,9 @@ bytes are changed by this source correction.
 - Stop labeling a newly created generic card as AI-authored when its source has
   not been declared.
 - Bind the candidate to exact Core commit
-  `f13390916c0b6a71aed8a62c458b5c440985ad98`, including explicit compact
-  projection omission disclosure and bundle-safe Core Schema imports.
+  `3676ab0e4b54b83c4193eef3519b19cc6d0cd245`, which is reachable on current
+  kdna history with an installable lockfile; the package tree differs from the
+  previous pin only in README narrative.
 
 This is an unpublished Development Preview candidate. No existing registry
 version or package bytes are changed.
