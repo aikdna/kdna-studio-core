@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- README now states the exact Human Lock signature wiring status: the format
+  layer verifies signatures when a manifest carries `author.public_key_pem`,
+  but the current Studio pipeline neither attaches signatures to exports nor
+  writes the key, so runtime signature verification is inert for Studio
+  exports and no signature claim may be made.
+
 ### Breaking
 
 - Set the corrective package coordinate to `3.0.0`. The published `2.0.2`
