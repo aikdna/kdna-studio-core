@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const cbor = require('cbor-x');
 
 const studio = require('../src');
+const packageManifest = require('../package.json');
 
 function addJudgment(project, overrides = {}) {
   return studio.authoring.addSourceJudgment(project, {
@@ -20,7 +21,8 @@ function addJudgment(project, overrides = {}) {
   });
 }
 
-test('the public package root exposes the admitted authoring primitives', () => {
+test('the 3.x package root exposes only the admitted authoring primitives', () => {
+  assert.equal(packageManifest.version, '3.0.0');
   for (const name of [
     'project',
     'cards',
@@ -40,8 +42,13 @@ test('the public package root exposes the admitted authoring primitives', () => 
     'feynman',
     'pipeline',
     'packaging',
+    'versioning',
+    'granularity',
+    'delta',
+    'contradiction',
+    'validateCards',
   ]) {
-    assert.equal(studio[name], undefined, `experimental workshop leaked from package root: ${name}`);
+    assert.equal(studio[name], undefined, `retired 2.x export leaked from 3.x package root: ${name}`);
   }
 });
 

@@ -27,9 +27,9 @@ Runtime export must validate with `@aikdna/kdna-core` and must plan through the
 LoadPlan contract in `aikdna/kdna`. Studio products must not create app-private
 `.kdna` shapes that KDNA Core or CLI cannot inspect, validate, or plan-load.
 
-The additive `authoring` API provides the minimum explicit path
-`source -> review -> confirm -> export` without removing the existing project,
-card, evidence, compile, distillation, provenance, or Runtime export primitives.
+The 3.x `authoring` API provides the minimum explicit path
+`source -> review -> confirm -> export` while retaining the admitted project,
+card, evidence, compile, distillation, provenance, and Runtime export primitives.
 Every judgment on this path declares whether its source is human,
 organizational, AI, Agent, or mixed. If synthesized content claims to represent
 a named person or organization, export fails until the matching subject is
@@ -110,6 +110,11 @@ Test Lab, Feynman, Quality, and Governance workshop implementations remain in
 the repository for research and regression coverage. They are not exported
 from the package root and are not included in the release tarball. Their code
 retention is not a compatibility promise.
+
+This boundary begins at `3.0.0` because it removes root exports and deep-import
+paths that existed in the published 2.x package. Consumers of the published
+`2.0.2` contract must not be silently moved to 3.x. See the changelog for the
+complete breaking-export and packaged-path inventory.
 
 ## Install
 

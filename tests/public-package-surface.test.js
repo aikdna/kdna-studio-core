@@ -20,16 +20,22 @@ test('npm tarball excludes unvalidated Studio workshops', () => {
 
   for (const forbidden of [
     'src/cards/feynman.js',
+    'src/cli-bridge/',
+    'src/granularity.js',
     'src/governance/',
+    'src/packaging/',
+    'src/pipeline.js',
+    'src/product-runtime/',
     'src/quality/',
     'src/testlab/',
+    'src/versioning/',
     'schemas/evaluation-report.schema.json',
     'schemas/quality-gate-report.schema.json',
   ]) {
     assert.equal(
       files.some((file) => file === forbidden || file.startsWith(forbidden)),
       false,
-      `experimental workshop leaked into npm tarball: ${forbidden}`,
+      `retired 2.x path leaked into 3.x npm tarball: ${forbidden}`,
     );
   }
 

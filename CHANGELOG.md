@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Breaking
+
+- Set the corrective package coordinate to `3.0.0`. The published `2.0.2`
+  package exposed `pipeline` as a semver-stable convenience API, so removing
+  it cannot be represented by a `2.0.4` patch candidate.
+- Remove these 2.x root exports from the 3.x package contract: `quality`,
+  `pipeline`, `governance`, `testlab`, `delta`, `feynman`, `contradiction`,
+  `validateCards`, `versioning`, `granularity`, and `packaging`.
+- Remove these 2.x deep-import paths from the 3.x npm tarball:
+  `src/cards/feynman.js`, `src/cli-bridge/`, `src/granularity.js`,
+  `src/governance/`, `src/packaging/`, `src/pipeline.js`,
+  `src/product-runtime/`, `src/quality/`, `src/testlab/`, and
+  `src/versioning/`. Their repository sources may remain for regression and
+  historical reference, but are not 3.x compatibility surfaces.
+
 ### Changed
 
 - Limit the public package root and release tarball to the supported
@@ -20,6 +35,10 @@
   project validation, current Runtime export, and explicit non-promises.
 - Correct the Quick Start card-review example so it keeps immutable state
   transition results before adding the card to a project.
+
+The earlier unpublished `2.0.4` candidate coordinate is superseded by the
+`3.0.0` breaking candidate. No `2.0.4` package was published and no registry
+bytes are changed by this source correction.
 
 ### Verification
 
