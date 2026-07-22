@@ -240,10 +240,10 @@ bytes are changed by this source correction.
 
 - Stop labeling a newly created generic card as AI-authored when its source has
   not been declared.
-- Bind the candidate to exact Core commit
-  `3676ab0e4b54b83c4193eef3519b19cc6d0cd245`, which is reachable on current
-  kdna history with an installable lockfile; the package tree differs from the
-  previous pin only in README narrative.
+- Bind the candidate to final Core main commit
+  `76bbc587ce05f7e575c2373832cc5c9eee9df98a`, with an installable lockfile and
+  a source-equivalent final-main package. This supersedes the earlier
+  historical candidate pin.
 
 This is an unpublished Development Preview candidate. No existing registry
 version or package bytes are changed.

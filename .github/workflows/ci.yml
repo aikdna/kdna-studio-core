@@ -13,7 +13,7 @@ jobs:
       - name: Check out the exact Core candidate outside the Studio workspace
         env:
           KDNA_CORE_CANDIDATE_REPOSITORY: aikdna/kdna
-          KDNA_CORE_CANDIDATE_COMMIT: 3676ab0e4b54b83c4193eef3519b19cc6d0cd245
+          KDNA_CORE_CANDIDATE_COMMIT: 76bbc587ce05f7e575c2373832cc5c9eee9df98a
         run: |
           set -euo pipefail
           runner_temp="$(realpath "$RUNNER_TEMP")"
