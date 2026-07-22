@@ -19,6 +19,7 @@ const {
   IDENTITY_ALREADY_EXISTS,
   IDENTITY_INCOMPLETE,
   IDENTITY_CORRUPT,
+  IDENTITY_KDF_FAILED,
   IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED,
   IDENTITY_COMMITTED_INCONSISTENT,
 } = require('../src/creator-identity');
@@ -648,6 +649,22 @@ test('encryptPrivateKey: new envelopes are written at 600000 PBKDF2 iterations',
   // The encrypted identity still passes the full consistency checks.
   assert.equal(loadIdentity(dir).encrypted, true);
   assert.ok(verifySignature('encrypted-sign', loadPublicKey(dir), signPayload('encrypted-sign', dir, 'passphrase')));
+});
+
+test('encryptPrivateKey: KDF failures carry a stable machine-readable code', () => {
+  const realPbkdf2Sync = crypto.pbkdf2Sync;
+  const injected = new Error('injected KDF failure');
+  injected.code = 'ERR_CRYPTO_OPERATION_FAILED';
+  crypto.pbkdf2Sync = () => { throw injected; };
+  try {
+    const failure = captureError(() => encryptPrivateKey('private-key', 'passphrase'));
+    assert.equal(failure.code, IDENTITY_KDF_FAILED);
+    assert.equal(failure.committed, false);
+    assert.equal(failure.identityVerified, false);
+    assert.doesNotMatch(failure.message, /passphrase|private-key/);
+  } finally {
+    crypto.pbkdf2Sync = realPbkdf2Sync;
+  }
 });
 
 test('decryptPrivateKey: legacy 100000-iteration envelopes still decrypt', () => {

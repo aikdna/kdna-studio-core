@@ -210,6 +210,7 @@ function derivePublicKeyFromPrivate(privateKeyPem) {
 const IDENTITY_ALREADY_EXISTS = 'IDENTITY_ALREADY_EXISTS';
 const IDENTITY_INCOMPLETE = 'IDENTITY_INCOMPLETE';
 const IDENTITY_CORRUPT = 'IDENTITY_CORRUPT';
+const IDENTITY_KDF_FAILED = 'IDENTITY_KDF_FAILED';
 
 // Stable machine-readable result codes for post-commit failures:
 // the atomic rename already published the complete identity, but the
@@ -664,7 +665,17 @@ function signHumanLock(cardId, statement, judgmentFingerprint, identityDir = nul
 
 function encryptPrivateKey(pem, passphrase) {
   const salt = crypto.randomBytes(ENVELOPE_SALT_BYTES);
-  const key = crypto.pbkdf2Sync(passphrase, salt, PBKDF2_ITERATIONS, 32, 'sha256');
+  let key;
+  try {
+    key = crypto.pbkdf2Sync(passphrase, salt, PBKDF2_ITERATIONS, 32, 'sha256');
+  } catch (cause) {
+    throw identityStateError(
+      IDENTITY_KDF_FAILED,
+      'Creator identity key derivation failed before any identity was committed.',
+      { committed: false, identityVerified: false },
+      cause,
+    );
+  }
   const iv = crypto.randomBytes(ENVELOPE_IV_BYTES);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const ciphertext = Buffer.concat([cipher.update(Buffer.from(pem)), cipher.final()]);
@@ -816,6 +827,7 @@ module.exports = {
   IDENTITY_ALREADY_EXISTS,
   IDENTITY_INCOMPLETE,
   IDENTITY_CORRUPT,
+  IDENTITY_KDF_FAILED,
   IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED,
   IDENTITY_COMMITTED_INCONSISTENT,
 };

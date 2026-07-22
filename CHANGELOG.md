@@ -93,6 +93,9 @@
   a partial set reports `IDENTITY_INCOMPLETE`, and a present but inconsistent
   or damaged three-file set reports `IDENTITY_CORRUPT`. Classification never
   overwrites or removes existing files.
+- Report creator-key derivation failures as `IDENTITY_KDF_FAILED` before any
+  identity is committed, so callers do not have to infer a KDF failure from
+  human-readable text.
 - `loadIdentity` now requires the full canonical identity and verifies it:
   `kdna.pub` must be a parseable Ed25519 public key; `creator.json`'s
   `public_key` (when present) must be the same key as `kdna.pub`;
