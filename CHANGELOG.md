@@ -4,11 +4,37 @@
 
 ### Fixed
 
+- Make `rotateIdentity` in `src/creator-identity.js` crash-safe. Rotation
+  previously overwrote `kdna.key`/`kdna.pub` in place and only updated
+  `creator.json` last, so a failure mid-rotation could destroy the only copy
+  of the old private key or drop the `previous_keys` record. Rotation now
+  first persists the old private key bytes to `kdna.key.previous` (mode
+  `0o600`; encrypted keys stay encrypted in the backup) and records the old
+  public key and rotation signature under `previous_keys`, then replaces
+  every file with atomic temp-file-plus-rename writes. A failure at any step
+  leaves the old keypair usable.
+- Close a TOCTOU race in `initIdentity`: key files are now written with
+  `flag: 'wx'`, so an identity that appears between the existence check and
+  the write is reported as an explicit "already exist" error instead of being
+  silently overwritten. A failed init rolls back only the files it created.
+- Raise the PBKDF2 iteration count for newly written private-key envelopes
+  from 100000 to 600000 (OWASP recommendation for PBKDF2-HMAC-SHA256). The
+  envelope is self-describing — `decryptPrivateKey` reads `iterations` from
+  the envelope — so envelopes written at 100000 iterations keep decrypting
+  and no migration is needed.
 - README now states the exact Human Lock signature wiring status: the format
   layer verifies signatures when a manifest carries `author.public_key_pem`,
   but the current Studio pipeline neither attaches signatures to exports nor
   writes the key, so runtime signature verification is inert for Studio
   exports and no signature claim may be made.
+
+### Verification
+
+- Add `tests/creator-identity.test.js` (12 tests), the first test coverage
+  for `src/creator-identity.js`: init/refusal-to-overwrite, sign/verify
+  roundtrips, legacy 100k envelope decryption, rotation success paths, and
+  simulated mid-rotation crash recovery. `rotateIdentity` is exercised
+  without adding it to the module's public exports.
 
 ### Breaking
 
