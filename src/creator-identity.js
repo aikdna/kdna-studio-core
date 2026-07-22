@@ -82,7 +82,7 @@ function fsyncDirectorySync(dir) {
     fd = fs.openSync(dir, 'r');
     fs.fsyncSync(fd);
   } catch (error) {
-    if (error && (error.code === 'EISDIR' || error.code === 'EINVAL')) return;
+    if (error && (error.code === 'EISDIR' || error.code === 'EINVAL' || error.code === 'EPERM')) return;
     throw error;
   } finally {
     if (fd !== undefined) {

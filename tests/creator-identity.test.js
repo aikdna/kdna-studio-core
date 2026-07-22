@@ -98,8 +98,11 @@ test('initIdentity: creates keypair, creator.json, and private key is 0o600', ()
   assert.equal(identity.encrypted, false);
   const loaded = loadIdentity(dir);
   assert.equal(loaded.creator_id, identity.creator_id);
-  const mode = fs.statSync(path.join(dir, 'kdna.key')).mode & 0o777;
-  assert.equal(mode, 0o600);
+  // Windows does not honor POSIX file modes.
+  if (process.platform !== 'win32') {
+    const mode = fs.statSync(path.join(dir, 'kdna.key')).mode & 0o777;
+    assert.equal(mode, 0o600);
+  }
 });
 
 test('initIdentity: publishes into a not-yet-existing directory as one atomic rename', () => {
