@@ -13,7 +13,7 @@ jobs:
       - name: Check out the exact Core candidate outside the Studio workspace
         env:
           KDNA_CORE_CANDIDATE_REPOSITORY: aikdna/kdna
-          KDNA_CORE_CANDIDATE_COMMIT: 3676ab0e4b54b83c4193eef3519b19cc6d0cd245
+          KDNA_CORE_CANDIDATE_COMMIT: 76bbc587ce05f7e575c2373832cc5c9eee9df98a
         run: |
           set -euo pipefail
           runner_temp="$(realpath "$RUNNER_TEMP")"
@@ -74,3 +74,25 @@ jobs:
             esac
           done
           node --test "${tests[@]}"
+  identity-focused:
+    # The identity directory transaction uses platform-sensitive primitives
+    # (directory rename semantics, directory fsync, SIGKILL from a watcher
+    # thread), so prove it on macOS and Windows too, not only on Ubuntu.
+    # Only the identity suites run here to keep the job short; the module is
+    # dependency-free, so no install step is needed.
+    name: Identity transaction tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - name: Set up the tested Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22.23.1
+          check-latest: false
+      - name: Run the identity suites
+        run: node --test tests/creator-identity.test.js tests/creator-identity-envelope.test.js

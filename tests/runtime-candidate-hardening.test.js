@@ -240,7 +240,13 @@ test('candidate CI pins immutable actions, exact Node runtimes, and verified npm
   assert.match(workflow, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
   assert.equal(
     workflow.match(/actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38/g)?.length,
-    2,
+    3,
+  );
+  assert.match(workflow, /identity-focused:/);
+  assert.match(workflow, /os:\s*\[macos-latest, windows-latest\]/);
+  assert.match(
+    workflow,
+    /node --test tests\/creator-identity\.test\.js tests\/creator-identity-envelope\.test\.js/,
   );
   assert.match(workflow, /node:\s*\[18\.20\.8, 22\.23\.1\]/);
   assert.match(workflow, /node-version:\s*22\.23\.1/);

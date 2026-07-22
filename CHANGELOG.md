@@ -2,26 +2,131 @@
 
 ## Unreleased
 
+### Corrections
+
+- Retract the identity-rotation claims made above and in the `1.4.0` entry
+  below. `rotateIdentity` was never part of the module's exports and had no
+  caller anywhere; it was only reachable because the test suite compiled the
+  module source with the internal binding exposed. The previous "crash-safe
+  rotation" fix therefore hardened dead code, and the dead implementation,
+  its `kdna.key.previous` backup machinery, and the source-injection tests
+  are now removed. **Studio Core 3.0.0 does not provide identity key
+  rotation.** An identity is replaced by removing the identity directory and
+  running init again.
+- Correct the identity transaction record above. The hard-link commit-record
+  transaction described there did **not** provide crash recovery: a process
+  killed after the first file write left remnant key files in the canonical
+  directory that blocked the next init, and the test suite only simulated
+  recovery by deleting those remnants by hand. The transaction is now a
+  staging directory plus a single atomic directory rename (see Fixed), and
+  the crash tests are real SIGKILLed subprocesses whose recovery path
+  deletes nothing manually.
+- Correct the identity consistency model above. `loadIdentity` trusted
+  `creator.json.public_key` without comparing it to `kdna.pub`, and
+  `loadPublicKey` returned the raw file with no verification at all, so one
+  identity directory could present two different public keys to different
+  callers. The canonical identity is now exactly the three-file set
+  (`kdna.key` + `kdna.pub` + `creator.json`) and every read path verifies it.
+- Correct the envelope iteration contract above. The previous
+  `[1, 4000000]` clamp accepted arbitrary positive iteration counts and
+  justified the upper bound as headroom for future increases. A
+  self-describing envelope is a compatibility mechanism for the counts that
+  were actually written — exactly 100000 (historical) and 600000 (current) —
+  and every other value is now rejected before the KDF runs. The headroom
+  rationale is retracted.
+
 ### Fixed
 
-- Make `rotateIdentity` in `src/creator-identity.js` crash-safe. Rotation
-  previously overwrote `kdna.key`/`kdna.pub` in place and only updated
-  `creator.json` last, so a failure mid-rotation could destroy the only copy
-  of the old private key or drop the `previous_keys` record. Rotation now
-  first persists the old private key bytes to `kdna.key.previous` (mode
-  `0o600`; encrypted keys stay encrypted in the backup) and records the old
-  public key and rotation signature under `previous_keys`, then replaces
-  every file with atomic temp-file-plus-rename writes. A failure at any step
-  leaves the old keypair usable.
-- Close a TOCTOU race in `initIdentity`: key files are now written with
-  `flag: 'wx'`, so an identity that appears between the existence check and
-  the write is reported as an explicit "already exist" error instead of being
-  silently overwritten. A failed init rolls back only the files it created.
+- Make `initIdentity` a single atomic directory transaction. The three
+  identity files are written and fsynced inside a mode-0700 sibling staging
+  directory on the same filesystem, the staging directory is fsynced, and
+  the identity is published by one atomic directory rename onto the
+  canonical path (followed by a parent-directory fsync). The canonical
+  directory never holds a subset of the identity files: before the rename
+  it holds none of them, after the rename it holds all three. A process
+  killed at any point leaves either a complete, mutually consistent
+  identity or no valid identity, and the next init recovers without manual
+  cleanup: staging remnants are removed only when they are provably
+  transaction-owned (transaction naming shape, identity-files-only content)
+  and their owner process is provably dead, and anything not provably owned
+  by the transaction is never touched.
+  Concurrent inits have exactly one winner — the first rename creates a
+  non-empty directory and later renames fail instead of replacing it — and
+  losers remove only their own staging, never the winner's identity. An
+  existing complete identity is never overwritten.
+- Reclaim staging remnants by owner liveness, never by directory age. The
+  previous sweep treated any staging directory older than a 60-second grace
+  as dead and deleted it even when the owner pid encoded in its name was
+  still alive, so a slow or long-running init in another process could have
+  its in-flight transaction deleted under it. A remnant is now removed only
+  when its owner pid parses AND no live process holds it AND its contents
+  are provably identity-transaction files; a live owner's staging is left
+  untouched at any age, and remnants with unparseable owners or foreign
+  files fail safe and are never auto-deleted.
+- Give the identity transaction real commit semantics. The atomic directory
+  rename is the logical commit point: a failure before it leaves no identity
+  and is an ordinary, safely retryable init error. A failure of the
+  parent-directory fsync AFTER the rename was previously reported as an
+  ordinary init failure even though the complete identity already existed on
+  disk — the API said failure while the disk said success. That post-commit
+  durability failure now throws a stable machine-readable result instead:
+  `code: 'IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED'`, `committed: true`,
+  `durabilityConfirmed: false`, plus `identity_dir` and the re-verified
+  `creator_id`. The committed identity is re-checked through the full
+  three-file consistency verification before the result claims it, the
+  identity is never deleted or rolled back, a retry correctly reports that
+  the identity already exists, and the error carries no private key
+  material. These diagnostic fields are optional caller diagnostics, not
+  part of any protocol schema. The successful return value of
+  `initIdentity` is unchanged.
+- Split post-commit verification failure from verified durability failure.
+  A committed identity that re-verifies now reports
+  `IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED` with
+  `identityVerified: true` and a verified `creator_id`. If the canonical
+  three-file set fails re-verification after the rename, init instead reports
+  `IDENTITY_COMMITTED_INCONSISTENT` with `committed: true` and
+  `identityVerified: false`; it does not claim the identity is complete or
+  safe to sign with, never deletes it, and gives a preserve-and-recover
+  diagnostic without private key material.
+- Give every pre-existing canonical identity state a stable code. Only a
+  complete set that passes `loadIdentity` reports `IDENTITY_ALREADY_EXISTS`;
+  a partial set reports `IDENTITY_INCOMPLETE`, and a present but inconsistent
+  or damaged three-file set reports `IDENTITY_CORRUPT`. Classification never
+  overwrites or removes existing files.
+- Report creator-key derivation failures as `IDENTITY_KDF_FAILED` before any
+  identity is committed, so callers do not have to infer a KDF failure from
+  human-readable text.
+- `loadIdentity` now requires the full canonical identity and verifies it:
+  `kdna.pub` must be a parseable Ed25519 public key; `creator.json`'s
+  `public_key` (when present) must be the same key as `kdna.pub`;
+  `creator_id` must equal the SHA-256 fingerprint of the normalized
+  `kdna.pub`; and a plaintext `kdna.key` must derive that same public key
+  (encrypted envelopes are verified at sign time, after decryption).
+  Missing, replaced, tampered, or cross-copied files fail closed on every
+  read path.
+- `loadPublicKey` no longer returns the raw file. It returns the public key
+  only after the same three-file consistency verification, returns null
+  only when the directory holds no identity files at all, and rejects
+  partial or inconsistent state.
+- `signPayload` proves four-way consistency before signing: the public key
+  derived from the private key, `kdna.pub`, `creator.json`'s public key,
+  and the `creator_id` fingerprint must all be the same Ed25519 key.
+- Harden `decryptPrivateKey` against hostile envelopes. Every structural
+  check runs before the PBKDF2 derivation: the envelope must be a plain
+  object with `encrypted === true`; `kdf` must equal `pbkdf2-sha256`
+  exactly (previously an envelope naming a nonexistent KDF was still fed to
+  the cipher); `iterations` must be exactly 100000 (historical envelopes)
+  or 600000 (current writes) — every other value, including 1, 99999,
+  100001, 599999, 600001, and 4000000, is rejected before the KDF runs;
+  `salt` (16 bytes), `iv` (12 bytes), and `tag` (16 bytes) must be strict,
+  canonical base64 of the exact contract length; `ciphertext` must be
+  strict base64 decoding to at most 64 KB. The envelope being
+  self-describing is a compatibility mechanism, not a security boundary.
 - Raise the PBKDF2 iteration count for newly written private-key envelopes
-  from 100000 to 600000 (OWASP recommendation for PBKDF2-HMAC-SHA256). The
-  envelope is self-describing — `decryptPrivateKey` reads `iterations` from
-  the envelope — so envelopes written at 100000 iterations keep decrypting
-  and no migration is needed.
+  from 100000 to 600000 (OWASP recommendation for PBKDF2-HMAC-SHA256;
+  supported by the pbkdf2 implementations of Node 18, 22, and 24).
+  Historical 100000-iteration envelopes keep decrypting; no migration is
+  needed. Those two counts are the complete compatibility range.
 - README now states the exact Human Lock signature wiring status: the format
   layer verifies signatures when a manifest carries `author.public_key_pem`,
   but the current Studio pipeline neither attaches signatures to exports nor
@@ -30,11 +135,50 @@
 
 ### Verification
 
-- Add `tests/creator-identity.test.js` (12 tests), the first test coverage
-  for `src/creator-identity.js`: init/refusal-to-overwrite, sign/verify
-  roundtrips, legacy 100k envelope decryption, rotation success paths, and
-  simulated mid-rotation crash recovery. `rotateIdentity` is exercised
-  without adding it to the module's public exports.
+- `tests/creator-identity.test.js` exercises `src/creator-identity.js`
+  through its public exports — no source injection. Crash coverage uses real
+  subprocesses running the real `initIdentity` export while a watcher thread
+  SIGKILLs the process the moment a commit phase becomes observable on the
+  real filesystem:
+  - pre-commit kills after the `kdna.key` write, after the `kdna.pub`
+    write, and after the `creator.json` write: the canonical directory
+    never holds a subset of the identity files, no read path accepts the
+    state, and the next init recovers directly with no manual deletion
+    (the recovery itself removes the provable staging remnant);
+  - a kill immediately after the atomic rename leaves a complete identity
+    that loads and signs with no recovery step;
+  - four concurrent init subprocesses produce exactly one winner; losers
+    fail with an explicit error and never overwrite or delete the winner's
+    identity.
+- Staging reclamation coverage uses a real two-process fixture: a live child
+  process owns a provable staging remnant whose directory age is pushed past
+  any age threshold, and another process's init leaves the staging and its
+  staged files byte-for-byte intact; after the owner exits, the next sweep
+  reclaims the remnant. Remnants with unparseable owner pids or foreign
+  files are proven to survive the sweep untouched.
+- Commit-semantics coverage injects fsync faults precisely at the two commit
+  boundaries: a parent-directory fsync failure after the rename yields the
+  machine-readable committed result (canonical three files present,
+  `loadIdentity` and `signPayload` succeed, retry reports the existing
+  identity, no private key material anywhere in the error), and a
+  staging-fsync failure before the rename yields an ordinary error with no
+  canonical state and a directly retryable init.
+- Cross-tamper matrix: the `kdna.pub` of identity B placed in directory A,
+  a `creator.json` naming a different public key than `kdna.pub`, a
+  tampered `creator_id`, a deleted `kdna.pub`, a deleted private key, and a
+  replaced private key are each rejected by `loadIdentity`,
+  `loadPublicKey`, and `signPayload`.
+- Add `tests/creator-identity-envelope.test.js` (hostile-envelope coverage
+  for `decryptPrivateKey`, runnable standalone): unknown KDF names,
+  non-integer iteration counts, and every integer count outside
+  {100000, 600000} (1, 99999, 100001, 599999, 600001, 4000000, 2**40),
+  malformed and non-canonical base64, wrong salt/iv/tag lengths, and
+  oversized ciphertext — all rejected before the KDF runs; 100000 and
+  600000 envelopes decrypt.
+- CI gains focused identity jobs on macOS and Windows running only the two
+  identity suites, so the directory-transaction primitives (rename
+  semantics, directory fsync, watcher-thread SIGKILL) are proven on three
+  platforms, not just Ubuntu.
 
 ### Breaking
 
@@ -96,10 +240,10 @@ bytes are changed by this source correction.
 
 - Stop labeling a newly created generic card as AI-authored when its source has
   not been declared.
-- Bind the candidate to exact Core commit
-  `3676ab0e4b54b83c4193eef3519b19cc6d0cd245`, which is reachable on current
-  kdna history with an installable lockfile; the package tree differs from the
-  previous pin only in README narrative.
+- Bind the candidate to final Core main commit
+  `76bbc587ce05f7e575c2373832cc5c9eee9df98a`, with an installable lockfile and
+  a source-equivalent final-main package. This supersedes the earlier
+  historical candidate pin.
 
 This is an unpublished Development Preview candidate. No existing registry
 version or package bytes are changed.
@@ -437,7 +581,7 @@ even when every card is Human Locked.
 - computeContentDigest: excludes reports/ and build-receipt
 
 ## 1.4.0 (2026-05-29)
-- Creator Identity system: Ed25519 keypair, creator_id, passphrase encryption, key rotation
+- Creator Identity system: Ed25519 keypair, creator_id, passphrase encryption, key rotation (the "key rotation" claim is retracted: rotation was never exported or reachable — see the Unreleased Corrections entry)
 - Project model: source_mode (blank/kdna_asset/source_folder), creator_identity, lineage
 - lockCard: schema gate for axiom full_statement/why, misunderstanding key_distinction
 - compileManifest: outputs creator, lineage, source_mode
