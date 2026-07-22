@@ -79,6 +79,20 @@
   material. These diagnostic fields are optional caller diagnostics, not
   part of any protocol schema. The successful return value of
   `initIdentity` is unchanged.
+- Split post-commit verification failure from verified durability failure.
+  A committed identity that re-verifies now reports
+  `IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED` with
+  `identityVerified: true` and a verified `creator_id`. If the canonical
+  three-file set fails re-verification after the rename, init instead reports
+  `IDENTITY_COMMITTED_INCONSISTENT` with `committed: true` and
+  `identityVerified: false`; it does not claim the identity is complete or
+  safe to sign with, never deletes it, and gives a preserve-and-recover
+  diagnostic without private key material.
+- Give every pre-existing canonical identity state a stable code. Only a
+  complete set that passes `loadIdentity` reports `IDENTITY_ALREADY_EXISTS`;
+  a partial set reports `IDENTITY_INCOMPLETE`, and a present but inconsistent
+  or damaged three-file set reports `IDENTITY_CORRUPT`. Classification never
+  overwrites or removes existing files.
 - `loadIdentity` now requires the full canonical identity and verifies it:
   `kdna.pub` must be a parseable Ed25519 public key; `creator.json`'s
   `public_key` (when present) must be the same key as `kdna.pub`;

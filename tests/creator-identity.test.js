@@ -16,7 +16,11 @@ const {
   encryptPrivateKey,
   decryptPrivateKey,
   isEncryptedKey,
+  IDENTITY_ALREADY_EXISTS,
+  IDENTITY_INCOMPLETE,
+  IDENTITY_CORRUPT,
   IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED,
+  IDENTITY_COMMITTED_INCONSISTENT,
 } = require('../src/creator-identity');
 
 const MODULE_PATH = path.join(__dirname, '..', 'src', 'creator-identity.js');
@@ -36,6 +40,17 @@ function tempIdentityParent() {
 
 function readKey(dir, name) {
   return fs.readFileSync(path.join(dir, name), 'utf8');
+}
+
+function captureError(fn) {
+  let failure = null;
+  try {
+    fn();
+  } catch (error) {
+    failure = error;
+  }
+  assert.ok(failure, 'expected function to throw');
+  return failure;
 }
 
 function runNode(args) {
@@ -124,7 +139,10 @@ test('initIdentity: refuses to overwrite existing keys and leaves files untouche
   const pubBefore = readKey(dir, 'kdna.pub');
   const jsonBefore = readKey(dir, 'creator.json');
 
-  assert.throws(() => initIdentity('second', dir), /already exist/);
+  const failure = captureError(() => initIdentity('second', dir));
+  assert.equal(failure.code, IDENTITY_ALREADY_EXISTS);
+  assert.equal(failure.identityVerified, true);
+  assert.equal(failure.creator_id, first.creator_id);
 
   assert.equal(readKey(dir, 'kdna.key'), privBefore);
   assert.equal(readKey(dir, 'kdna.pub'), pubBefore);
@@ -137,7 +155,10 @@ test('initIdentity: a pre-existing creator.json is never overwritten', () => {
   const preExisting = JSON.stringify({ creator_id: 'kdna:creator:ed25519:pre-existing' }, null, 2);
   fs.writeFileSync(path.join(dir, 'creator.json'), preExisting, { mode: 0o644 });
 
-  assert.throws(() => initIdentity('tester', dir), /already exist/);
+  const failure = captureError(() => initIdentity('tester', dir));
+  assert.equal(failure.code, IDENTITY_INCOMPLETE);
+  assert.equal(failure.identityVerified, false);
+  assert.doesNotMatch(failure.message, /already exists/i);
 
   assert.equal(readKey(dir, 'creator.json'), preExisting);
   assert.equal(fs.existsSync(path.join(dir, 'kdna.key')), false);
@@ -147,7 +168,10 @@ test('initIdentity: a pre-existing creator.json is never overwritten', () => {
 test('initIdentity: existing public key alone also blocks regeneration', () => {
   const dir = tempIdentityDir();
   fs.writeFileSync(path.join(dir, 'kdna.pub'), 'pre-existing', { mode: 0o644 });
-  assert.throws(() => initIdentity('tester', dir), /already exist/);
+  const failure = captureError(() => initIdentity('tester', dir));
+  assert.equal(failure.code, IDENTITY_INCOMPLETE);
+  assert.equal(failure.identityVerified, false);
+  assert.doesNotMatch(failure.message, /already exists/i);
   assert.equal(readKey(dir, 'kdna.pub'), 'pre-existing');
   assert.equal(fs.existsSync(path.join(dir, 'kdna.key')), false);
 });
@@ -158,6 +182,42 @@ test('initIdentity: refuses to merge into a directory holding foreign files', ()
   assert.throws(() => initIdentity('tester', dir), /not empty/);
   assert.equal(readKey(dir, 'notes.txt'), 'user data');
   assert.equal(fs.existsSync(path.join(dir, 'kdna.key')), false);
+});
+
+test('initIdentity: each single canonical file is classified as incomplete and preserved', () => {
+  for (const file of ['creator.json', 'kdna.key', 'kdna.pub']) {
+    const dir = tempIdentityDir();
+    const content = file === 'creator.json'
+      ? JSON.stringify({ creator_id: 'kdna:creator:ed25519:partial' })
+      : `partial-${file}`;
+    fs.writeFileSync(path.join(dir, file), content);
+
+    const failure = captureError(() => initIdentity('tester', dir));
+    assert.equal(failure.code, IDENTITY_INCOMPLETE, file);
+    assert.equal(failure.identityVerified, false, file);
+    assert.doesNotMatch(failure.message, /already exists/i);
+    assert.equal(readKey(dir, file), content, file);
+    assert.deepEqual(fs.readdirSync(dir), [file], file);
+  }
+});
+
+test('initIdentity: a present but mismatched three-file identity is corrupt, not already-existing', () => {
+  const dir = tempIdentityDir();
+  initIdentity('tester', dir);
+  const beforePrivate = readKey(dir, 'kdna.key');
+  const beforePublic = readKey(dir, 'kdna.pub');
+  const corrupt = JSON.parse(readKey(dir, 'creator.json'));
+  corrupt.creator_id = `${corrupt.creator_id}-wrong`;
+  const corruptJson = JSON.stringify(corrupt, null, 2);
+  fs.writeFileSync(path.join(dir, 'creator.json'), corruptJson);
+
+  const failure = captureError(() => initIdentity('replacement', dir));
+  assert.equal(failure.code, IDENTITY_CORRUPT);
+  assert.equal(failure.identityVerified, false);
+  assert.doesNotMatch(failure.message, /already exists/i);
+  assert.equal(readKey(dir, 'kdna.key'), beforePrivate);
+  assert.equal(readKey(dir, 'kdna.pub'), beforePublic);
+  assert.equal(readKey(dir, 'creator.json'), corruptJson);
 });
 
 // ─── initIdentity crash boundaries (real subprocesses, real SIGKILL) ──
@@ -335,6 +395,7 @@ test('initIdentity: a parent-directory fsync failure after the commit rename rep
   assert.ok(failure);
   assert.equal(failure.code, IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED);
   assert.equal(failure.committed, true);
+  assert.equal(failure.identityVerified, true);
   assert.equal(failure.durabilityConfirmed, false);
   assert.equal(failure.identity_dir, dir);
   assert.doesNotMatch(failure.message, /already exist/);
@@ -360,6 +421,60 @@ test('initIdentity: a parent-directory fsync failure after the commit rename rep
   assert.throws(() => initIdentity('retry', dir), /already exist/);
   assert.equal(loadIdentity(dir).creator_id, loaded.creator_id);
   assert.deepEqual(stagingDirs(parentDir), []);
+});
+
+test('initIdentity: post-commit verification failure is committed-but-inconsistent and every use path fails closed', () => {
+  const { parentDir, dir } = tempIdentityParent();
+  const realOpenSync = fs.openSync;
+  const injected = new Error('injected parent fsync failure');
+  injected.code = 'EIO';
+
+  fs.openSync = function openSync(target, flags, mode) {
+    if (flags === 'r' && target === parentDir) {
+      // The rename has already committed the canonical directory. Corrupt one
+      // public metadata file before the post-commit verifier runs.
+      fs.writeFileSync(path.join(dir, 'creator.json'), '{ committed but corrupt');
+      throw injected;
+    }
+    return realOpenSync.call(fs, target, flags, mode);
+  };
+
+  let failure;
+  try {
+    initIdentity('inconsistent', dir);
+  } catch (error) {
+    failure = error;
+  } finally {
+    fs.openSync = realOpenSync;
+  }
+
+  assert.ok(failure);
+  assert.equal(failure.code, IDENTITY_COMMITTED_INCONSISTENT);
+  assert.equal(failure.committed, true);
+  assert.equal(failure.identityVerified, false);
+  assert.equal(failure.durabilityConfirmed, false);
+  assert.equal(failure.identity_dir, dir);
+  assert.equal(failure.creator_id, undefined);
+  assert.match(failure.message, /failed consistency verification/i);
+  assert.match(failure.message, /do not sign/i);
+  assert.match(failure.message, /preserve the directory/i);
+  assert.doesNotMatch(failure.message, /complete three-file identity/i);
+  assert.doesNotMatch(failure.message, /use loadIdentity\(\) to access/i);
+
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['creator.json', 'kdna.key', 'kdna.pub']);
+  assert.throws(() => loadIdentity(dir), /not valid JSON/);
+  assert.throws(() => loadPublicKey(dir), /not valid JSON/);
+  assert.throws(() => signPayload('must-not-sign', dir), /not valid JSON/);
+
+  const retryFailure = captureError(() => initIdentity('retry', dir));
+  assert.equal(retryFailure.code, IDENTITY_CORRUPT);
+  assert.equal(retryFailure.identityVerified, false);
+  assert.deepEqual(stagingDirs(parentDir), []);
+
+  const privateKey = readKey(dir, 'kdna.key');
+  assert.equal(failure.message.includes(privateKey), false);
+  assert.equal(failure.stack.includes(privateKey), false);
+  assert.equal(JSON.stringify(failure).includes(privateKey), false);
 });
 
 test('initIdentity: a pre-commit failure publishes nothing and init is safely retryable', () => {

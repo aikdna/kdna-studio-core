@@ -207,19 +207,25 @@ function derivePublicKeyFromPrivate(privateKeyPem) {
   return crypto.createPublicKey(key).export({ type: 'spki', format: 'pem' });
 }
 
-function identityExistsError(dir) {
-  return new Error(
-    `Identity keys already exist in ${dir}. Use loadIdentity() to access them, or remove the files to regenerate.`,
-  );
-}
+const IDENTITY_ALREADY_EXISTS = 'IDENTITY_ALREADY_EXISTS';
+const IDENTITY_INCOMPLETE = 'IDENTITY_INCOMPLETE';
+const IDENTITY_CORRUPT = 'IDENTITY_CORRUPT';
 
-// Stable machine-readable result code for the post-commit durability failure:
+// Stable machine-readable result codes for post-commit failures:
 // the atomic rename already published the complete identity, but the
 // parent-directory fsync that would confirm durability failed. This is NOT an
 // initialization failure and must never be reported as one — the identity
 // exists on disk, must not be deleted or rolled back, and a retry will (and
 // should) report that the identity already exists.
 const IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED = 'IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED';
+const IDENTITY_COMMITTED_INCONSISTENT = 'IDENTITY_COMMITTED_INCONSISTENT';
+
+function identityStateError(code, message, fields = {}, cause = null) {
+  const error = cause ? new Error(message, { cause }) : new Error(message);
+  error.code = code;
+  Object.assign(error, fields);
+  return error;
+}
 
 /**
  * Build the error for a post-commit parent-directory fsync failure. The
@@ -229,31 +235,45 @@ const IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED = 'IDENTITY_COMMITTED_DURABILITY
  * public diagnostic fields only — never any private key material.
  */
 function committedDurabilityError(dir, cause) {
-  let creatorId = null;
+  let loaded;
   try {
-    const loaded = loadIdentity(dir);
-    creatorId = loaded && loaded.creator_id;
-  } catch {
-    creatorId = null;
+    loaded = loadIdentity(dir);
+  } catch (verificationError) {
+    const causeCode = cause && cause.code ? cause.code : 'unknown error';
+    return identityStateError(
+      IDENTITY_COMMITTED_INCONSISTENT,
+      `Identity files were committed in ${dir}, but the identity failed consistency verification after `
+      + `the commit and parent-directory durability confirmation also failed (${causeCode}). `
+      + 'Do not sign with or otherwise use this identity. Preserve the directory without changing or '
+      + 'deleting it, restrict access to it, and recover from a trusted backup or have an administrator '
+      + 'inspect all three files before any further use. Do not re-run identity initialization.',
+      {
+        committed: true,
+        identityVerified: false,
+        durabilityConfirmed: false,
+        identity_dir: dir,
+      },
+      verificationError,
+    );
   }
   const causeCode = cause && cause.code ? cause.code : 'unknown error';
-  const error = new Error(
+  return identityStateError(
+    IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED,
     `Identity in ${dir} is committed: the atomic rename published the complete three-file identity`
-    + (creatorId
-      ? ` (creator_id ${creatorId}) and it passed the three-file consistency verification`
-      : '')
+    + ` (creator_id ${loaded.creator_id}) and it passed the three-file consistency verification`
     + `, but confirming durability of the parent directory failed (${causeCode}). `
     + 'The identity is on disk — do not treat this as "nothing was created", '
     + 'do not delete the files, and do not retry as a fresh initialization; '
     + 'use loadIdentity() to access the identity.',
-    { cause },
+    {
+      committed: true,
+      identityVerified: true,
+      durabilityConfirmed: false,
+      identity_dir: dir,
+      creator_id: loaded.creator_id,
+    },
+    cause,
   );
-  error.code = IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED;
-  error.committed = true;
-  error.durabilityConfirmed = false;
-  error.identity_dir = dir;
-  if (creatorId) error.creator_id = creatorId;
-  return error;
 }
 
 function readCanonicalState(dir) {
@@ -286,6 +306,55 @@ function hasIdentityFiles(dir) {
 }
 
 /**
+ * Classify existing canonical identity files using stable machine-readable
+ * codes. Only an exact three-file set that passes loadIdentity may be called
+ * an existing identity. Partial state is incomplete; a present three-file set
+ * that fails verification is corrupt. No classification path modifies disk.
+ */
+function existingIdentityStateError(dir, state = readCanonicalState(dir)) {
+  const present = state.identityFiles.slice().sort();
+  if (present.length !== IDENTITY_FILE_NAMES.size) {
+    return identityStateError(
+      IDENTITY_INCOMPLETE,
+      `Identity in ${dir} is incomplete: found ${present.join(', ') || 'no canonical identity files'}, `
+      + `but a valid identity requires ${PRIVATE_KEY_FILE}, ${PUBLIC_KEY_FILE}, and ${IDENTITY_JSON_FILE}. `
+      + 'The existing files were not changed or removed.',
+      { identityVerified: false, identity_dir: dir },
+    );
+  }
+
+  try {
+    const identity = loadIdentity(dir);
+    if (!identity) {
+      return identityStateError(
+        IDENTITY_CORRUPT,
+        `Identity in ${dir} has all three canonical files but could not be verified. `
+        + 'The existing files were not changed or removed.',
+        { identityVerified: false, identity_dir: dir },
+      );
+    }
+    return identityStateError(
+      IDENTITY_ALREADY_EXISTS,
+      `Identity already exists in ${dir} and passed consistency verification. `
+      + 'Use loadIdentity() to access it; initialization never overwrites it.',
+      {
+        identityVerified: true,
+        identity_dir: dir,
+        creator_id: identity.creator_id,
+      },
+    );
+  } catch (cause) {
+    return identityStateError(
+      IDENTITY_CORRUPT,
+      `Identity in ${dir} has all three canonical files but failed consistency verification. `
+      + 'The existing files were not changed or removed; preserve them and recover manually.',
+      { identityVerified: false, identity_dir: dir },
+      cause,
+    );
+  }
+}
+
+/**
  * Publish the staging directory onto the canonical identity path with one
  * atomic directory rename. A rename never replaces a non-empty directory, so
  * the first transaction to land wins and every concurrent loser fails instead
@@ -305,7 +374,7 @@ function publishStagingDir(stagingDir, targetDir) {
   if (state.notDirectory) {
     throw new Error(`Identity path ${targetDir} exists and is not a directory — refusing to publish.`);
   }
-  if (state.identityFiles.length > 0) throw identityExistsError(targetDir);
+  if (state.identityFiles.length > 0) throw existingIdentityStateError(targetDir, state);
   if (state.entries.length > 0) {
     throw new Error(
       `Identity directory ${targetDir} is not empty and holds no identity files. The identity is `
@@ -317,7 +386,7 @@ function publishStagingDir(stagingDir, targetDir) {
       fs.rmdirSync(targetDir);
     } catch (error) {
       if (!error || error.code !== 'ENOENT') {
-        if (hasIdentityFiles(targetDir)) throw identityExistsError(targetDir);
+        if (hasIdentityFiles(targetDir)) throw existingIdentityStateError(targetDir);
         throw error;
       }
     }
@@ -327,7 +396,7 @@ function publishStagingDir(stagingDir, targetDir) {
   } catch (error) {
     if (error && ['ENOTEMPTY', 'EEXIST', 'EPERM', 'ENOTDIR'].includes(error.code)
         && hasIdentityFiles(targetDir)) {
-      throw identityExistsError(targetDir);
+      throw existingIdentityStateError(targetDir);
     }
     throw error;
   }
@@ -373,20 +442,12 @@ function initIdentity(displayName, identityDir = null, passphrase = null) {
   // created by the rename, and the rename never replaces a non-empty target.
   const state = readCanonicalState(dir);
   if (state.notDirectory) {
-    throw new Error(`Identity path ${dir} exists and is not a directory — refusing to initialize.`);
-  }
-  if (state.identityFiles.includes(IDENTITY_JSON_FILE)) {
-    throw new Error(
-      `Identity already exists in ${dir}: creator.json is present and is never overwritten. `
-      + 'Use loadIdentity() to access it, or remove the files to regenerate.',
-    );
+    const error = new Error(`Identity path ${dir} exists and is not a directory — refusing to initialize.`);
+    error.code = 'ENOTDIR';
+    throw error;
   }
   if (state.identityFiles.length > 0) {
-    throw new Error(
-      `Identity files already exist in ${dir} without a creator.json `
-      + `(${state.identityFiles.join(', ')}). An incomplete identity is not a valid identity; `
-      + 'remove the remnant files to regenerate.',
-    );
+    throw existingIdentityStateError(dir, state);
   }
   if (state.entries.length > 0) {
     throw new Error(
@@ -752,5 +813,9 @@ module.exports = {
   decryptPrivateKey,
   isEncryptedKey,
   CREATOR_ID_PREFIX,
+  IDENTITY_ALREADY_EXISTS,
+  IDENTITY_INCOMPLETE,
+  IDENTITY_CORRUPT,
   IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED,
+  IDENTITY_COMMITTED_INCONSISTENT,
 };
