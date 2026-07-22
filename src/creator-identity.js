@@ -298,6 +298,35 @@ function readCanonicalState(dir) {
   };
 }
 
+function ensureParentDirectory(parentDir) {
+  try {
+    fs.mkdirSync(parentDir, { recursive: true });
+    return;
+  } catch (error) {
+    // Node/filesystem combinations do not agree on the code returned by a
+    // recursive mkdir when an ancestor is a regular file: some report
+    // ENOTDIR, while others report EEXIST for the blocking component. Inspect
+    // the path as a filesystem fact and normalize only that exact condition;
+    // unrelated EEXIST failures remain untouched.
+    if (!error || error.code !== 'EEXIST') throw error;
+    try {
+      if (fs.statSync(parentDir).isDirectory()) return;
+    } catch (inspectionError) {
+      if (inspectionError && inspectionError.code === 'ENOTDIR') {
+        throw inspectionError;
+      }
+      throw error;
+    }
+    const notDirectory = new Error(
+      `Identity parent path ${parentDir} is not a directory — refusing to initialize.`,
+    );
+    notDirectory.code = 'ENOTDIR';
+    notDirectory.path = parentDir;
+    notDirectory.syscall = 'mkdir';
+    throw notDirectory;
+  }
+}
+
 function hasIdentityFiles(dir) {
   try {
     return fs.readdirSync(dir).some((name) => IDENTITY_FILE_NAMES.has(name));
@@ -435,7 +464,7 @@ function publishStagingDir(stagingDir, targetDir) {
 function initIdentity(displayName, identityDir = null, passphrase = null) {
   const dir = identityDir || defaultIdentityDir();
   const parentDir = path.dirname(dir);
-  fs.mkdirSync(parentDir, { recursive: true });
+  ensureParentDirectory(parentDir);
   cleanupStaleStagingDirs(parentDir);
 
   // Advisory pre-checks for clear messages. The authoritative no-clobber
