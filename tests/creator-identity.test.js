@@ -133,6 +133,22 @@ test('initIdentity: publishes into a not-yet-existing directory as one atomic re
   assert.deepEqual(stagingDirs(parentDir), []);
 });
 
+test('initIdentity: a non-directory ancestor reports ENOTDIR instead of unrelated EEXIST', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-identity-parent-blocker-'));
+  const blocker = path.join(root, 'blocker');
+  fs.writeFileSync(blocker, 'a regular file, not a directory');
+  try {
+    const failure = captureError(() =>
+      initIdentity('tester', path.join(blocker, 'identity')),
+    );
+    assert.equal(failure.code, 'ENOTDIR');
+    assert.equal(fs.readFileSync(blocker, 'utf8'), 'a regular file, not a directory');
+    assert.deepEqual(fs.readdirSync(root), ['blocker']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('initIdentity: refuses to overwrite existing keys and leaves files untouched', () => {
   const dir = tempIdentityDir();
   const first = initIdentity('first', dir);
