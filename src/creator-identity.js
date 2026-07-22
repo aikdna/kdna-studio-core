@@ -23,6 +23,31 @@ function defaultIdentityDir() {
 const PRIVATE_KEY_FILE = 'kdna.key';
 const PUBLIC_KEY_FILE = 'kdna.pub';
 const IDENTITY_JSON_FILE = 'creator.json';
+const PRIVATE_KEY_BACKUP_FILE = 'kdna.key.previous';
+
+// PBKDF2 iteration count for newly written key envelopes.
+// The envelope is self-describing: decryptPrivateKey() reads `iterations`
+// from the envelope itself, so raising the write-side cost parameter is
+// backward compatible — envelopes written at 100000 iterations keep
+// decrypting without any migration. New writes use 600000, matching the
+// OWASP recommendation for PBKDF2-HMAC-SHA256.
+const PBKDF2_ITERATIONS = 600000;
+
+/**
+ * Atomically replace `filePath` with `data`: write a sibling temp file,
+ * then rename over the destination. A crash or failure mid-write leaves
+ * the previous destination bytes intact. Same pattern as
+ * scripts/acquire-trusted-npm-release.js.
+ */
+function atomicWriteSync(filePath, data, options = {}) {
+  const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, data, { flag: 'wx', mode: options.mode || 0o600 });
+    fs.renameSync(temporary, filePath);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
+}
 
 /**
  * Compute the creator_id fingerprint from an Ed25519 public key PEM.
@@ -60,8 +85,27 @@ function initIdentity(displayName, identityDir = null, passphrase = null) {
     ? encryptPrivateKey(privateKey, passphrase)
     : privateKey;
 
-  fs.writeFileSync(privateKeyPath, privateKeyData, { mode: 0o600 });
-  fs.writeFileSync(publicKeyPath, publicKey, { mode: 0o644 });
+  // flag: 'wx' closes the TOCTOU gap between the existsSync check above and
+  // the write: if a key file appears in between, the write fails instead of
+  // silently overwriting an existing identity.
+  const existsError = () => new Error(
+    `Identity keys already exist in ${dir}. Use loadIdentity() to access them, or remove the files to regenerate.`,
+  );
+  let privateWritten = false;
+  let publicWritten = false;
+  try {
+    fs.writeFileSync(privateKeyPath, privateKeyData, { flag: 'wx', mode: 0o600 });
+    privateWritten = true;
+    fs.writeFileSync(publicKeyPath, publicKey, { flag: 'wx', mode: 0o644 });
+    publicWritten = true;
+  } catch (error) {
+    // Best-effort rollback of only the files this call created, so a failed
+    // init neither leaves a half-written keypair nor removes pre-existing keys.
+    if (privateWritten) fs.rmSync(privateKeyPath, { force: true });
+    if (publicWritten) fs.rmSync(publicKeyPath, { force: true });
+    if (error && error.code === 'EEXIST') throw existsError();
+    throw error;
+  }
 
   const creatorId = creatorFingerprint(publicKey);
   const identity = {
@@ -148,14 +192,14 @@ function signHumanLock(cardId, statement, judgmentFingerprint, identityDir = nul
 
 function encryptPrivateKey(pem, passphrase) {
   const salt = crypto.randomBytes(16);
-  const key = crypto.pbkdf2Sync(passphrase, salt, 100000, 32, 'sha256');
+  const key = crypto.pbkdf2Sync(passphrase, salt, PBKDF2_ITERATIONS, 32, 'sha256');
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   const ciphertext = Buffer.concat([cipher.update(Buffer.from(pem)), cipher.final()]);
   return JSON.stringify({
     encrypted: true,
     kdf: 'pbkdf2-sha256',
-    iterations: 100000,
+    iterations: PBKDF2_ITERATIONS,
     salt: salt.toString('base64'),
     iv: iv.toString('base64'),
     tag: cipher.getAuthTag().toString('base64'),
@@ -224,12 +268,7 @@ function rotateIdentity(passphrase = null, identityDir = null) {
   ].join('\n');
   const rotationSig = `ed25519:${crypto.sign(null, Buffer.from(rotationPayload), oldPrivatePem).toString('hex')}`;
 
-  // Save new keypair
   const newPrivData = passphrase ? encryptPrivateKey(newPriv, passphrase) : newPriv;
-  fs.writeFileSync(oldPrivPath, newPrivData, { mode: 0o600 });
-  fs.writeFileSync(oldPubPath, newPub, { mode: 0o644 });
-
-  // Update identity record
   const newCreatorId = creatorFingerprint(newPub);
   const identityJson = path.join(dir, IDENTITY_JSON_FILE);
   let idData = {};
@@ -241,15 +280,30 @@ function rotateIdentity(passphrase = null, identityDir = null) {
     public_key: identity.public_key,
     rotated_at: new Date().toISOString(),
     rotation_signature: rotationSig,
+    private_key_backup: PRIVATE_KEY_BACKUP_FILE,
   });
 
+  // Step 1 — back the old keypair up BEFORE anything is overwritten, and
+  // persist the previous_keys record while creator.json still describes the
+  // old identity. The raw on-disk private key bytes are copied as-is, so an
+  // encrypted key stays encrypted in the backup. All writes are atomic
+  // (temp file + rename), so a failure at any step leaves the old keypair
+  // fully usable.
+  const oldPrivBackupPath = path.join(dir, PRIVATE_KEY_BACKUP_FILE);
+  atomicWriteSync(oldPrivBackupPath, fs.readFileSync(oldPrivPath), { mode: 0o600 });
+  idData.previous_keys = previousKeys;
+  atomicWriteSync(identityJson, JSON.stringify(idData, null, 2), { mode: 0o644 });
+
+  // Step 2 — atomically replace the keypair with the new one.
+  atomicWriteSync(oldPrivPath, newPrivData, { mode: 0o600 });
+  atomicWriteSync(oldPubPath, newPub, { mode: 0o644 });
+
+  // Step 3 — atomically advance creator.json to the new identity.
   idData.creator_id = newCreatorId;
   idData.public_key = newPub;
   idData.rotated_at = new Date().toISOString();
   idData.encrypted = !!passphrase;
-  idData.previous_keys = previousKeys;
-
-  fs.writeFileSync(identityJson, JSON.stringify(idData, null, 2), { mode: 0o644 });
+  atomicWriteSync(identityJson, JSON.stringify(idData, null, 2), { mode: 0o644 });
 
   return { ...idData, creator_id: newCreatorId };
 }
