@@ -48,12 +48,37 @@
   identity or no valid identity, and the next init recovers without manual
   cleanup: staging remnants are removed only when they are provably
   transaction-owned (transaction naming shape, identity-files-only content)
-  and provably dead (owner pid gone, or older than a 60-second grace), and
-  anything not provably owned by the transaction is never touched.
+  and their owner process is provably dead, and anything not provably owned
+  by the transaction is never touched.
   Concurrent inits have exactly one winner — the first rename creates a
   non-empty directory and later renames fail instead of replacing it — and
   losers remove only their own staging, never the winner's identity. An
   existing complete identity is never overwritten.
+- Reclaim staging remnants by owner liveness, never by directory age. The
+  previous sweep treated any staging directory older than a 60-second grace
+  as dead and deleted it even when the owner pid encoded in its name was
+  still alive, so a slow or long-running init in another process could have
+  its in-flight transaction deleted under it. A remnant is now removed only
+  when its owner pid parses AND no live process holds it AND its contents
+  are provably identity-transaction files; a live owner's staging is left
+  untouched at any age, and remnants with unparseable owners or foreign
+  files fail safe and are never auto-deleted.
+- Give the identity transaction real commit semantics. The atomic directory
+  rename is the logical commit point: a failure before it leaves no identity
+  and is an ordinary, safely retryable init error. A failure of the
+  parent-directory fsync AFTER the rename was previously reported as an
+  ordinary init failure even though the complete identity already existed on
+  disk — the API said failure while the disk said success. That post-commit
+  durability failure now throws a stable machine-readable result instead:
+  `code: 'IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED'`, `committed: true`,
+  `durabilityConfirmed: false`, plus `identity_dir` and the re-verified
+  `creator_id`. The committed identity is re-checked through the full
+  three-file consistency verification before the result claims it, the
+  identity is never deleted or rolled back, a retry correctly reports that
+  the identity already exists, and the error carries no private key
+  material. These diagnostic fields are optional caller diagnostics, not
+  part of any protocol schema. The successful return value of
+  `initIdentity` is unchanged.
 - `loadIdentity` now requires the full canonical identity and verifies it:
   `kdna.pub` must be a parseable Ed25519 public key; `creator.json`'s
   `public_key` (when present) must be the same key as `kdna.pub`;
@@ -94,10 +119,10 @@
 ### Verification
 
 - `tests/creator-identity.test.js` exercises `src/creator-identity.js`
-  exclusively through its public exports — no source injection, no `fs`
-  patching. Crash coverage uses real subprocesses running the real
-  `initIdentity` export while a watcher thread SIGKILLs the process the
-  moment a commit phase becomes observable on the real filesystem:
+  through its public exports — no source injection. Crash coverage uses real
+  subprocesses running the real `initIdentity` export while a watcher thread
+  SIGKILLs the process the moment a commit phase becomes observable on the
+  real filesystem:
   - pre-commit kills after the `kdna.key` write, after the `kdna.pub`
     write, and after the `creator.json` write: the canonical directory
     never holds a subset of the identity files, no read path accepts the
@@ -108,6 +133,19 @@
   - four concurrent init subprocesses produce exactly one winner; losers
     fail with an explicit error and never overwrite or delete the winner's
     identity.
+- Staging reclamation coverage uses a real two-process fixture: a live child
+  process owns a provable staging remnant whose directory age is pushed past
+  any age threshold, and another process's init leaves the staging and its
+  staged files byte-for-byte intact; after the owner exits, the next sweep
+  reclaims the remnant. Remnants with unparseable owner pids or foreign
+  files are proven to survive the sweep untouched.
+- Commit-semantics coverage injects fsync faults precisely at the two commit
+  boundaries: a parent-directory fsync failure after the rename yields the
+  machine-readable committed result (canonical three files present,
+  `loadIdentity` and `signPayload` succeed, retry reports the existing
+  identity, no private key material anywhere in the error), and a
+  staging-fsync failure before the rename yields an ordinary error with no
+  canonical state and a directly retryable init.
 - Cross-tamper matrix: the `kdna.pub` of identity B placed in directory A,
   a `creator.json` naming a different public key than `kdna.pub`, a
   tampered `creator_id`, a deleted `kdna.pub`, a deleted private key, and a

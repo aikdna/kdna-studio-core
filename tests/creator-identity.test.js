@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
@@ -16,10 +16,12 @@ const {
   encryptPrivateKey,
   decryptPrivateKey,
   isEncryptedKey,
+  IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED,
 } = require('../src/creator-identity');
 
 const MODULE_PATH = path.join(__dirname, '..', 'src', 'creator-identity.js');
 const CRASH_CHILD = path.join(__dirname, 'identity-crash-child.js');
+const STAGING_HOLDER_CHILD = path.join(__dirname, 'identity-staging-holder-child.js');
 
 function tempIdentityDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-identity-'));
@@ -223,6 +225,178 @@ test('initIdentity: four concurrent subprocesses yield exactly one identity and 
   assert.throws(() => initIdentity('third', dir), /already exist/);
   assert.equal(loadIdentity(dir).creator_id, loaded.creator_id);
   assert.ok(verifySignature('still-winner', readKey(dir, 'kdna.pub'), signPayload('still-winner', dir)));
+  assert.deepEqual(stagingDirs(parentDir), []);
+});
+
+// ─── Staging remnant reclamation: liveness, never age ────────────────
+
+async function waitForFile(filePath, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (fs.existsSync(filePath)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.fail(`timed out waiting for ${filePath}`);
+}
+
+test('initIdentity: a live owner\'s staging is never reclaimed at any age; a dead owner\'s provable remnant is', async (t) => {
+  const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-live-staging-'));
+  t.after(() => fs.rmSync(parentDir, { recursive: true, force: true }));
+
+  // A real, live child process owns a provable staging remnant.
+  const holder = spawn(process.execPath, [STAGING_HOLDER_CHILD, parentDir], {
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let holderStderr = '';
+  holder.stderr.on('data', (chunk) => { holderStderr += chunk; });
+  const holderExited = new Promise((resolve) => {
+    holder.on('close', (code, signal) => resolve({ code, signal }));
+  });
+  await waitForFile(path.join(parentDir, '.holder-ready'));
+  const stagingName = fs.readFileSync(path.join(parentDir, '.holder-ready'), 'utf8');
+  const stagingDir = path.join(parentDir, stagingName);
+  assert.match(stagingName, new RegExp(`^\\.kdna-init-${holder.pid}-`));
+  assert.deepEqual(fs.readdirSync(stagingDir).sort(), ['kdna.key', 'kdna.pub']);
+
+  // Make the remnant look far older than any age-based grace period: an age
+  // threshold must never override the fact that the owner is alive. Windows
+  // cannot always update directory timestamps; the liveness assertion does
+  // not depend on the age adjustment succeeding.
+  const longAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  try { fs.utimesSync(stagingDir, longAgo, longAgo); } catch { /* best effort */ }
+
+  // Another init sweeps the same parent directory. The live owner's staging
+  // and its staged files survive byte-for-byte.
+  initIdentity('sweeper', path.join(parentDir, 'identity'));
+  assert.deepEqual(fs.readdirSync(stagingDir).sort(), ['kdna.key', 'kdna.pub']);
+  assert.equal(readKey(stagingDir, 'kdna.key'), 'held-private-key-placeholder');
+  assert.equal(readKey(stagingDir, 'kdna.pub'), 'held-public-key-placeholder');
+
+  // Once the owner process is dead, the provable remnant is reclaimed by the
+  // next sweep.
+  holder.kill('SIGTERM');
+  await holderExited;
+  assert.equal(holderStderr, '');
+  initIdentity('sweeper-2', path.join(parentDir, 'identity-2'));
+  assert.equal(fs.existsSync(stagingDir), false);
+});
+
+test('initIdentity: remnants with unparseable owners or foreign files fail safe and are never auto-removed', () => {
+  const { parentDir, dir } = tempIdentityParent();
+  // A real dead pid: spawned, exited, and reaped synchronously.
+  const deadPid = spawnSync(process.execPath, ['-e', ''], { shell: false }).pid;
+  assert.ok(Number.isSafeInteger(deadPid));
+
+  const unparseable = path.join(parentDir, '.kdna-init-notapid-x.staging.d');
+  fs.mkdirSync(unparseable);
+  fs.writeFileSync(path.join(unparseable, 'kdna.key'), 'orphaned');
+
+  const foreign = path.join(parentDir, `.kdna-init-${deadPid}-x.staging.d`);
+  fs.mkdirSync(foreign);
+  fs.writeFileSync(path.join(foreign, 'notes.txt'), 'user data');
+
+  const provable = path.join(parentDir, `.kdna-init-${deadPid}-y.staging.d`);
+  fs.mkdirSync(provable);
+  fs.writeFileSync(path.join(provable, 'kdna.pub'), 'orphaned');
+
+  initIdentity('tester', dir);
+
+  // Ownership unproven or content foreign: left alone, never auto-deleted.
+  assert.equal(readKey(unparseable, 'kdna.key'), 'orphaned');
+  assert.equal(readKey(foreign, 'notes.txt'), 'user data');
+  // Dead owner + provable transaction content: reclaimed.
+  assert.equal(fs.existsSync(provable), false);
+});
+
+// ─── Commit-point semantics: the rename is the logical commit ────────
+
+test('initIdentity: a parent-directory fsync failure after the commit rename reports a committed identity, never a plain failure', () => {
+  const { parentDir, dir } = tempIdentityParent();
+  const realOpenSync = fs.openSync;
+  const injected = new Error('injected parent fsync failure');
+  injected.code = 'EIO';
+  // Precise post-commit injection: the only (parentDir, 'r') open in the
+  // whole transaction is the parent-directory fsync after the rename.
+  fs.openSync = function openSync(target, flags, mode) {
+    if (flags === 'r' && target === parentDir) throw injected;
+    return realOpenSync.call(fs, target, flags, mode);
+  };
+  let failure = null;
+  try {
+    initIdentity('durability', dir);
+  } catch (error) {
+    failure = error;
+  } finally {
+    fs.openSync = realOpenSync;
+  }
+
+  // The caller receives a stable, machine-readable committed state — not an
+  // ordinary initialization failure and not an "already exists" report.
+  assert.ok(failure);
+  assert.equal(failure.code, IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED);
+  assert.equal(failure.committed, true);
+  assert.equal(failure.durabilityConfirmed, false);
+  assert.equal(failure.identity_dir, dir);
+  assert.doesNotMatch(failure.message, /already exist/);
+  assert.match(failure.message, /committed/);
+  assert.match(failure.message, /durability/);
+
+  // The identity is on disk, complete, and passes every read path — the API
+  // must not imply that nothing was created.
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['creator.json', 'kdna.key', 'kdna.pub']);
+  const loaded = loadIdentity(dir);
+  assert.ok(loaded);
+  assert.equal(failure.creator_id, loaded.creator_id);
+  assert.ok(verifySignature('committed', readKey(dir, 'kdna.pub'), signPayload('committed', dir)));
+
+  // The error never carries private key material, in any field.
+  assert.equal(failure.message.includes('PRIVATE KEY'), false);
+  assert.equal(failure.stack.includes('PRIVATE KEY'), false);
+  assert.equal(JSON.stringify(failure).includes('PRIVATE KEY'), false);
+  assert.equal(JSON.stringify(failure).includes(readKey(dir, 'kdna.key')), false);
+
+  // Nothing was rolled back: a retry sees the committed identity and fails
+  // closed instead of re-creating it.
+  assert.throws(() => initIdentity('retry', dir), /already exist/);
+  assert.equal(loadIdentity(dir).creator_id, loaded.creator_id);
+  assert.deepEqual(stagingDirs(parentDir), []);
+});
+
+test('initIdentity: a pre-commit failure publishes nothing and init is safely retryable', () => {
+  const { parentDir, dir } = tempIdentityParent();
+  const realOpenSync = fs.openSync;
+  const injected = new Error('injected staging fsync failure');
+  injected.code = 'EIO';
+  // Precise pre-commit injection: the staging-directory fsync before the
+  // rename is the only 'r' open of a .kdna-init-* path.
+  fs.openSync = function openSync(target, flags, mode) {
+    if (flags === 'r' && path.basename(target).startsWith('.kdna-init-')) throw injected;
+    return realOpenSync.call(fs, target, flags, mode);
+  };
+  let failure = null;
+  try {
+    initIdentity('pre-commit', dir);
+  } catch (error) {
+    failure = error;
+  } finally {
+    fs.openSync = realOpenSync;
+  }
+
+  // The failure happened before the commit rename: an ordinary error with no
+  // committed state, and nothing on the canonical path.
+  assert.ok(failure);
+  assert.equal(failure.code, 'EIO');
+  assert.equal(failure.committed, undefined);
+  assert.equal(fs.existsSync(dir), false);
+  assert.equal(loadIdentity(dir), null);
+  assert.equal(loadPublicKey(dir), null);
+  assert.throws(() => signPayload('x', dir), /No private key found/);
+
+  // The same call succeeds once the fault is gone — pre-commit failures are
+  // always safe to retry.
+  const identity = initIdentity('retried', dir);
+  assert.equal(loadIdentity(dir).creator_id, identity.creator_id);
+  assert.ok(verifySignature('retried', readKey(dir, 'kdna.pub'), signPayload('retried', dir)));
   assert.deepEqual(stagingDirs(parentDir), []);
 });
 

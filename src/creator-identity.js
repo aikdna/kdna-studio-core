@@ -42,10 +42,10 @@ const IDENTITY_FILE_NAMES = new Set([PRIVATE_KEY_FILE, PUBLIC_KEY_FILE, IDENTITY
 // which is what makes a leftover staging directory provably transaction-owned.
 const STAGING_DIR_PREFIX = '.kdna-init-';
 const STAGING_DIR_SUFFIX = '.staging.d';
-// A staging remnant whose owner pid is still alive may belong to a concurrent
-// init and is never touched. Without a live owner, a remnant younger than this
-// grace period is also left alone; anything older is provably dead state.
-const STAGING_REMNANT_GRACE_MS = 60 * 1000;
+// A staging remnant is removed only when it is provably transaction-owned
+// AND its owner process is provably dead. Age is never evidence of death:
+// a remnant whose owner pid is still alive belongs to a live (concurrent or
+// long-running) init and is left untouched no matter how old it is.
 
 // PBKDF2 iteration count for newly written key envelopes. 600000 matches the
 // OWASP recommendation for PBKDF2-HMAC-SHA256 and is supported by the
@@ -144,8 +144,13 @@ function isProvableStagingRemnant(absolute) {
 /**
  * Remove stale staging remnants from interrupted transactions so they cannot
  * accumulate. A remnant is removed only when it is provably transaction-owned
- * AND provably dead: its owner pid is gone, or it is older than the grace
- * period. Live owners (concurrent inits) are never disturbed.
+ * AND its owner is provably dead: the owner pid encoded in the directory name
+ * parses and no live process holds it. A live owner — a concurrent or simply
+ * long-running init in another process — is never disturbed, regardless of
+ * the remnant's age; a directory age threshold can never override the fact
+ * that the owner is alive. Remnants whose owner pid does not parse, or whose
+ * contents are not provably identity-transaction files, fail safe: they are
+ * left alone rather than auto-deleted.
  */
 function cleanupStaleStagingDirs(parentDir) {
   let entries;
@@ -158,15 +163,8 @@ function cleanupStaleStagingDirs(parentDir) {
     if (!entry.isDirectory() || !isStagingDirName(entry.name)) continue;
     const absolute = path.join(parentDir, entry.name);
     const ownerPid = stagingOwnerPid(entry.name);
-    let dead = ownerPid !== null && ownerPid !== process.pid && !processAlive(ownerPid);
-    if (!dead) {
-      try {
-        dead = Date.now() - fs.statSync(absolute).mtimeMs > STAGING_REMNANT_GRACE_MS;
-      } catch {
-        dead = false;
-      }
-    }
-    if (!dead) continue;
+    if (ownerPid === null) continue;
+    if (processAlive(ownerPid)) continue;
     if (isProvableStagingRemnant(absolute)) {
       fs.rmSync(absolute, { recursive: true, force: true });
     }
@@ -215,6 +213,49 @@ function identityExistsError(dir) {
   );
 }
 
+// Stable machine-readable result code for the post-commit durability failure:
+// the atomic rename already published the complete identity, but the
+// parent-directory fsync that would confirm durability failed. This is NOT an
+// initialization failure and must never be reported as one — the identity
+// exists on disk, must not be deleted or rolled back, and a retry will (and
+// should) report that the identity already exists.
+const IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED = 'IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED';
+
+/**
+ * Build the error for a post-commit parent-directory fsync failure. The
+ * committed identity is re-verified through the full three-file consistency
+ * checks before the error claims it, so the machine-readable committed state
+ * is only ever attached to an identity that actually loads. The error carries
+ * public diagnostic fields only — never any private key material.
+ */
+function committedDurabilityError(dir, cause) {
+  let creatorId = null;
+  try {
+    const loaded = loadIdentity(dir);
+    creatorId = loaded && loaded.creator_id;
+  } catch {
+    creatorId = null;
+  }
+  const causeCode = cause && cause.code ? cause.code : 'unknown error';
+  const error = new Error(
+    `Identity in ${dir} is committed: the atomic rename published the complete three-file identity`
+    + (creatorId
+      ? ` (creator_id ${creatorId}) and it passed the three-file consistency verification`
+      : '')
+    + `, but confirming durability of the parent directory failed (${causeCode}). `
+    + 'The identity is on disk — do not treat this as "nothing was created", '
+    + 'do not delete the files, and do not retry as a fresh initialization; '
+    + 'use loadIdentity() to access the identity.',
+    { cause },
+  );
+  error.code = IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED;
+  error.committed = true;
+  error.durabilityConfirmed = false;
+  error.identity_dir = dir;
+  if (creatorId) error.creator_id = creatorId;
+  return error;
+}
+
 function readCanonicalState(dir) {
   let entries;
   try {
@@ -251,6 +292,13 @@ function hasIdentityFiles(dir) {
  * of overwriting the winner. An empty placeholder directory (e.g. created by
  * the caller beforehand) is removed first; a crash between that removal and
  * the rename leaves no identity at all, which the next init handles normally.
+ *
+ * The rename is the logical commit point. A failure before the rename leaves
+ * the canonical path without identity files, so init fails as an ordinary,
+ * safely retryable error. A failure of the parent-directory fsync AFTER the
+ * rename is a different result, not a failure: the identity is committed on
+ * disk, so it is reported as a committed-but-durability-unconfirmed state
+ * (see committedDurabilityError) and is never deleted or rolled back.
  */
 function publishStagingDir(stagingDir, targetDir) {
   const state = readCanonicalState(targetDir);
@@ -283,7 +331,11 @@ function publishStagingDir(stagingDir, targetDir) {
     }
     throw error;
   }
-  fsyncDirectorySync(path.dirname(targetDir));
+  try {
+    fsyncDirectorySync(path.dirname(targetDir));
+  } catch (error) {
+    throw committedDurabilityError(targetDir, error);
+  }
 }
 
 /**
@@ -294,14 +346,21 @@ function publishStagingDir(stagingDir, targetDir) {
  * The three identity files commit as one transaction: they are written and
  * fsynced inside a mode-0700 sibling staging directory, the staging directory
  * is fsynced, and a single atomic directory rename publishes the set onto the
- * canonical path (followed by a parent-directory fsync). Before the rename
- * the canonical path holds none of the identity files; after it, all three.
- * A process killed at any point leaves either a complete, mutually consistent
- * identity or no valid identity, and the next init recovers without manual
- * cleanup: provable staging remnants are removed, and anything not provably
- * owned by the transaction is never touched. An existing identity is never
- * overwritten — the rename fails rather than replacing a non-empty directory,
- * so a racing init cannot clobber a winner.
+ * canonical path. The rename is the logical commit point: before it the
+ * canonical path holds none of the identity files and any failure is an
+ * ordinary, safely retryable init error; after it the identity exists. If the
+ * post-commit parent-directory fsync fails, initIdentity throws a
+ * machine-readable committed result (code
+ * IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED, committed: true) — the identity
+ * is on disk and re-verified, only its durability confirmation failed; it is
+ * never deleted or rolled back. A process killed at any point leaves either
+ * a complete, mutually consistent identity or no valid identity, and the
+ * next init recovers without manual cleanup: provable staging remnants of
+ * provably dead owner processes are removed, live owners are never disturbed
+ * regardless of remnant age, and anything not provably owned by the
+ * transaction is never touched. An existing identity is never overwritten —
+ * the rename fails rather than replacing a non-empty directory, so a racing
+ * init cannot clobber a winner.
  */
 function initIdentity(displayName, identityDir = null, passphrase = null) {
   const dir = identityDir || defaultIdentityDir();
@@ -693,4 +752,5 @@ module.exports = {
   decryptPrivateKey,
   isEncryptedKey,
   CREATOR_ID_PREFIX,
+  IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED,
 };
