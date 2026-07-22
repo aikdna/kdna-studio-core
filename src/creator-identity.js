@@ -11,6 +11,14 @@
  * Studio Core does not provide identity key rotation. The identity directory
  * holds exactly one identity: kdna.key, kdna.pub, and creator.json either form
  * one mutually consistent identity or are not accepted as an identity at all.
+ *
+ * Canonical identity = the three-file set {kdna.key, kdna.pub, creator.json}.
+ * initIdentity publishes that set as one atomic directory transaction: the
+ * files are written and fsynced inside a mode-0700 sibling staging directory,
+ * and a single directory rename moves the staging directory onto the canonical
+ * path. The canonical path therefore never holds a subset of the identity
+ * files — a crash leaves either no identity or a complete one — and the first
+ * rename to land wins, so concurrent inits cannot overwrite each other.
  */
 
 const crypto = require('crypto');
@@ -27,33 +35,31 @@ function defaultIdentityDir() {
 const PRIVATE_KEY_FILE = 'kdna.key';
 const PUBLIC_KEY_FILE = 'kdna.pub';
 const IDENTITY_JSON_FILE = 'creator.json';
+const IDENTITY_FILE_NAMES = new Set([PRIVATE_KEY_FILE, PUBLIC_KEY_FILE, IDENTITY_JSON_FILE]);
+
+// Staging sibling directory naming. Only the identity transaction creates
+// directories with this shape, and it writes no other file names into them,
+// which is what makes a leftover staging directory provably transaction-owned.
+const STAGING_DIR_PREFIX = '.kdna-init-';
+const STAGING_DIR_SUFFIX = '.staging.d';
+// A staging remnant whose owner pid is still alive may belong to a concurrent
+// init and is never touched. Without a live owner, a remnant younger than this
+// grace period is also left alone; anything older is provably dead state.
+const STAGING_REMNANT_GRACE_MS = 60 * 1000;
 
 // PBKDF2 iteration count for newly written key envelopes. 600000 matches the
 // OWASP recommendation for PBKDF2-HMAC-SHA256 and is supported by the
 // pbkdf2Sync implementations of every supported runtime (Node 18, 22, 24;
 // engines: >=18).
-//
-// The envelope carries its own `iterations` value so envelopes written at
-// 100000 iterations keep decrypting without any migration. That
-// self-description is a compatibility mechanism, not a security property:
-// decryptPrivateKey() strictly validates the envelope (exact KDF name,
-// bounded iteration count, strict base64 field lengths) before deriving a
-// key, and rejects anything outside the contract below.
 const PBKDF2_ITERATIONS = 600000;
-
-// Accepted iteration range for envelopes being decrypted.
-// Minimum 1: the count is a cost parameter, not a correctness parameter, so
-// any positive value must still decrypt (legacy envelopes included).
-// Maximum 4,000,000: PBKDF2-HMAC-SHA256 runs at roughly 1M iterations per
-// second on modest hardware, so the clamp bounds a single decrypt call to a
-// few seconds worst case. Envelopes carrying absurd counts (2^31 and beyond,
-// or negative/fractional values) are rejected before any work instead of
-// turning decryptPrivateKey into a CPU-exhaustion vector. The clamp follows
-// the same reasoning as the parameter bounds applied to Core's Argon2id
-// profile; 4M is ~6.7x the current write-side cost, leaving headroom for
-// future increases without permitting hostile values.
-const PBKDF2_MIN_ITERATIONS = 1;
-const PBKDF2_MAX_ITERATIONS = 4000000;
+// Historical envelopes were written at 100000 iterations. The envelope
+// carries its own `iterations` value so those envelopes keep decrypting
+// without any migration. That self-description is a compatibility mechanism
+// for exactly the two counts that were ever written — it is not a license
+// for arbitrary values: decryptPrivateKey() rejects every other iteration
+// count before the KDF runs.
+const PBKDF2_LEGACY_ITERATIONS = 100000;
+const PBKDF2_ACCEPTED_ITERATIONS = new Set([PBKDF2_LEGACY_ITERATIONS, PBKDF2_ITERATIONS]);
 
 const ENVELOPE_KDF = 'pbkdf2-sha256';
 const ENVELOPE_SALT_BYTES = 16;
@@ -63,30 +69,6 @@ const ENVELOPE_TAG_BYTES = 16; // GCM authentication tag
 // magnitude larger are never legitimate. The cap keeps hostile envelopes
 // from forcing large buffer allocations and is enforced before the KDF runs.
 const ENVELOPE_MAX_CIPHERTEXT_BYTES = 64 * 1024;
-
-/**
- * Write `data` to `filePath` only if `filePath` does not already exist:
- * write and fsync a sibling temp file, then hard-link it into place.
- * link(2) is atomic and fails with EEXIST instead of overwriting, so an
- * existing identity file is never clobbered — even by a caller that races
- * the advisory existence checks in initIdentity(). The temp file is fsynced
- * before the link so the linked bytes are durable.
- */
-function writeNewFileSync(filePath, data, mode) {
-  const temporary = `${filePath}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  try {
-    const fd = fs.openSync(temporary, 'wx', mode);
-    try {
-      fs.writeFileSync(fd, data);
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
-    fs.linkSync(temporary, filePath);
-  } finally {
-    fs.rmSync(temporary, { force: true });
-  }
-}
 
 /**
  * fsync a directory so the file entries created inside it are durable.
@@ -110,11 +92,121 @@ function fsyncDirectorySync(dir) {
 }
 
 /**
- * Compute the creator_id fingerprint from an Ed25519 public key PEM.
+ * Write one identity file inside this transaction's own staging directory.
+ * The staging directory is exclusively owned by this call, so a plain 'wx'
+ * create plus fsync is sufficient; atomicity across the three files comes
+ * from the directory rename that publishes them together.
+ */
+function writeStagedFileSync(stagingDir, name, data, mode) {
+  const fd = fs.openSync(path.join(stagingDir, name), 'wx', mode);
+  try {
+    fs.writeFileSync(fd, data);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function isStagingDirName(name) {
+  return name.startsWith(STAGING_DIR_PREFIX) && name.endsWith(STAGING_DIR_SUFFIX);
+}
+
+function stagingOwnerPid(name) {
+  const middle = name.slice(STAGING_DIR_PREFIX.length, -STAGING_DIR_SUFFIX.length);
+  const pid = Number(middle.split('-')[0]);
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
+}
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !!(error && error.code === 'EPERM');
+  }
+}
+
+/**
+ * A staging remnant is provably transaction-owned — and therefore safe to
+ * remove — only when it carries the transaction naming shape and contains
+ * nothing but identity files. Anything else is user state and is left alone.
+ */
+function isProvableStagingRemnant(absolute) {
+  let entries;
+  try {
+    entries = fs.readdirSync(absolute, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  return entries.every((entry) => entry.isFile() && IDENTITY_FILE_NAMES.has(entry.name));
+}
+
+/**
+ * Remove stale staging remnants from interrupted transactions so they cannot
+ * accumulate. A remnant is removed only when it is provably transaction-owned
+ * AND provably dead: its owner pid is gone, or it is older than the grace
+ * period. Live owners (concurrent inits) are never disturbed.
+ */
+function cleanupStaleStagingDirs(parentDir) {
+  let entries;
+  try {
+    entries = fs.readdirSync(parentDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !isStagingDirName(entry.name)) continue;
+    const absolute = path.join(parentDir, entry.name);
+    const ownerPid = stagingOwnerPid(entry.name);
+    let dead = ownerPid !== null && ownerPid !== process.pid && !processAlive(ownerPid);
+    if (!dead) {
+      try {
+        dead = Date.now() - fs.statSync(absolute).mtimeMs > STAGING_REMNANT_GRACE_MS;
+      } catch {
+        dead = false;
+      }
+    }
+    if (!dead) continue;
+    if (isProvableStagingRemnant(absolute)) {
+      fs.rmSync(absolute, { recursive: true, force: true });
+    }
+  }
+}
+
+/**
+ * Compute the creator_id fingerprint from a normalized Ed25519 public key PEM.
  */
 function creatorFingerprint(publicKeyPem) {
   const hash = crypto.createHash('sha256').update(publicKeyPem).digest('hex');
   return `${CREATOR_ID_PREFIX}${hash}`;
+}
+
+/**
+ * Parse a PEM public key and return its canonical SPKI/PEM spelling, so two
+ * spellings of the same key compare equal and non-Ed25519 or unparseable
+ * material is rejected instead of hashed.
+ */
+function normalizePublicKey(pem, source) {
+  let key;
+  try {
+    key = crypto.createPublicKey(pem);
+  } catch {
+    throw new Error(`Public key from ${source} is not a parseable PEM public key — the identity is corrupt.`);
+  }
+  if (key.asymmetricKeyType !== 'ed25519') {
+    throw new Error(
+      `Public key from ${source} is ${key.asymmetricKeyType}, not ed25519 — the identity is corrupt.`,
+    );
+  }
+  return key.export({ type: 'spki', format: 'pem' });
+}
+
+function derivePublicKeyFromPrivate(privateKeyPem) {
+  const key = crypto.createPrivateKey(privateKeyPem);
+  if (key.asymmetricKeyType !== 'ed25519') {
+    throw new Error('not an ed25519 private key');
+  }
+  return crypto.createPublicKey(key).export({ type: 'spki', format: 'pem' });
 }
 
 function identityExistsError(dir) {
@@ -123,42 +215,124 @@ function identityExistsError(dir) {
   );
 }
 
+function readCanonicalState(dir) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      return { exists: false, notDirectory: false, entries: [], identityFiles: [] };
+    }
+    if (error && error.code === 'ENOTDIR') {
+      return { exists: true, notDirectory: true, entries: [], identityFiles: [] };
+    }
+    throw error;
+  }
+  return {
+    exists: true,
+    notDirectory: false,
+    entries,
+    identityFiles: entries.filter((name) => IDENTITY_FILE_NAMES.has(name)),
+  };
+}
+
+function hasIdentityFiles(dir) {
+  try {
+    return fs.readdirSync(dir).some((name) => IDENTITY_FILE_NAMES.has(name));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Publish the staging directory onto the canonical identity path with one
+ * atomic directory rename. A rename never replaces a non-empty directory, so
+ * the first transaction to land wins and every concurrent loser fails instead
+ * of overwriting the winner. An empty placeholder directory (e.g. created by
+ * the caller beforehand) is removed first; a crash between that removal and
+ * the rename leaves no identity at all, which the next init handles normally.
+ */
+function publishStagingDir(stagingDir, targetDir) {
+  const state = readCanonicalState(targetDir);
+  if (state.notDirectory) {
+    throw new Error(`Identity path ${targetDir} exists and is not a directory — refusing to publish.`);
+  }
+  if (state.identityFiles.length > 0) throw identityExistsError(targetDir);
+  if (state.entries.length > 0) {
+    throw new Error(
+      `Identity directory ${targetDir} is not empty and holds no identity files. The identity is `
+      + 'published as one atomic directory, so init refuses to merge into a directory with foreign files.',
+    );
+  }
+  if (state.exists) {
+    try {
+      fs.rmdirSync(targetDir);
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') {
+        if (hasIdentityFiles(targetDir)) throw identityExistsError(targetDir);
+        throw error;
+      }
+    }
+  }
+  try {
+    fs.renameSync(stagingDir, targetDir);
+  } catch (error) {
+    if (error && ['ENOTEMPTY', 'EEXIST', 'EPERM', 'ENOTDIR'].includes(error.code)
+        && hasIdentityFiles(targetDir)) {
+      throw identityExistsError(targetDir);
+    }
+    throw error;
+  }
+  fsyncDirectorySync(path.dirname(targetDir));
+}
+
 /**
  * Generate a new Ed25519 keypair and persist to identityDir.
  * If passphrase is provided, the private key is encrypted with AES-256-GCM
  * (key derived via PBKDF2-SHA256). Without passphrase, plaintext with 0o600.
  *
- * The three identity files are committed as one transaction: kdna.key,
- * kdna.pub, then creator.json as the final commit record. Every write is
- * no-clobber (an existing creator.json is never overwritten) and any
- * write/link/fsync failure rolls back every file this call created. A
- * process killed between commit boundaries leaves either a complete,
- * mutually consistent identity or no valid identity: remnant key files
- * without a creator.json are rejected here and by loadIdentity()/signPayload().
+ * The three identity files commit as one transaction: they are written and
+ * fsynced inside a mode-0700 sibling staging directory, the staging directory
+ * is fsynced, and a single atomic directory rename publishes the set onto the
+ * canonical path (followed by a parent-directory fsync). Before the rename
+ * the canonical path holds none of the identity files; after it, all three.
+ * A process killed at any point leaves either a complete, mutually consistent
+ * identity or no valid identity, and the next init recovers without manual
+ * cleanup: provable staging remnants are removed, and anything not provably
+ * owned by the transaction is never touched. An existing identity is never
+ * overwritten — the rename fails rather than replacing a non-empty directory,
+ * so a racing init cannot clobber a winner.
  */
 function initIdentity(displayName, identityDir = null, passphrase = null) {
   const dir = identityDir || defaultIdentityDir();
-  fs.mkdirSync(dir, { recursive: true });
-
-  const privateKeyPath = path.join(dir, PRIVATE_KEY_FILE);
-  const publicKeyPath = path.join(dir, PUBLIC_KEY_FILE);
-  const identityJsonPath = path.join(dir, IDENTITY_JSON_FILE);
+  const parentDir = path.dirname(dir);
+  fs.mkdirSync(parentDir, { recursive: true });
+  cleanupStaleStagingDirs(parentDir);
 
   // Advisory pre-checks for clear messages. The authoritative no-clobber
-  // guarantee is the EEXIST failure of the hard-link commit below, which
-  // closes the TOCTOU gap between these checks and the writes.
-  if (fs.existsSync(identityJsonPath)) {
+  // guarantee is the atomic publish: the canonical directory is only ever
+  // created by the rename, and the rename never replaces a non-empty target.
+  const state = readCanonicalState(dir);
+  if (state.notDirectory) {
+    throw new Error(`Identity path ${dir} exists and is not a directory — refusing to initialize.`);
+  }
+  if (state.identityFiles.includes(IDENTITY_JSON_FILE)) {
     throw new Error(
       `Identity already exists in ${dir}: creator.json is present and is never overwritten. `
       + 'Use loadIdentity() to access it, or remove the files to regenerate.',
     );
   }
-  const remnants = [privateKeyPath, publicKeyPath].filter((p) => fs.existsSync(p));
-  if (remnants.length > 0) {
+  if (state.identityFiles.length > 0) {
     throw new Error(
       `Identity files already exist in ${dir} without a creator.json `
-      + `(${remnants.map((p) => path.basename(p)).join(', ')}). An incomplete identity left by an `
-      + 'interrupted init is not a valid identity; remove the remnant files to regenerate.',
+      + `(${state.identityFiles.join(', ')}). An incomplete identity is not a valid identity; `
+      + 'remove the remnant files to regenerate.',
+    );
+  }
+  if (state.entries.length > 0) {
+    throw new Error(
+      `Identity directory ${dir} is not empty and holds no identity files. The identity is `
+      + 'published as one atomic directory, so init refuses to merge into a directory with foreign files.',
     );
   }
 
@@ -176,7 +350,7 @@ function initIdentity(displayName, identityDir = null, passphrase = null) {
     creator_id: creatorId,
     display_name: displayName || '',
     public_key: publicKey,
-    public_key_path: publicKeyPath,
+    public_key_path: path.join(dir, PUBLIC_KEY_FILE),
     identity_dir: dir,
     created_at: new Date().toISOString(),
     verified: false,
@@ -184,27 +358,24 @@ function initIdentity(displayName, identityDir = null, passphrase = null) {
   };
   const identityJson = JSON.stringify(identity, null, 2);
 
-  const created = [];
+  const stagingName = `${STAGING_DIR_PREFIX}${process.pid}-${Date.now().toString(36)}-`
+    + `${crypto.randomBytes(6).toString('hex')}${STAGING_DIR_SUFFIX}`;
+  const stagingDir = path.join(parentDir, stagingName);
+  fs.mkdirSync(stagingDir, { mode: 0o700 });
   try {
-    writeNewFileSync(privateKeyPath, privateKeyData, 0o600);
-    created.push(privateKeyPath);
-    writeNewFileSync(publicKeyPath, publicKey, 0o644);
-    created.push(publicKeyPath);
-    // creator.json is the commit record: once it exists, the directory holds
-    // a complete identity; before it exists, the directory holds none.
-    writeNewFileSync(identityJsonPath, identityJson, 0o644);
-    created.push(identityJsonPath);
-    fsyncDirectorySync(dir);
-  } catch (error) {
-    // Roll back every file this call created — including creator.json — so a
-    // failed init never leaves a half-written identity behind. Files that
-    // already existed are never touched: a path is only in `created` after
-    // this call's own link succeeded.
-    for (const createdPath of created.reverse()) {
-      fs.rmSync(createdPath, { force: true });
-    }
-    if (error && error.code === 'EEXIST') throw identityExistsError(dir);
-    throw error;
+    writeStagedFileSync(stagingDir, PRIVATE_KEY_FILE, privateKeyData, 0o600);
+    writeStagedFileSync(stagingDir, PUBLIC_KEY_FILE, publicKey, 0o644);
+    // creator.json is written last inside staging, but the commit point is
+    // the rename: all three files become visible together, or none do.
+    writeStagedFileSync(stagingDir, IDENTITY_JSON_FILE, identityJson, 0o644);
+    fsyncDirectorySync(stagingDir);
+    publishStagingDir(stagingDir, dir);
+  } finally {
+    // After a successful publish the staging path no longer exists (it was
+    // renamed); this removes only this transaction's own staging copy after
+    // a failure. It never touches the canonical directory or another
+    // transaction's staging.
+    fs.rmSync(stagingDir, { recursive: true, force: true });
   }
 
   return identity;
@@ -212,16 +383,19 @@ function initIdentity(displayName, identityDir = null, passphrase = null) {
 
 /**
  * Load an existing creator identity from disk.
- * Returns null only when no creator.json exists. A creator.json that is
- * unparseable, has no usable public key, or whose creator_id does not match
- * the public key fingerprint is corrupt or mismatched state and is rejected
- * with an error instead of being silently loaded or silently treated as
- * "no identity".
+ * Returns null only when no creator.json exists. Anything else that is not a
+ * complete, mutually consistent three-file identity — missing kdna.pub or
+ * kdna.key, unparseable creator.json, a creator.json public key that differs
+ * from kdna.pub, a creator_id that does not match the normalized kdna.pub
+ * fingerprint, or a plaintext private key that derives a different public
+ * key — is rejected with an error instead of being silently loaded or
+ * silently treated as "no identity".
  */
 function loadIdentity(identityDir = null) {
   const dir = identityDir || defaultIdentityDir();
   const identityJsonPath = path.join(dir, IDENTITY_JSON_FILE);
   const publicKeyPath = path.join(dir, PUBLIC_KEY_FILE);
+  const privateKeyFilePath = path.join(dir, PRIVATE_KEY_FILE);
 
   if (!fs.existsSync(identityJsonPath)) return null;
 
@@ -239,26 +413,64 @@ function loadIdentity(identityDir = null) {
     );
   }
 
-  // Public key material may live in creator.json itself or only in kdna.pub
-  // (it may have been deleted from the JSON for security).
-  const publicKeyPem = typeof identity.public_key === 'string' && identity.public_key
-    ? identity.public_key
-    : (fs.existsSync(publicKeyPath) ? fs.readFileSync(publicKeyPath, 'utf8') : null);
-  if (!publicKeyPem) {
+  if (!fs.existsSync(publicKeyPath)) {
     throw new Error(
-      `Identity in ${dir} is incomplete: creator.json carries no public key and ${PUBLIC_KEY_FILE} is missing.`,
+      `Identity in ${dir} is incomplete: ${PUBLIC_KEY_FILE} is missing. The canonical identity `
+      + `requires ${PRIVATE_KEY_FILE}, ${PUBLIC_KEY_FILE}, and ${IDENTITY_JSON_FILE}.`,
+    );
+  }
+  if (!fs.existsSync(privateKeyFilePath)) {
+    throw new Error(
+      `Identity in ${dir} is incomplete: ${PRIVATE_KEY_FILE} is missing. The canonical identity `
+      + `requires ${PRIVATE_KEY_FILE}, ${PUBLIC_KEY_FILE}, and ${IDENTITY_JSON_FILE}.`,
     );
   }
 
-  const expectedId = creatorFingerprint(publicKeyPem);
+  const diskPublicKey = normalizePublicKey(
+    fs.readFileSync(publicKeyPath, 'utf8'), `${PUBLIC_KEY_FILE} in ${dir}`,
+  );
+
+  // creator.json may carry the public key, but it must be the same Ed25519
+  // key as kdna.pub — the directory may never present two different keys.
+  if (typeof identity.public_key === 'string' && identity.public_key) {
+    const jsonPublicKey = normalizePublicKey(identity.public_key, `public_key in ${dir}/creator.json`);
+    if (jsonPublicKey !== diskPublicKey) {
+      throw new Error(
+        `public_key in ${dir}/creator.json is not the same Ed25519 public key as ${PUBLIC_KEY_FILE} — `
+        + 'refusing to load an inconsistent identity.',
+      );
+    }
+  }
+
+  const expectedId = creatorFingerprint(diskPublicKey);
   if (identity.creator_id !== expectedId) {
     throw new Error(
       `creator_id in ${dir}/creator.json does not match the public key fingerprint `
-      + '(expected ' + expectedId + ', found ' + identity.creator_id + ') — refusing to load a mismatched identity.',
+      + `(expected ${expectedId}, found ${identity.creator_id}) — refusing to load a mismatched identity.`,
     );
   }
 
-  identity.public_key = publicKeyPem;
+  // A plaintext private key is checked against the public key eagerly; an
+  // encrypted envelope can only be verified by signPayload after decryption.
+  const privateKeyContent = fs.readFileSync(privateKeyFilePath, 'utf8');
+  if (!isEncryptedKey(privateKeyContent)) {
+    let derived;
+    try {
+      derived = derivePublicKeyFromPrivate(privateKeyContent);
+    } catch {
+      throw new Error(
+        `Private key at ${privateKeyFilePath} is not a parseable ed25519 private key — the identity is corrupt.`,
+      );
+    }
+    if (derived !== diskPublicKey) {
+      throw new Error(
+        `Private key in ${dir} does not match the public key in ${PUBLIC_KEY_FILE} — `
+        + 'refusing to load a mismatched identity.',
+      );
+    }
+  }
+
+  identity.public_key = diskPublicKey;
   identity.identity_dir = dir;
   identity.public_key_path = publicKeyPath;
 
@@ -270,18 +482,19 @@ function loadIdentity(identityDir = null) {
  * Returns the signature in "ed25519:<hex>" format.
  * If the key is encrypted, passphrase is required.
  *
- * Signing requires the full identity — private key, public key, and
- * creator.json — to be present and mutually consistent. A partial or
- * mismatched set is rejected; nothing is ever signed with key material that
- * does not belong to the recorded creator_id.
+ * Signing requires the full canonical identity and proves four-way
+ * consistency before any signature is produced: the public key derived from
+ * the private key, kdna.pub, creator.json's public key, and the creator_id
+ * fingerprint must all be the same Ed25519 key. Nothing is ever signed with
+ * key material that does not belong to the recorded creator_id.
  */
 function signPayload(payload, identityDir = null, passphrase = null) {
   const dir = identityDir || defaultIdentityDir();
-  const privateKeyPath = path.join(dir, PRIVATE_KEY_FILE);
+  const privateKeyFilePath = path.join(dir, PRIVATE_KEY_FILE);
 
-  if (!fs.existsSync(privateKeyPath)) {
+  if (!fs.existsSync(privateKeyFilePath)) {
     throw new Error(
-      `No private key found at ${privateKeyPath}. Run identity init first.`,
+      `No private key found at ${privateKeyFilePath}. Run identity init first.`,
     );
   }
 
@@ -292,7 +505,7 @@ function signPayload(payload, identityDir = null, passphrase = null) {
     );
   }
 
-  let privateKeyPem = fs.readFileSync(privateKeyPath, 'utf8');
+  let privateKeyPem = fs.readFileSync(privateKeyFilePath, 'utf8');
   if (isEncryptedKey(privateKeyPem)) {
     if (!passphrase) throw new Error('Private key is encrypted. Provide --passphrase to sign.');
     privateKeyPem = decryptPrivateKey(privateKeyPem, passphrase);
@@ -300,15 +513,15 @@ function signPayload(payload, identityDir = null, passphrase = null) {
 
   let derivedPublicKey;
   try {
-    derivedPublicKey = crypto.createPublicKey(privateKeyPem).export({ type: 'spki', format: 'pem' });
+    derivedPublicKey = derivePublicKeyFromPrivate(privateKeyPem);
   } catch {
     throw new Error(
-      `Private key at ${privateKeyPath} is not a parseable private key — the identity is corrupt.`,
+      `Private key at ${privateKeyFilePath} is not a parseable ed25519 private key — the identity is corrupt.`,
     );
   }
   if (derivedPublicKey !== identity.public_key) {
     throw new Error(
-      `Private key in ${dir} does not match the public key recorded in creator.json — `
+      `Private key in ${dir} does not match the public key recorded in the identity — `
       + 'refusing to sign with a mismatched identity.',
     );
   }
@@ -377,12 +590,12 @@ function decodeEnvelopeField(value, name, expectedBytes) {
  *
  * Every structural check runs BEFORE the expensive PBKDF2 derivation, so a
  * hostile or corrupt envelope is rejected cheaply: unknown KDF names,
- * out-of-range or non-integer iteration counts, malformed base64, wrong
- * field lengths, and oversized ciphertexts never reach the KDF or the
- * cipher. The envelope being self-describing is a compatibility mechanism,
- * not a trust decision — only the exact contract written by
- * encryptPrivateKey() (plus legacy iteration counts within the clamp) is
- * accepted.
+ * iteration counts outside the accepted set, malformed base64, wrong field
+ * lengths, and oversized ciphertexts never reach the KDF or the cipher.
+ * The envelope being self-describing is a compatibility mechanism, not a
+ * trust decision — only the exact contract written by encryptPrivateKey()
+ * (600000 iterations) and the historical 100000-iteration envelopes are
+ * accepted. Any other iteration count is rejected.
  */
 function decryptPrivateKey(envelope, passphrase) {
   let env = envelope;
@@ -403,12 +616,10 @@ function decryptPrivateKey(envelope, passphrase) {
       `Unsupported key envelope KDF: ${seen}. Only '${ENVELOPE_KDF}' is accepted.`,
     );
   }
-  if (!Number.isSafeInteger(env.iterations)
-      || env.iterations < PBKDF2_MIN_ITERATIONS
-      || env.iterations > PBKDF2_MAX_ITERATIONS) {
+  if (!Number.isSafeInteger(env.iterations) || !PBKDF2_ACCEPTED_ITERATIONS.has(env.iterations)) {
     throw new Error(
-      `Invalid key envelope: iterations must be a safe integer between ${PBKDF2_MIN_ITERATIONS} `
-      + `and ${PBKDF2_MAX_ITERATIONS}, got ${String(env.iterations)}.`,
+      `Invalid key envelope: iterations must be exactly ${PBKDF2_LEGACY_ITERATIONS} (legacy) or `
+      + `${PBKDF2_ITERATIONS} (current), got ${String(env.iterations)}.`,
     );
   }
   const salt = decodeEnvelopeField(env.salt, 'salt', ENVELOPE_SALT_BYTES);
@@ -442,12 +653,24 @@ function isEncryptedKey(content) {
 
 /**
  * Get the public key PEM for the creator identity.
+ * Returns null only when the directory holds no identity files at all. The
+ * key is never read straight off disk: it is returned only after the full
+ * three-file consistency verification in loadIdentity, so a partial,
+ * replaced, or cross-copied public key is rejected instead of served.
  */
 function loadPublicKey(identityDir = null) {
   const dir = identityDir || defaultIdentityDir();
-  const publicKeyPath = path.join(dir, PUBLIC_KEY_FILE);
-  if (!fs.existsSync(publicKeyPath)) return null;
-  return fs.readFileSync(publicKeyPath, 'utf8');
+  const anyIdentityFile = [PRIVATE_KEY_FILE, PUBLIC_KEY_FILE, IDENTITY_JSON_FILE]
+    .some((name) => fs.existsSync(path.join(dir, name)));
+  if (!anyIdentityFile) return null;
+  const identity = loadIdentity(dir);
+  if (!identity) {
+    throw new Error(
+      `Identity in ${dir} is incomplete: ${IDENTITY_JSON_FILE} is missing, so ${PUBLIC_KEY_FILE} `
+      + 'is not part of a verified identity — refusing to return it.',
+    );
+  }
+  return identity.public_key;
 }
 
 /**

@@ -19,37 +19,73 @@ const {
 } = require('../src/creator-identity');
 
 const MODULE_PATH = path.join(__dirname, '..', 'src', 'creator-identity.js');
+const CRASH_CHILD = path.join(__dirname, 'identity-crash-child.js');
 
 function tempIdentityDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-identity-'));
+}
+
+// A dedicated parent directory holding a not-yet-existing identity dir, so
+// tests can assert on staging siblings without scanning the shared tmpdir.
+function tempIdentityParent() {
+  const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-identity-parent-'));
+  return { parentDir, dir: path.join(parentDir, 'identity') };
 }
 
 function readKey(dir, name) {
   return fs.readFileSync(path.join(dir, name), 'utf8');
 }
 
-function withPatchedFs(method, patch, fn) {
-  const original = fs[method];
-  fs[method] = patch(original);
-  try {
-    fn();
-  } finally {
-    fs[method] = original;
-  }
-}
-
-function runNode(script) {
+function runNode(args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = spawn(process.execPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.on('error', reject);
-    child.on('close', (code) => resolve({ code, stderr }));
+    child.on('close', (code, signal) => resolve({ code, signal, stderr }));
   });
 }
 
-function visibleFiles(dir) {
-  return fs.readdirSync(dir).filter((name) => !name.endsWith('.tmp'));
+function stagingDirs(parentDir) {
+  return fs.readdirSync(parentDir)
+    .filter((name) => name.startsWith('.kdna-init-') && name.endsWith('.staging.d'));
+}
+
+function verifySignature(payload, publicKeyPem, signature) {
+  const sigBytes = Buffer.from(signature.slice('ed25519:'.length), 'hex');
+  return crypto.verify(null, Buffer.from(payload), publicKeyPem, sigBytes);
+}
+
+function ed25519Keypair() {
+  return crypto.generateKeyPairSync('ed25519', {
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+}
+
+// Drive the real initIdentity export in a subprocess and have a watcher
+// thread SIGKILL it at the requested commit phase. The child loops attempts
+// internally so the watcher always catches the millisecond-wide phase
+// window; a returned attempt is always a real kill at the real phase,
+// proven by the marker the watcher writes before dying (its content is the
+// interrupted transaction's parent directory).
+async function crashInitAtPhase(phase, maxAttempts = 5) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), `kdna-crash-${phase}-`));
+    const result = await runNode([CRASH_CHILD, baseDir, phase]);
+    const markerPath = path.join(baseDir, '.crash-marker');
+    if (fs.existsSync(markerPath)) {
+      assert.notEqual(result.code, 0, `crash child at phase ${phase} exited cleanly`);
+      const parentDir = fs.readFileSync(markerPath, 'utf8');
+      // The marker must name the interrupted attempt inside this baseDir;
+      // anything else means the kill raced the marker write — retry.
+      if (parentDir.startsWith(`${baseDir}${path.sep}`)) {
+        return { parentDir, dir: path.join(parentDir, 'identity'), result };
+      }
+    }
+  }
+  assert.fail(`crash harness never observed phase "${phase}" in ${maxAttempts} attempts`);
+  return null;
 }
 
 // ─── initIdentity ───────────────────────────────────────────────────
@@ -64,6 +100,16 @@ test('initIdentity: creates keypair, creator.json, and private key is 0o600', ()
   assert.equal(loaded.creator_id, identity.creator_id);
   const mode = fs.statSync(path.join(dir, 'kdna.key')).mode & 0o777;
   assert.equal(mode, 0o600);
+});
+
+test('initIdentity: publishes into a not-yet-existing directory as one atomic rename', () => {
+  const { parentDir, dir } = tempIdentityParent();
+  const identity = initIdentity('tester', dir);
+  assert.equal(loadIdentity(dir).creator_id, identity.creator_id);
+  // The canonical directory holds exactly the three identity files and no
+  // staging sibling is left behind.
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['creator.json', 'kdna.key', 'kdna.pub']);
+  assert.deepEqual(stagingDirs(parentDir), []);
 });
 
 test('initIdentity: refuses to overwrite existing keys and leaves files untouched', () => {
@@ -101,117 +147,62 @@ test('initIdentity: existing public key alone also blocks regeneration', () => {
   assert.equal(fs.existsSync(path.join(dir, 'kdna.key')), false);
 });
 
-// ─── initIdentity transaction rollback ─────────────────────────────
-
-test('initIdentity: public key write failure rolls back the private key', () => {
+test('initIdentity: refuses to merge into a directory holding foreign files', () => {
   const dir = tempIdentityDir();
-  const pubPath = path.join(dir, 'kdna.pub');
-
-  withPatchedFs('linkSync', (original) => (source, destination) => {
-    if (destination === pubPath) throw new Error('simulated public key write failure');
-    return original(source, destination);
-  }, () => {
-    assert.throws(() => initIdentity('tester', dir), /simulated public key write failure/);
-  });
-
-  assert.deepEqual(visibleFiles(dir), []);
-  assert.equal(loadIdentity(dir), null);
+  fs.writeFileSync(path.join(dir, 'notes.txt'), 'user data', { mode: 0o644 });
+  assert.throws(() => initIdentity('tester', dir), /not empty/);
+  assert.equal(readKey(dir, 'notes.txt'), 'user data');
+  assert.equal(fs.existsSync(path.join(dir, 'kdna.key')), false);
 });
 
-test('initIdentity: creator.json commit failure rolls back the whole keypair', () => {
-  const dir = tempIdentityDir();
-  const jsonPath = path.join(dir, 'creator.json');
+// ─── initIdentity crash boundaries (real subprocesses, real SIGKILL) ──
 
-  withPatchedFs('linkSync', (original) => (source, destination) => {
-    if (destination === jsonPath) throw new Error('simulated creator.json commit failure');
-    return original(source, destination);
-  }, () => {
-    assert.throws(() => initIdentity('tester', dir), /simulated creator.json commit failure/);
-  });
+for (const phase of ['key', 'pub', 'json']) {
+  test(`initIdentity: SIGKILL after the ${phase} write (pre-commit) never publishes, and the next init recovers without manual cleanup`, async () => {
+    const { parentDir, dir } = await crashInitAtPhase(phase);
 
-  // Rollback scope includes every file the call created: no half identity.
-  assert.deepEqual(visibleFiles(dir), []);
-  assert.equal(loadIdentity(dir), null);
-});
-
-test('initIdentity: creator.json write (pre-commit) failure rolls back the whole keypair', () => {
-  const dir = tempIdentityDir();
-
-  withPatchedFs('openSync', (original) => (target, ...rest) => {
-    if (typeof target === 'string' && target.includes('creator.json')) {
-      throw new Error('simulated creator.json write failure');
+    if (fs.existsSync(path.join(dir, 'creator.json'))) {
+      // The kill landed in the microseconds after the rename: that is the
+      // post-commit case and the identity must be complete and usable.
+      const loaded = loadIdentity(dir);
+      assert.ok(loaded);
+      assert.equal(loaded.creator_id, creatorFingerprint(readKey(dir, 'kdna.pub')));
+      assert.ok(verifySignature('late-kill', readKey(dir, 'kdna.pub'), signPayload('late-kill', dir)));
+      return;
     }
-    return original(target, ...rest);
-  }, () => {
-    assert.throws(() => initIdentity('tester', dir), /simulated creator.json write failure/);
-  });
 
-  assert.deepEqual(visibleFiles(dir), []);
-  assert.equal(loadIdentity(dir), null);
-});
-
-// ─── initIdentity crash boundaries (real subprocesses) ─────────────
-
-test('initIdentity: a process killed mid-init leaves no accepted identity and recovers', async () => {
-  for (const crashAfter of [1, 2]) {
-    const dir = tempIdentityDir();
-    const script = `
-      const fs = require('fs');
-      let links = 0;
-      const original = fs.linkSync.bind(fs);
-      fs.linkSync = (source, destination) => {
-        const result = original(source, destination);
-        links += 1;
-        if (links === ${crashAfter}) process.exit(42);
-        return result;
-      };
-      require(${JSON.stringify(MODULE_PATH)}).initIdentity('crasher', ${JSON.stringify(dir)});
-    `;
-    const { code } = await runNode(script);
-    assert.equal(code, 42);
-
-    // The remnant files are not accepted as an identity by any path.
+    // The canonical directory never holds a subset of the identity files.
+    assert.equal(fs.existsSync(dir), false);
     assert.equal(loadIdentity(dir), null);
-    assert.throws(() => initIdentity('retry', dir), /already exist/);
-    assert.throws(() => signPayload('x', dir), /No valid identity/);
+    assert.equal(loadPublicKey(dir), null);
+    assert.throws(() => signPayload('x', dir), /No private key found/);
 
-    // After manual cleanup of the remnants, init recovers to a full identity.
-    fs.rmSync(path.join(dir, 'kdna.key'), { force: true });
-    fs.rmSync(path.join(dir, 'kdna.pub'), { force: true });
+    // The next init recovers directly. The test deletes nothing by hand:
+    // the recovery itself removes the provable staging remnant (its owner
+    // pid is the dead crash child).
     const recovered = initIdentity('recovered', dir);
     assert.equal(loadIdentity(dir).creator_id, recovered.creator_id);
-  }
-});
+    assert.ok(verifySignature('recovered', readKey(dir, 'kdna.pub'), signPayload('recovered', dir)));
+    assert.deepEqual(stagingDirs(parentDir), []);
+  });
+}
 
-test('initIdentity: a process killed right after the commit record leaves a complete identity', async () => {
-  const dir = tempIdentityDir();
-  const script = `
-    const fs = require('fs');
-    let links = 0;
-    const original = fs.linkSync.bind(fs);
-    fs.linkSync = (source, destination) => {
-      const result = original(source, destination);
-      links += 1;
-      if (links === 3) process.exit(42);
-      return result;
-    };
-    require(${JSON.stringify(MODULE_PATH)}).initIdentity('crasher', ${JSON.stringify(dir)});
-  `;
-  const { code } = await runNode(script);
-  assert.equal(code, 42);
+test('initIdentity: SIGKILL immediately after the atomic publish leaves a complete identity', async () => {
+  const { dir } = await crashInitAtPhase('post-commit');
 
+  // The rename already happened: the identity loads and signs directly,
+  // with no recovery step at all.
   const loaded = loadIdentity(dir);
   assert.ok(loaded);
   assert.equal(loaded.creator_id, creatorFingerprint(readKey(dir, 'kdna.pub')));
   const sig = signPayload('post-crash', dir);
-  const sigBytes = Buffer.from(sig.slice('ed25519:'.length), 'hex');
-  assert.equal(crypto.verify(null, Buffer.from('post-crash'), loaded.public_key, sigBytes), true);
+  assert.ok(verifySignature('post-crash', loaded.public_key, sig));
 });
 
-test('initIdentity: concurrent initialization yields exactly one consistent identity', async () => {
-  const dir = tempIdentityDir();
+test('initIdentity: four concurrent subprocesses yield exactly one identity and losers never damage the winner', async () => {
+  const { parentDir, dir } = tempIdentityParent();
   const script = `require(${JSON.stringify(MODULE_PATH)}).initIdentity('racer', ${JSON.stringify(dir)});`;
-  const results = await Promise.all(Array.from({ length: 4 }, () => runNode(script)));
+  const results = await Promise.all(Array.from({ length: 4 }, () => runNode(['-e', script])));
 
   assert.equal(results.filter((r) => r.code === 0).length, 1);
   for (const loser of results.filter((r) => r.code !== 0)) {
@@ -222,22 +213,28 @@ test('initIdentity: concurrent initialization yields exactly one consistent iden
   assert.ok(loaded);
   assert.equal(loaded.creator_id, creatorFingerprint(readKey(dir, 'kdna.pub')));
   const sig = signPayload('race-winner', dir);
-  const sigBytes = Buffer.from(sig.slice('ed25519:'.length), 'hex');
-  assert.equal(crypto.verify(null, Buffer.from('race-winner'), readKey(dir, 'kdna.pub'), sigBytes), true);
+  assert.ok(verifySignature('race-winner', readKey(dir, 'kdna.pub'), sig));
+
+  // The losers exited without removing or overwriting the winner: the
+  // identity is still intact and a further init still fails closed.
+  assert.throws(() => initIdentity('third', dir), /already exist/);
+  assert.equal(loadIdentity(dir).creator_id, loaded.creator_id);
+  assert.ok(verifySignature('still-winner', readKey(dir, 'kdna.pub'), signPayload('still-winner', dir)));
+  assert.deepEqual(stagingDirs(parentDir), []);
 });
 
-// ─── loadIdentity / signPayload consistency ────────────────────────
+// ─── Canonical three-file consistency ────────────────────────────────
 
 test('loadIdentity: creator_id that does not match the public key fingerprint is rejected', () => {
   const dir = tempIdentityDir();
   const identity = initIdentity('tester', dir);
-  const jsonPath = path.join(dir, 'creator.json');
   const tampered = JSON.parse(readKey(dir, 'creator.json'));
   tampered.creator_id = `${identity.creator_id.slice(0, -1)}${identity.creator_id.endsWith('0') ? '1' : '0'}`;
-  fs.writeFileSync(jsonPath, JSON.stringify(tampered, null, 2));
+  fs.writeFileSync(path.join(dir, 'creator.json'), JSON.stringify(tampered, null, 2));
 
-  assert.throws(() => loadIdentity(dir), /does not match the public key fingerprint/);
-  assert.throws(() => signPayload('x', dir), /does not match the public key fingerprint/);
+  for (const read of [() => loadIdentity(dir), () => loadPublicKey(dir), () => signPayload('x', dir)]) {
+    assert.throws(read, /does not match the public key fingerprint/);
+  }
 });
 
 test('loadIdentity: corrupt creator.json is rejected, not treated as no identity', () => {
@@ -245,17 +242,67 @@ test('loadIdentity: corrupt creator.json is rejected, not treated as no identity
   initIdentity('tester', dir);
   fs.writeFileSync(path.join(dir, 'creator.json'), '{ not json');
   assert.throws(() => loadIdentity(dir), /not valid JSON/);
+  assert.throws(() => loadPublicKey(dir), /not valid JSON/);
 });
 
-test('signPayload: a private key that does not match the public key is rejected', () => {
+test('loadIdentity: a creator.json public key that differs from kdna.pub is rejected', () => {
+  const dirA = tempIdentityDir();
+  const dirB = tempIdentityDir();
+  initIdentity('A', dirA);
+  initIdentity('B', dirB);
+
+  // creator.json now names key B while kdna.pub holds key A: the directory
+  // would present two different public keys to different readers.
+  const json = JSON.parse(readKey(dirA, 'creator.json'));
+  json.public_key = readKey(dirB, 'kdna.pub');
+  fs.writeFileSync(path.join(dirA, 'creator.json'), JSON.stringify(json, null, 2));
+
+  for (const read of [() => loadIdentity(dirA), () => loadPublicKey(dirA), () => signPayload('x', dirA)]) {
+    assert.throws(read, /not the same Ed25519 public key/);
+  }
+});
+
+test('cross-directory tamper: the kdna.pub of identity B inside directory A is rejected by load, loadPublicKey, and sign', () => {
+  const dirA = tempIdentityDir();
+  const dirB = tempIdentityDir();
+  initIdentity('A', dirA);
+  initIdentity('B', dirB);
+
+  fs.writeFileSync(path.join(dirA, 'kdna.pub'), readKey(dirB, 'kdna.pub'), { mode: 0o644 });
+
+  for (const read of [() => loadIdentity(dirA), () => loadPublicKey(dirA), () => signPayload('x', dirA)]) {
+    assert.throws(read, /not the same Ed25519 public key/);
+  }
+});
+
+test('loadIdentity: deleting kdna.pub breaks the canonical identity and every read path fails closed', () => {
   const dir = tempIdentityDir();
   initIdentity('tester', dir);
-  const { privateKey: foreignPrivate } = crypto.generateKeyPairSync('ed25519', {
-    publicKeyEncoding: { type: 'spki', format: 'pem' },
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-  });
+  fs.rmSync(path.join(dir, 'kdna.pub'));
+
+  for (const read of [() => loadIdentity(dir), () => loadPublicKey(dir), () => signPayload('x', dir)]) {
+    assert.throws(read, /incomplete/);
+  }
+});
+
+test('loadIdentity: deleting the private key breaks the canonical identity and every read path fails closed', () => {
+  const dir = tempIdentityDir();
+  initIdentity('tester', dir);
+  fs.rmSync(path.join(dir, 'kdna.key'));
+
+  assert.throws(() => loadIdentity(dir), /incomplete/);
+  assert.throws(() => loadPublicKey(dir), /incomplete/);
+  assert.throws(() => signPayload('x', dir), /No private key found/);
+});
+
+test('loadIdentity/signPayload: a replaced private key is rejected on every path', () => {
+  const dir = tempIdentityDir();
+  initIdentity('tester', dir);
+  const { privateKey: foreignPrivate } = ed25519Keypair();
   fs.writeFileSync(path.join(dir, 'kdna.key'), foreignPrivate, { mode: 0o600 });
 
+  assert.throws(() => loadIdentity(dir), /does not match the public key/);
+  assert.throws(() => loadPublicKey(dir), /does not match the public key/);
   assert.throws(() => signPayload('x', dir), /does not match the public key/);
 });
 
@@ -263,7 +310,17 @@ test('signPayload: key files without creator.json are not a signable identity', 
   const dir = tempIdentityDir();
   initIdentity('tester', dir);
   fs.rmSync(path.join(dir, 'creator.json'));
+
+  assert.equal(loadIdentity(dir), null);
   assert.throws(() => signPayload('x', dir), /No valid identity/);
+  assert.throws(() => loadPublicKey(dir), /incomplete/);
+});
+
+test('loadPublicKey: returns null only for a directory with no identity files', () => {
+  const dir = tempIdentityDir();
+  assert.equal(loadPublicKey(dir), null);
+  const { dir: missing } = tempIdentityParent();
+  assert.equal(loadPublicKey(missing), null);
 });
 
 // ─── Signing roundtrip ──────────────────────────────────────────────
@@ -272,11 +329,11 @@ test('signPayload/signHumanLock: signatures verify against the stored public key
   const dir = tempIdentityDir();
   initIdentity('signer', dir);
   const publicKeyPem = loadPublicKey(dir);
+  assert.equal(publicKeyPem, readKey(dir, 'kdna.pub'));
 
   const sig = signPayload('hello', dir);
   assert.ok(sig.startsWith('ed25519:'));
-  const sigBytes = Buffer.from(sig.slice('ed25519:'.length), 'hex');
-  assert.equal(crypto.verify(null, Buffer.from('hello'), publicKeyPem, sigBytes), true);
+  assert.ok(verifySignature('hello', publicKeyPem, sig));
 
   const lockSig = signHumanLock('card-1', 'I confirm this judgment.', 'fp-123', dir);
   const lockPayload = ['card-1', 'I confirm this judgment.', 'fp-123'].join('\n');
@@ -296,13 +353,13 @@ test('encryptPrivateKey: new envelopes are written at 600000 PBKDF2 iterations',
   assert.equal(isEncryptedKey(readKey(dir, 'kdna.key')), true);
   const pem = decryptPrivateKey(readKey(dir, 'kdna.key'), 'passphrase');
   assert.ok(pem.includes('PRIVATE KEY'));
+  // The encrypted identity still passes the full consistency checks.
+  assert.equal(loadIdentity(dir).encrypted, true);
+  assert.ok(verifySignature('encrypted-sign', loadPublicKey(dir), signPayload('encrypted-sign', dir, 'passphrase')));
 });
 
 test('decryptPrivateKey: legacy 100000-iteration envelopes still decrypt', () => {
-  const { privateKey } = crypto.generateKeyPairSync('ed25519', {
-    publicKeyEncoding: { type: 'spki', format: 'pem' },
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-  });
+  const { privateKey } = ed25519Keypair();
   const salt = crypto.randomBytes(16);
   const key = crypto.pbkdf2Sync('legacy-pass', salt, 100000, 32, 'sha256');
   const iv = crypto.randomBytes(12);

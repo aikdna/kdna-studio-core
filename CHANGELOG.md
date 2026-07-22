@@ -13,44 +13,78 @@
   are now removed. **Studio Core 3.0.0 does not provide identity key
   rotation.** An identity is replaced by removing the identity directory and
   running init again.
+- Correct the identity transaction record above. The hard-link commit-record
+  transaction described there did **not** provide crash recovery: a process
+  killed after the first file write left remnant key files in the canonical
+  directory that blocked the next init, and the test suite only simulated
+  recovery by deleting those remnants by hand. The transaction is now a
+  staging directory plus a single atomic directory rename (see Fixed), and
+  the crash tests are real SIGKILLed subprocesses whose recovery path
+  deletes nothing manually.
+- Correct the identity consistency model above. `loadIdentity` trusted
+  `creator.json.public_key` without comparing it to `kdna.pub`, and
+  `loadPublicKey` returned the raw file with no verification at all, so one
+  identity directory could present two different public keys to different
+  callers. The canonical identity is now exactly the three-file set
+  (`kdna.key` + `kdna.pub` + `creator.json`) and every read path verifies it.
+- Correct the envelope iteration contract above. The previous
+  `[1, 4000000]` clamp accepted arbitrary positive iteration counts and
+  justified the upper bound as headroom for future increases. A
+  self-describing envelope is a compatibility mechanism for the counts that
+  were actually written — exactly 100000 (historical) and 600000 (current) —
+  and every other value is now rejected before the KDF runs. The headroom
+  rationale is retracted.
 
 ### Fixed
 
-- Make `initIdentity` a single no-clobber transaction. `kdna.key`,
-  `kdna.pub`, and `creator.json` are written in commit order — private key,
-  public key, then `creator.json` as the commit record — each via a
-  write/fsync/hard-link sequence that fails with `EEXIST` instead of
-  overwriting, so an existing `creator.json` can never be clobbered, even by
-  a racing process. Any write, link, or fsync failure rolls back every file
-  the call created, including `creator.json`; a failed or interrupted init
-  leaves either a complete, mutually consistent identity or no valid
-  identity. Remnant key files without a `creator.json` are rejected by
-  `initIdentity` (explicit error), `loadIdentity` (returns null), and
-  `signPayload` (refuses to sign) instead of being half-accepted.
-- `loadIdentity` now verifies that `creator_id` equals the SHA-256
-  fingerprint of the public key and rejects corrupt or mismatched
-  `creator.json` with an explicit error instead of silently loading it or
-  silently treating it as "no identity".
-- `signPayload` now refuses to sign unless the private key, public key, and
-  `creator.json` form one consistent identity: it derives the public key
-  from the private key and rejects any mismatch with the recorded identity.
+- Make `initIdentity` a single atomic directory transaction. The three
+  identity files are written and fsynced inside a mode-0700 sibling staging
+  directory on the same filesystem, the staging directory is fsynced, and
+  the identity is published by one atomic directory rename onto the
+  canonical path (followed by a parent-directory fsync). The canonical
+  directory never holds a subset of the identity files: before the rename
+  it holds none of them, after the rename it holds all three. A process
+  killed at any point leaves either a complete, mutually consistent
+  identity or no valid identity, and the next init recovers without manual
+  cleanup: staging remnants are removed only when they are provably
+  transaction-owned (transaction naming shape, identity-files-only content)
+  and provably dead (owner pid gone, or older than a 60-second grace), and
+  anything not provably owned by the transaction is never touched.
+  Concurrent inits have exactly one winner — the first rename creates a
+  non-empty directory and later renames fail instead of replacing it — and
+  losers remove only their own staging, never the winner's identity. An
+  existing complete identity is never overwritten.
+- `loadIdentity` now requires the full canonical identity and verifies it:
+  `kdna.pub` must be a parseable Ed25519 public key; `creator.json`'s
+  `public_key` (when present) must be the same key as `kdna.pub`;
+  `creator_id` must equal the SHA-256 fingerprint of the normalized
+  `kdna.pub`; and a plaintext `kdna.key` must derive that same public key
+  (encrypted envelopes are verified at sign time, after decryption).
+  Missing, replaced, tampered, or cross-copied files fail closed on every
+  read path.
+- `loadPublicKey` no longer returns the raw file. It returns the public key
+  only after the same three-file consistency verification, returns null
+  only when the directory holds no identity files at all, and rejects
+  partial or inconsistent state.
+- `signPayload` proves four-way consistency before signing: the public key
+  derived from the private key, `kdna.pub`, `creator.json`'s public key,
+  and the `creator_id` fingerprint must all be the same Ed25519 key.
 - Harden `decryptPrivateKey` against hostile envelopes. Every structural
-  check now runs before the PBKDF2 derivation: the envelope must be a plain
+  check runs before the PBKDF2 derivation: the envelope must be a plain
   object with `encrypted === true`; `kdf` must equal `pbkdf2-sha256`
   exactly (previously an envelope naming a nonexistent KDF was still fed to
-  the cipher); `iterations` must be a safe integer within [1, 4000000] —
-  the upper clamp, following the same reasoning as Core's Argon2id
-  parameter bounds, keeps a single decrypt call bounded at a few seconds
-  instead of allowing CPU exhaustion; `salt` (16 bytes), `iv` (12 bytes),
-  and `tag` (16 bytes) must be strict, canonical base64 of the exact
-  contract length; `ciphertext` must be strict base64 decoding to at most
-  64 KB. The envelope being self-describing is a compatibility mechanism,
-  not a security boundary.
+  the cipher); `iterations` must be exactly 100000 (historical envelopes)
+  or 600000 (current writes) — every other value, including 1, 99999,
+  100001, 599999, 600001, and 4000000, is rejected before the KDF runs;
+  `salt` (16 bytes), `iv` (12 bytes), and `tag` (16 bytes) must be strict,
+  canonical base64 of the exact contract length; `ciphertext` must be
+  strict base64 decoding to at most 64 KB. The envelope being
+  self-describing is a compatibility mechanism, not a security boundary.
 - Raise the PBKDF2 iteration count for newly written private-key envelopes
   from 100000 to 600000 (OWASP recommendation for PBKDF2-HMAC-SHA256;
-  supported by the pbkdf2 implementations of Node 18, 22, and 24). Envelopes
-  written at 100000 iterations keep decrypting — the iteration clamp above
-  accepts the full historical range — and no migration is needed.
+  supported by the pbkdf2 implementations of Node 18, 22, and 24).
+  Historical 100000-iteration envelopes keep decrypting; no migration is
+  needed. Those two counts are the complete compatibility range.
 - README now states the exact Human Lock signature wiring status: the format
   layer verifies signatures when a manifest carries `author.public_key_pem`,
   but the current Studio pipeline neither attaches signatures to exports nor
@@ -59,20 +93,37 @@
 
 ### Verification
 
-- `tests/creator-identity.test.js` now exercises `src/creator-identity.js`
-  exclusively through its public exports (the source-injection harness is
-  removed): init transaction rollback at every commit step, refusal to
-  overwrite a pre-existing `creator.json`, concurrent initialization via
-  real racing subprocesses (exactly one winner, one consistent identity),
-  subprocesses killed at each commit boundary (remnants never accepted as an
-  identity; post-commit crash yields a complete identity), `creator_id` /
-  public-key / private-key mismatch rejection, sign/verify roundtrips, and
-  legacy 100k envelope decryption.
+- `tests/creator-identity.test.js` exercises `src/creator-identity.js`
+  exclusively through its public exports — no source injection, no `fs`
+  patching. Crash coverage uses real subprocesses running the real
+  `initIdentity` export while a watcher thread SIGKILLs the process the
+  moment a commit phase becomes observable on the real filesystem:
+  - pre-commit kills after the `kdna.key` write, after the `kdna.pub`
+    write, and after the `creator.json` write: the canonical directory
+    never holds a subset of the identity files, no read path accepts the
+    state, and the next init recovers directly with no manual deletion
+    (the recovery itself removes the provable staging remnant);
+  - a kill immediately after the atomic rename leaves a complete identity
+    that loads and signs with no recovery step;
+  - four concurrent init subprocesses produce exactly one winner; losers
+    fail with an explicit error and never overwrite or delete the winner's
+    identity.
+- Cross-tamper matrix: the `kdna.pub` of identity B placed in directory A,
+  a `creator.json` naming a different public key than `kdna.pub`, a
+  tampered `creator_id`, a deleted `kdna.pub`, a deleted private key, and a
+  replaced private key are each rejected by `loadIdentity`,
+  `loadPublicKey`, and `signPayload`.
 - Add `tests/creator-identity-envelope.test.js` (hostile-envelope coverage
-  for `decryptPrivateKey`): unknown KDF names, string/negative/fractional/
-  zero/oversized iteration counts, malformed and non-canonical base64, wrong
-  salt/iv/tag lengths, and oversized ciphertext — all rejected before the
-  KDF runs.
+  for `decryptPrivateKey`, runnable standalone): unknown KDF names,
+  non-integer iteration counts, and every integer count outside
+  {100000, 600000} (1, 99999, 100001, 599999, 600001, 4000000, 2**40),
+  malformed and non-canonical base64, wrong salt/iv/tag lengths, and
+  oversized ciphertext — all rejected before the KDF runs; 100000 and
+  600000 envelopes decrypt.
+- CI gains focused identity jobs on macOS and Windows running only the two
+  identity suites, so the directory-transaction primitives (rename
+  semantics, directory fsync, watcher-thread SIGKILL) are proven on three
+  platforms, not just Ubuntu.
 
 ### Breaking
 

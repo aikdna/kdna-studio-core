@@ -10,7 +10,7 @@ const { decryptPrivateKey, encryptPrivateKey } = require('../src/creator-identit
 
 const PLAINTEXT = '-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIDest\t\n-----END PRIVATE KEY-----\n';
 
-function makeEnvelope(passphrase = 'pw', iterations = 1, plaintext = PLAINTEXT) {
+function makeEnvelope(passphrase = 'pw', iterations = 100000, plaintext = PLAINTEXT) {
   const salt = crypto.randomBytes(16);
   const key = crypto.pbkdf2Sync(passphrase, salt, iterations, 32, 'sha256');
   const iv = crypto.randomBytes(12);
@@ -29,10 +29,13 @@ function makeEnvelope(passphrase = 'pw', iterations = 1, plaintext = PLAINTEXT) 
 
 // ─── Accept paths ──────────────────────────────────────────────────
 
-test('decryptPrivateKey: minimal-cost envelope (iterations = 1) still decrypts', () => {
-  const envelope = makeEnvelope('pw', 1);
-  assert.equal(decryptPrivateKey(envelope, 'pw'), PLAINTEXT);
-  assert.equal(decryptPrivateKey(JSON.stringify(envelope), 'pw'), PLAINTEXT);
+test('decryptPrivateKey: accepts exactly the two iteration counts ever written', () => {
+  // 100000: historical envelopes. 600000: current writes. Both decrypt.
+  for (const iterations of [100000, 600000]) {
+    const envelope = makeEnvelope('pw', iterations);
+    assert.equal(decryptPrivateKey(envelope, 'pw'), PLAINTEXT);
+    assert.equal(decryptPrivateKey(JSON.stringify(envelope), 'pw'), PLAINTEXT);
+  }
 });
 
 test('decryptPrivateKey: encryptPrivateKey roundtrip', () => {
@@ -68,7 +71,7 @@ test('decryptPrivateKey: unknown KDF names are rejected before any derivation', 
   }
 });
 
-test('decryptPrivateKey: KDF check precedes the iteration clamp', () => {
+test('decryptPrivateKey: KDF check precedes the iteration check', () => {
   const envelope = makeEnvelope();
   envelope.kdf = 'argon2id';
   envelope.iterations = Number.MAX_SAFE_INTEGER;
@@ -77,18 +80,24 @@ test('decryptPrivateKey: KDF check precedes the iteration clamp', () => {
 
 // ─── Iterations ────────────────────────────────────────────────────
 
-test('decryptPrivateKey: rejects non-integer, non-positive, and oversized iteration counts', () => {
-  for (const iterations of ['600000', 0, -1, 1.5, NaN, 4000001, Number.MAX_SAFE_INTEGER, null]) {
+test('decryptPrivateKey: rejects non-integer and non-numeric iteration counts', () => {
+  for (const iterations of ['600000', 0, -1, 1.5, NaN, Number.MAX_SAFE_INTEGER, null]) {
     const envelope = makeEnvelope();
     envelope.iterations = iterations;
-    assert.throws(() => decryptPrivateKey(envelope, 'pw'), /iterations must be a safe integer/);
+    assert.throws(() => decryptPrivateKey(envelope, 'pw'), /iterations must be exactly/);
   }
 });
 
-test('decryptPrivateKey: rejects absurd iteration counts that the old code fed to PBKDF2', () => {
-  const envelope = makeEnvelope();
-  envelope.iterations = 2 ** 40;
-  assert.throws(() => decryptPrivateKey(envelope, 'pw'), /iterations must be a safe integer/);
+test('decryptPrivateKey: rejects every integer iteration count outside {100000, 600000} before the KDF runs', () => {
+  // Arbitrary positive counts are not legal just because the envelope is
+  // self-describing: 1 (cost-free), 99999 / 100001 (adjacent to legacy),
+  // 599999 / 600001 (adjacent to current), 4000000 (CPU exhaustion), and
+  // 2**40 (absurd) all fail before pbkdf2Sync.
+  for (const iterations of [1, 99999, 100001, 599999, 600001, 4000000, 2 ** 40]) {
+    const envelope = makeEnvelope();
+    envelope.iterations = iterations;
+    assert.throws(() => decryptPrivateKey(envelope, 'pw'), /iterations must be exactly/);
+  }
 });
 
 // ─── Base64 fields ─────────────────────────────────────────────────
