@@ -1,5 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { spawn } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
@@ -17,20 +18,7 @@ const {
   isEncryptedKey,
 } = require('../src/creator-identity');
 
-// rotateIdentity is defined in src/creator-identity.js but not exported, and
-// this fix deliberately adds no new public API. Tests compile the module
-// source with the extra binding exposed so the shipped code is exercised
-// as-is.
-function loadInternals() {
-  const modulePath = path.join(__dirname, '..', 'src', 'creator-identity.js');
-  const source = `${fs.readFileSync(modulePath, 'utf8')}\nmodule.exports.rotateIdentity = rotateIdentity;`;
-  const mod = { exports: {} };
-  const compile = new Function('module', 'exports', 'require', '__dirname', '__filename', source);
-  compile(mod, mod.exports, require, path.dirname(modulePath), modulePath);
-  return mod.exports;
-}
-
-const { rotateIdentity } = loadInternals();
+const MODULE_PATH = path.join(__dirname, '..', 'src', 'creator-identity.js');
 
 function tempIdentityDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'kdna-studio-identity-'));
@@ -38,6 +26,30 @@ function tempIdentityDir() {
 
 function readKey(dir, name) {
   return fs.readFileSync(path.join(dir, name), 'utf8');
+}
+
+function withPatchedFs(method, patch, fn) {
+  const original = fs[method];
+  fs[method] = patch(original);
+  try {
+    fn();
+  } finally {
+    fs[method] = original;
+  }
+}
+
+function runNode(script) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code, stderr }));
+  });
+}
+
+function visibleFiles(dir) {
+  return fs.readdirSync(dir).filter((name) => !name.endsWith('.tmp'));
 }
 
 // ─── initIdentity ───────────────────────────────────────────────────
@@ -69,12 +81,189 @@ test('initIdentity: refuses to overwrite existing keys and leaves files untouche
   assert.equal(loadIdentity(dir).creator_id, first.creator_id);
 });
 
+test('initIdentity: a pre-existing creator.json is never overwritten', () => {
+  const dir = tempIdentityDir();
+  const preExisting = JSON.stringify({ creator_id: 'kdna:creator:ed25519:pre-existing' }, null, 2);
+  fs.writeFileSync(path.join(dir, 'creator.json'), preExisting, { mode: 0o644 });
+
+  assert.throws(() => initIdentity('tester', dir), /already exist/);
+
+  assert.equal(readKey(dir, 'creator.json'), preExisting);
+  assert.equal(fs.existsSync(path.join(dir, 'kdna.key')), false);
+  assert.equal(fs.existsSync(path.join(dir, 'kdna.pub')), false);
+});
+
 test('initIdentity: existing public key alone also blocks regeneration', () => {
   const dir = tempIdentityDir();
   fs.writeFileSync(path.join(dir, 'kdna.pub'), 'pre-existing', { mode: 0o644 });
   assert.throws(() => initIdentity('tester', dir), /already exist/);
   assert.equal(readKey(dir, 'kdna.pub'), 'pre-existing');
   assert.equal(fs.existsSync(path.join(dir, 'kdna.key')), false);
+});
+
+// ─── initIdentity transaction rollback ─────────────────────────────
+
+test('initIdentity: public key write failure rolls back the private key', () => {
+  const dir = tempIdentityDir();
+  const pubPath = path.join(dir, 'kdna.pub');
+
+  withPatchedFs('linkSync', (original) => (source, destination) => {
+    if (destination === pubPath) throw new Error('simulated public key write failure');
+    return original(source, destination);
+  }, () => {
+    assert.throws(() => initIdentity('tester', dir), /simulated public key write failure/);
+  });
+
+  assert.deepEqual(visibleFiles(dir), []);
+  assert.equal(loadIdentity(dir), null);
+});
+
+test('initIdentity: creator.json commit failure rolls back the whole keypair', () => {
+  const dir = tempIdentityDir();
+  const jsonPath = path.join(dir, 'creator.json');
+
+  withPatchedFs('linkSync', (original) => (source, destination) => {
+    if (destination === jsonPath) throw new Error('simulated creator.json commit failure');
+    return original(source, destination);
+  }, () => {
+    assert.throws(() => initIdentity('tester', dir), /simulated creator.json commit failure/);
+  });
+
+  // Rollback scope includes every file the call created: no half identity.
+  assert.deepEqual(visibleFiles(dir), []);
+  assert.equal(loadIdentity(dir), null);
+});
+
+test('initIdentity: creator.json write (pre-commit) failure rolls back the whole keypair', () => {
+  const dir = tempIdentityDir();
+
+  withPatchedFs('openSync', (original) => (target, ...rest) => {
+    if (typeof target === 'string' && target.includes('creator.json')) {
+      throw new Error('simulated creator.json write failure');
+    }
+    return original(target, ...rest);
+  }, () => {
+    assert.throws(() => initIdentity('tester', dir), /simulated creator.json write failure/);
+  });
+
+  assert.deepEqual(visibleFiles(dir), []);
+  assert.equal(loadIdentity(dir), null);
+});
+
+// ─── initIdentity crash boundaries (real subprocesses) ─────────────
+
+test('initIdentity: a process killed mid-init leaves no accepted identity and recovers', async () => {
+  for (const crashAfter of [1, 2]) {
+    const dir = tempIdentityDir();
+    const script = `
+      const fs = require('fs');
+      let links = 0;
+      const original = fs.linkSync.bind(fs);
+      fs.linkSync = (source, destination) => {
+        const result = original(source, destination);
+        links += 1;
+        if (links === ${crashAfter}) process.exit(42);
+        return result;
+      };
+      require(${JSON.stringify(MODULE_PATH)}).initIdentity('crasher', ${JSON.stringify(dir)});
+    `;
+    const { code } = await runNode(script);
+    assert.equal(code, 42);
+
+    // The remnant files are not accepted as an identity by any path.
+    assert.equal(loadIdentity(dir), null);
+    assert.throws(() => initIdentity('retry', dir), /already exist/);
+    assert.throws(() => signPayload('x', dir), /No valid identity/);
+
+    // After manual cleanup of the remnants, init recovers to a full identity.
+    fs.rmSync(path.join(dir, 'kdna.key'), { force: true });
+    fs.rmSync(path.join(dir, 'kdna.pub'), { force: true });
+    const recovered = initIdentity('recovered', dir);
+    assert.equal(loadIdentity(dir).creator_id, recovered.creator_id);
+  }
+});
+
+test('initIdentity: a process killed right after the commit record leaves a complete identity', async () => {
+  const dir = tempIdentityDir();
+  const script = `
+    const fs = require('fs');
+    let links = 0;
+    const original = fs.linkSync.bind(fs);
+    fs.linkSync = (source, destination) => {
+      const result = original(source, destination);
+      links += 1;
+      if (links === 3) process.exit(42);
+      return result;
+    };
+    require(${JSON.stringify(MODULE_PATH)}).initIdentity('crasher', ${JSON.stringify(dir)});
+  `;
+  const { code } = await runNode(script);
+  assert.equal(code, 42);
+
+  const loaded = loadIdentity(dir);
+  assert.ok(loaded);
+  assert.equal(loaded.creator_id, creatorFingerprint(readKey(dir, 'kdna.pub')));
+  const sig = signPayload('post-crash', dir);
+  const sigBytes = Buffer.from(sig.slice('ed25519:'.length), 'hex');
+  assert.equal(crypto.verify(null, Buffer.from('post-crash'), loaded.public_key, sigBytes), true);
+});
+
+test('initIdentity: concurrent initialization yields exactly one consistent identity', async () => {
+  const dir = tempIdentityDir();
+  const script = `require(${JSON.stringify(MODULE_PATH)}).initIdentity('racer', ${JSON.stringify(dir)});`;
+  const results = await Promise.all(Array.from({ length: 4 }, () => runNode(script)));
+
+  assert.equal(results.filter((r) => r.code === 0).length, 1);
+  for (const loser of results.filter((r) => r.code !== 0)) {
+    assert.match(loser.stderr, /already exist/);
+  }
+
+  const loaded = loadIdentity(dir);
+  assert.ok(loaded);
+  assert.equal(loaded.creator_id, creatorFingerprint(readKey(dir, 'kdna.pub')));
+  const sig = signPayload('race-winner', dir);
+  const sigBytes = Buffer.from(sig.slice('ed25519:'.length), 'hex');
+  assert.equal(crypto.verify(null, Buffer.from('race-winner'), readKey(dir, 'kdna.pub'), sigBytes), true);
+});
+
+// ─── loadIdentity / signPayload consistency ────────────────────────
+
+test('loadIdentity: creator_id that does not match the public key fingerprint is rejected', () => {
+  const dir = tempIdentityDir();
+  const identity = initIdentity('tester', dir);
+  const jsonPath = path.join(dir, 'creator.json');
+  const tampered = JSON.parse(readKey(dir, 'creator.json'));
+  tampered.creator_id = `${identity.creator_id.slice(0, -1)}${identity.creator_id.endsWith('0') ? '1' : '0'}`;
+  fs.writeFileSync(jsonPath, JSON.stringify(tampered, null, 2));
+
+  assert.throws(() => loadIdentity(dir), /does not match the public key fingerprint/);
+  assert.throws(() => signPayload('x', dir), /does not match the public key fingerprint/);
+});
+
+test('loadIdentity: corrupt creator.json is rejected, not treated as no identity', () => {
+  const dir = tempIdentityDir();
+  initIdentity('tester', dir);
+  fs.writeFileSync(path.join(dir, 'creator.json'), '{ not json');
+  assert.throws(() => loadIdentity(dir), /not valid JSON/);
+});
+
+test('signPayload: a private key that does not match the public key is rejected', () => {
+  const dir = tempIdentityDir();
+  initIdentity('tester', dir);
+  const { privateKey: foreignPrivate } = crypto.generateKeyPairSync('ed25519', {
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+  fs.writeFileSync(path.join(dir, 'kdna.key'), foreignPrivate, { mode: 0o600 });
+
+  assert.throws(() => signPayload('x', dir), /does not match the public key/);
+});
+
+test('signPayload: key files without creator.json are not a signable identity', () => {
+  const dir = tempIdentityDir();
+  initIdentity('tester', dir);
+  fs.rmSync(path.join(dir, 'creator.json'));
+  assert.throws(() => signPayload('x', dir), /No valid identity/);
 });
 
 // ─── Signing roundtrip ──────────────────────────────────────────────
@@ -132,156 +321,4 @@ test('decryptPrivateKey: legacy 100000-iteration envelopes still decrypt', () =>
   // A wrong passphrase must fail authentication; the exact message depends on
   // the Node/OpenSSL version, so only the failure itself is asserted here.
   assert.throws(() => decryptPrivateKey(legacyEnvelope, 'wrong-pass'));
-});
-
-// ─── Rotation ───────────────────────────────────────────────────────
-
-test('rotateIdentity: rotates keys, records previous key, and new key signs', () => {
-  const dir = tempIdentityDir();
-  const before = initIdentity('rotator', dir);
-  const oldPub = loadPublicKey(dir);
-  const oldPrivRaw = readKey(dir, 'kdna.key');
-
-  const rotated = rotateIdentity(null, dir);
-
-  assert.notEqual(rotated.creator_id, before.creator_id);
-  assert.equal(rotated.creator_id, creatorFingerprint(loadPublicKey(dir)));
-  assert.equal(rotated.previous_keys.length, 1);
-  assert.equal(rotated.previous_keys[0].creator_id, before.creator_id);
-  assert.equal(rotated.previous_keys[0].public_key, oldPub);
-  assert.ok(rotated.previous_keys[0].rotation_signature.startsWith('ed25519:'));
-  assert.equal(rotated.previous_keys[0].private_key_backup, 'kdna.key.previous');
-
-  // Old private key bytes are preserved in the backup file.
-  assert.equal(readKey(dir, 'kdna.key.previous'), oldPrivRaw);
-  assert.equal(fs.statSync(path.join(dir, 'kdna.key.previous')).mode & 0o777, 0o600);
-
-  // New key signs and verifies against the new public key.
-  const sig = signPayload('post-rotation', dir);
-  const sigBytes = Buffer.from(sig.slice('ed25519:'.length), 'hex');
-  assert.equal(crypto.verify(null, Buffer.from('post-rotation'), loadPublicKey(dir), sigBytes), true);
-
-  assert.equal(loadIdentity(dir).creator_id, rotated.creator_id);
-});
-
-test('rotateIdentity: encrypted identity re-encrypts the new key with the passphrase', () => {
-  const dir = tempIdentityDir();
-  initIdentity('encrypted-rotator', dir, 'pw');
-  const oldEnvelope = readKey(dir, 'kdna.key');
-
-  const rotated = rotateIdentity('pw', dir);
-
-  assert.equal(isEncryptedKey(readKey(dir, 'kdna.key')), true);
-  // Backup preserves the old envelope bytes, still encrypted.
-  assert.equal(readKey(dir, 'kdna.key.previous'), oldEnvelope);
-  const sig = signPayload('x', dir, 'pw');
-  const sigBytes = Buffer.from(sig.slice('ed25519:'.length), 'hex');
-  assert.equal(crypto.verify(null, Buffer.from('x'), rotated.public_key, sigBytes), true);
-});
-
-test('rotateIdentity: encrypted identity without passphrase fails without touching files', () => {
-  const dir = tempIdentityDir();
-  initIdentity('encrypted', dir, 'pw');
-  const privBefore = readKey(dir, 'kdna.key');
-  const pubBefore = readKey(dir, 'kdna.pub');
-  const jsonBefore = readKey(dir, 'creator.json');
-
-  assert.throws(() => rotateIdentity(null, dir), /encrypted/);
-
-  assert.equal(readKey(dir, 'kdna.key'), privBefore);
-  assert.equal(readKey(dir, 'kdna.pub'), pubBefore);
-  assert.equal(readKey(dir, 'creator.json'), jsonBefore);
-  assert.equal(fs.existsSync(path.join(dir, 'kdna.key.previous')), false);
-});
-
-// ─── Rotation crash safety ──────────────────────────────────────────
-
-function withPatchedFs(method, patch, fn) {
-  const original = fs[method];
-  fs[method] = patch(original);
-  try {
-    fn();
-  } finally {
-    fs[method] = original;
-  }
-}
-
-test('rotateIdentity: failure while replacing the private key leaves the old keypair usable', () => {
-  const dir = tempIdentityDir();
-  const before = initIdentity('crash-test', dir);
-  const privBefore = readKey(dir, 'kdna.key');
-  const pubBefore = readKey(dir, 'kdna.pub');
-  const privPath = path.join(dir, 'kdna.key');
-
-  withPatchedFs('renameSync', (original) => (source, destination) => {
-    if (destination === privPath) throw new Error('simulated crash during key replacement');
-    return original(source, destination);
-  }, () => {
-    assert.throws(() => rotateIdentity(null, dir), /simulated crash/);
-  });
-
-  // Old keypair is untouched and still signs.
-  assert.equal(readKey(dir, 'kdna.key'), privBefore);
-  assert.equal(readKey(dir, 'kdna.pub'), pubBefore);
-  const sig = signPayload('still-me', dir);
-  const sigBytes = Buffer.from(sig.slice('ed25519:'.length), 'hex');
-  assert.equal(crypto.verify(null, Buffer.from('still-me'), pubBefore, sigBytes), true);
-
-  // The old identity is still the loaded one, and the backup landed before
-  // any overwrite was attempted.
-  assert.equal(loadIdentity(dir).creator_id, before.creator_id);
-  assert.equal(readKey(dir, 'kdna.key.previous'), privBefore);
-  assert.equal(loadIdentity(dir).previous_keys.length, 1);
-  assert.equal(loadIdentity(dir).previous_keys[0].public_key, pubBefore);
-});
-
-test('rotateIdentity: failure on the very first backup write changes nothing', () => {
-  const dir = tempIdentityDir();
-  initIdentity('crash-test', dir);
-  const privBefore = readKey(dir, 'kdna.key');
-  const pubBefore = readKey(dir, 'kdna.pub');
-  const jsonBefore = readKey(dir, 'creator.json');
-  const backupPath = path.join(dir, 'kdna.key.previous');
-
-  withPatchedFs('renameSync', (original) => (source, destination) => {
-    if (destination === backupPath) throw new Error('simulated crash during backup');
-    return original(source, destination);
-  }, () => {
-    assert.throws(() => rotateIdentity(null, dir), /simulated crash/);
-  });
-
-  assert.equal(readKey(dir, 'kdna.key'), privBefore);
-  assert.equal(readKey(dir, 'kdna.pub'), pubBefore);
-  assert.equal(readKey(dir, 'creator.json'), jsonBefore);
-  assert.equal(fs.existsSync(backupPath), false);
-});
-
-test('rotateIdentity: failure after key replacement keeps recovery data on disk', () => {
-  const dir = tempIdentityDir();
-  const before = initIdentity('crash-test', dir);
-  const oldPub = loadPublicKey(dir);
-  const oldPrivRaw = readKey(dir, 'kdna.key');
-  const jsonPath = path.join(dir, 'creator.json');
-
-  // Let the step-1 creator.json write (previous_keys backup) succeed, then
-  // fail the step-3 creator.json write that advances to the new identity.
-  let jsonRenames = 0;
-  withPatchedFs('renameSync', (original) => (source, destination) => {
-    if (destination === jsonPath) {
-      jsonRenames += 1;
-      if (jsonRenames === 2) throw new Error('simulated crash after key replacement');
-    }
-    return original(source, destination);
-  }, () => {
-    assert.throws(() => rotateIdentity(null, dir), /simulated crash/);
-  });
-
-  // Keys were rotated, creator.json was not advanced — but the previous
-  // public key and old private key bytes survive on disk for recovery.
-  assert.notEqual(readKey(dir, 'kdna.pub'), oldPub);
-  const saved = loadIdentity(dir);
-  assert.equal(saved.creator_id, before.creator_id);
-  assert.equal(saved.previous_keys.length, 1);
-  assert.equal(saved.previous_keys[0].public_key, oldPub);
-  assert.equal(readKey(dir, 'kdna.key.previous'), oldPrivRaw);
 });

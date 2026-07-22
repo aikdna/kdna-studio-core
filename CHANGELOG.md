@@ -2,26 +2,55 @@
 
 ## Unreleased
 
+### Corrections
+
+- Retract the identity-rotation claims made above and in the `1.4.0` entry
+  below. `rotateIdentity` was never part of the module's exports and had no
+  caller anywhere; it was only reachable because the test suite compiled the
+  module source with the internal binding exposed. The previous "crash-safe
+  rotation" fix therefore hardened dead code, and the dead implementation,
+  its `kdna.key.previous` backup machinery, and the source-injection tests
+  are now removed. **Studio Core 3.0.0 does not provide identity key
+  rotation.** An identity is replaced by removing the identity directory and
+  running init again.
+
 ### Fixed
 
-- Make `rotateIdentity` in `src/creator-identity.js` crash-safe. Rotation
-  previously overwrote `kdna.key`/`kdna.pub` in place and only updated
-  `creator.json` last, so a failure mid-rotation could destroy the only copy
-  of the old private key or drop the `previous_keys` record. Rotation now
-  first persists the old private key bytes to `kdna.key.previous` (mode
-  `0o600`; encrypted keys stay encrypted in the backup) and records the old
-  public key and rotation signature under `previous_keys`, then replaces
-  every file with atomic temp-file-plus-rename writes. A failure at any step
-  leaves the old keypair usable.
-- Close a TOCTOU race in `initIdentity`: key files are now written with
-  `flag: 'wx'`, so an identity that appears between the existence check and
-  the write is reported as an explicit "already exist" error instead of being
-  silently overwritten. A failed init rolls back only the files it created.
+- Make `initIdentity` a single no-clobber transaction. `kdna.key`,
+  `kdna.pub`, and `creator.json` are written in commit order — private key,
+  public key, then `creator.json` as the commit record — each via a
+  write/fsync/hard-link sequence that fails with `EEXIST` instead of
+  overwriting, so an existing `creator.json` can never be clobbered, even by
+  a racing process. Any write, link, or fsync failure rolls back every file
+  the call created, including `creator.json`; a failed or interrupted init
+  leaves either a complete, mutually consistent identity or no valid
+  identity. Remnant key files without a `creator.json` are rejected by
+  `initIdentity` (explicit error), `loadIdentity` (returns null), and
+  `signPayload` (refuses to sign) instead of being half-accepted.
+- `loadIdentity` now verifies that `creator_id` equals the SHA-256
+  fingerprint of the public key and rejects corrupt or mismatched
+  `creator.json` with an explicit error instead of silently loading it or
+  silently treating it as "no identity".
+- `signPayload` now refuses to sign unless the private key, public key, and
+  `creator.json` form one consistent identity: it derives the public key
+  from the private key and rejects any mismatch with the recorded identity.
+- Harden `decryptPrivateKey` against hostile envelopes. Every structural
+  check now runs before the PBKDF2 derivation: the envelope must be a plain
+  object with `encrypted === true`; `kdf` must equal `pbkdf2-sha256`
+  exactly (previously an envelope naming a nonexistent KDF was still fed to
+  the cipher); `iterations` must be a safe integer within [1, 4000000] —
+  the upper clamp, following the same reasoning as Core's Argon2id
+  parameter bounds, keeps a single decrypt call bounded at a few seconds
+  instead of allowing CPU exhaustion; `salt` (16 bytes), `iv` (12 bytes),
+  and `tag` (16 bytes) must be strict, canonical base64 of the exact
+  contract length; `ciphertext` must be strict base64 decoding to at most
+  64 KB. The envelope being self-describing is a compatibility mechanism,
+  not a security boundary.
 - Raise the PBKDF2 iteration count for newly written private-key envelopes
-  from 100000 to 600000 (OWASP recommendation for PBKDF2-HMAC-SHA256). The
-  envelope is self-describing — `decryptPrivateKey` reads `iterations` from
-  the envelope — so envelopes written at 100000 iterations keep decrypting
-  and no migration is needed.
+  from 100000 to 600000 (OWASP recommendation for PBKDF2-HMAC-SHA256;
+  supported by the pbkdf2 implementations of Node 18, 22, and 24). Envelopes
+  written at 100000 iterations keep decrypting — the iteration clamp above
+  accepts the full historical range — and no migration is needed.
 - README now states the exact Human Lock signature wiring status: the format
   layer verifies signatures when a manifest carries `author.public_key_pem`,
   but the current Studio pipeline neither attaches signatures to exports nor
@@ -30,11 +59,20 @@
 
 ### Verification
 
-- Add `tests/creator-identity.test.js` (12 tests), the first test coverage
-  for `src/creator-identity.js`: init/refusal-to-overwrite, sign/verify
-  roundtrips, legacy 100k envelope decryption, rotation success paths, and
-  simulated mid-rotation crash recovery. `rotateIdentity` is exercised
-  without adding it to the module's public exports.
+- `tests/creator-identity.test.js` now exercises `src/creator-identity.js`
+  exclusively through its public exports (the source-injection harness is
+  removed): init transaction rollback at every commit step, refusal to
+  overwrite a pre-existing `creator.json`, concurrent initialization via
+  real racing subprocesses (exactly one winner, one consistent identity),
+  subprocesses killed at each commit boundary (remnants never accepted as an
+  identity; post-commit crash yields a complete identity), `creator_id` /
+  public-key / private-key mismatch rejection, sign/verify roundtrips, and
+  legacy 100k envelope decryption.
+- Add `tests/creator-identity-envelope.test.js` (hostile-envelope coverage
+  for `decryptPrivateKey`): unknown KDF names, string/negative/fractional/
+  zero/oversized iteration counts, malformed and non-canonical base64, wrong
+  salt/iv/tag lengths, and oversized ciphertext — all rejected before the
+  KDF runs.
 
 ### Breaking
 
@@ -437,7 +475,7 @@ even when every card is Human Locked.
 - computeContentDigest: excludes reports/ and build-receipt
 
 ## 1.4.0 (2026-05-29)
-- Creator Identity system: Ed25519 keypair, creator_id, passphrase encryption, key rotation
+- Creator Identity system: Ed25519 keypair, creator_id, passphrase encryption, key rotation (the "key rotation" claim is retracted: rotation was never exported or reachable — see the Unreleased Corrections entry)
 - Project model: source_mode (blank/kdna_asset/source_folder), creator_identity, lineage
 - lockCard: schema gate for axiom full_statement/why, misunderstanding key_distinction
 - compileManifest: outputs creator, lineage, source_mode
