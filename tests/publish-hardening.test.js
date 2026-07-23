@@ -469,6 +469,20 @@ test('release context binds package, changelog, event, tag ref, HEAD, and workfl
   }
 });
 
+test('current package and changelog form one exact finalizable release coordinate', () => {
+  const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
+  assert.deepEqual(
+    validateReleaseContext(releaseInput({ pkg: CURRENT_PACKAGE, changelog })),
+    {
+      name: '@aikdna/kdna-studio-core',
+      version: '3.0.0',
+      tag: '3.0.0',
+      ref: 'refs/tags/3.0.0',
+      commit: HASH,
+    },
+  );
+});
+
 test('current binding rejects stale evidence before registry lookup', () => {
   const bytes = releaseTarball();
   const evidence = candidateEvidence(bytes);
