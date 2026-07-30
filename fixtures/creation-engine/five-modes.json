@@ -1,0 +1,34 @@
+{
+  "modes": [
+    {
+      "mode": "agent-authored",
+      "claim": "The declared Agent created the judgment system.",
+      "confirmation": "none",
+      "human_lock": false
+    },
+    {
+      "mode": "human-assisted",
+      "claim": "A human participated without a representation claim.",
+      "confirmation": "participation",
+      "human_lock": false
+    },
+    {
+      "mode": "human-confirmed",
+      "claim": "The named human confirmed the current semantic digest.",
+      "confirmation": "representation",
+      "human_lock": false
+    },
+    {
+      "mode": "organization-confirmed",
+      "claim": "An authorized organization confirmer confirmed the current semantic digest.",
+      "confirmation": "representation",
+      "human_lock": false
+    },
+    {
+      "mode": "interpretive",
+      "claim": "This interprets named material without representing its source subject.",
+      "confirmation": "none",
+      "human_lock": false
+    }
+  ]
+}

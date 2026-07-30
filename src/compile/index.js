@@ -42,6 +42,69 @@ function stringList(value) {
   return [];
 }
 
+const RUNTIME_RELATION_TYPES = new Set(['priority', 'exception']);
+const RUNTIME_RELATION_FIELDS = new Set([
+  'from',
+  'to',
+  'via',
+  'applies_when',
+  'does_not_apply_when',
+]);
+
+function compileRuntimeRelations(value) {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) {
+    const error = new Error('core_structure must be an array of public Runtime relations');
+    error.code = 'INVALID_RUNTIME_RELATION';
+    throw error;
+  }
+  return value.map((relation, index) => {
+    if (!relation || typeof relation !== 'object' || Array.isArray(relation)) {
+      const error = new Error(`core_structure[${index}] must be an object`);
+      error.code = 'INVALID_RUNTIME_RELATION';
+      throw error;
+    }
+    const unknownFields = Object.keys(relation)
+      .filter((field) => !RUNTIME_RELATION_FIELDS.has(field))
+      .sort();
+    if (unknownFields.length > 0) {
+      const error = new Error(
+        `core_structure[${index}] contains private or unknown fields: ${unknownFields.join(', ')}`,
+      );
+      error.code = 'INVALID_RUNTIME_RELATION';
+      throw error;
+    }
+    for (const field of ['from', 'to']) {
+      if (typeof relation[field] !== 'string' || !relation[field].trim()) {
+        const error = new Error(`core_structure[${index}].${field} must be a non-empty string`);
+        error.code = 'INVALID_RUNTIME_RELATION';
+        throw error;
+      }
+    }
+    if (!RUNTIME_RELATION_TYPES.has(relation.via)) {
+      const error = new Error(
+        `core_structure[${index}].via must be priority or exception`,
+      );
+      error.code = 'INVALID_RUNTIME_RELATION';
+      throw error;
+    }
+    for (const field of ['applies_when', 'does_not_apply_when']) {
+      if (relation[field] === undefined) continue;
+      if (
+        !Array.isArray(relation[field]) ||
+        relation[field].some((item) => typeof item !== 'string' || !item.trim())
+      ) {
+        const error = new Error(
+          `core_structure[${index}].${field} must contain only non-empty strings`,
+        );
+        error.code = 'INVALID_RUNTIME_RELATION';
+        throw error;
+      }
+    }
+    return JSON.parse(JSON.stringify(relation));
+  });
+}
+
 function uuidv7() {
   const ts = BigInt(Date.now());
   const rand = crypto.randomBytes(10);
@@ -150,19 +213,22 @@ function buildAssetIdentity(project, files, options = {}) {
 }
 
 function makeMeta(project) {
+  const declaredLoadCondition = [
+    project.distillation_target?.load_condition,
+    project.purpose_brief?.loading_condition,
+    project.release?.load_condition,
+  ].find((value) => typeof value === 'string' && value.trim().length > 0);
   return {
     version: (project.release && project.release.version) || '0.1.0',
     domain: project.name,
     created: project.created || new Date().toISOString().slice(0, 10),
     purpose: project.release?.description || `Domain judgment for ${project.name}`,
-    // Default load_condition. Schema requires this field to be a
-    // non-empty string (validated during runtime export). The default
-    // is the legacy placeholder; export-runtime detects it and skips
-    // injecting it into core.highest_question, falling through to
-    // firstAxiom.one_sentence or the explicit "(unset)" marker (PC-3,
-    // 2026-06-27). To silence the warning, set this in your project
-    // meta to a real question.
-    load_condition: 'Load when the task matches applies_when on domain axioms.',
+    // Creation Engine and distillation-first projects declare their loading
+    // condition before extraction. Preserve that declaration in authoring
+    // compile output so Runtime export can carry it into the current payload
+    // projection instead of deriving it from the first axiom.
+    load_condition:
+      declaredLoadCondition || 'Load when the task matches applies_when on domain axioms.',
   };
 }
 
@@ -194,9 +260,7 @@ function compileCore(cards, project, sourceCoreStructure = null) {
     // as ontology / stances and surface in the runtime payload.
     frameworks: lockedFrameworks,
     stances: lockedStances,
-    core_structure: Array.isArray(sourceCoreStructure)
-      ? JSON.parse(JSON.stringify(sourceCoreStructure))
-      : [],
+    core_structure: compileRuntimeRelations(sourceCoreStructure),
     boundaries: lockedBoundaries.map(c => ({
       ...JSON.parse(JSON.stringify(c.fields || {})),
       id: c.id,
@@ -221,8 +285,12 @@ function compilePatterns(cards, project) {
     applies_when: stringList(c.fields?.applies_when),
     does_not_apply_when: stringList(c.fields?.does_not_apply_when),
   }));
+  const preserveCreationIdentity = Boolean(project.creation_acceptance);
   const lockedSelfChecks = cards.filter(c => c.type === 'self_check' && c.locked).map(c => {
     const fields = JSON.parse(JSON.stringify(c.fields || {}));
+    if (preserveCreationIdentity) {
+      return { id: c.id, ...fields, question: fields.question || '' };
+    }
     const keys = Object.keys(fields);
     return keys.length === 1 && keys[0] === 'question'
       ? (fields.question || '')
@@ -253,11 +321,13 @@ function compilePatterns(cards, project) {
   // cards into the structured terminology, so the source's
   // banned_terms identity is preserved end-to-end.
   const lockedStandardTerms = cards.filter(c => c.type === 'term' && c.locked).map(c => ({
+    ...(preserveCreationIdentity ? { id: c.id } : {}),
     ...JSON.parse(JSON.stringify(c.fields || {})),
     term: c.fields?.term || c.id,
     definition: c.fields?.definition || '',
   }));
   const lockedBannedTerms = cards.filter(c => c.type === 'banned_term' && c.locked).map(c => ({
+    ...(preserveCreationIdentity ? { id: c.id } : {}),
     ...JSON.parse(JSON.stringify(c.fields || {})),
     term: c.fields?.term || c.id,
     why: c.fields?.why || '',
@@ -684,7 +754,11 @@ function compileDomain(project, options = {}) {
   // compile-only view so existing field shaping stays stable while Human Lock
   // remains optional provenance on the original project cards.
   const compileInputCards = compiledCards.map(c => ({ ...c, locked: true }));
-  const core = compileCore(compileInputCards, project, options.source?.core_structure || null);
+  const core = compileCore(
+    compileInputCards,
+    project,
+    options.source?.core_structure || project.source_core_structure || null,
+  );
   const patterns = compilePatterns(compileInputCards, project);
   const scenarios = compileScenarios(compileInputCards, project);
   const cases = compileCases(compileInputCards, project);

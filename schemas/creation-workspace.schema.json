@@ -1,0 +1,2466 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aikdna.com/schemas/creation-workspace.schema.json",
+  "title": "KDNA Creation Engine Workspace",
+  "description": "Recoverable Studio Core workspace for purpose, source interpretation, judgment modeling, confirmation, semantic testing, repair, and export evidence. Format validity remains a separate KDNA Core result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "root",
+    "state",
+    "purposeBrief",
+    "materials",
+    "candidates",
+    "judgmentModel",
+    "unresolvedQuestions",
+    "confirmationReceipts",
+    "semanticTestReport",
+    "applicationVerification",
+    "repairPlan",
+    "exportPlan",
+    "buildReceipt",
+    "interviewAnswers",
+    "operations",
+    "history"
+  ],
+  "properties": {
+    "root": { "type": ["string", "null"] },
+    "state": { "$ref": "#/$defs/CreationState" },
+    "purposeBrief": {
+      "oneOf": [
+        { "$ref": "#/$defs/PurposeBrief" },
+        { "type": "null" }
+      ]
+    },
+    "materials": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/SourceRecord" }
+    },
+    "candidates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/JudgmentCandidate" }
+    },
+    "judgmentModel": { "$ref": "#/$defs/JudgmentModel" },
+    "unresolvedQuestions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/UnresolvedQuestion" }
+    },
+    "confirmationReceipts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ConfirmationReceipt" }
+    },
+    "semanticTestReport": { "$ref": "#/$defs/SemanticTestReport" },
+    "applicationVerification": {
+      "$ref": "#/$defs/ApplicationVerification"
+    },
+    "repairPlan": { "$ref": "#/$defs/RepairPlan" },
+    "exportPlan": { "$ref": "#/$defs/ExportPlan" },
+    "buildReceipt": {
+      "oneOf": [
+        { "$ref": "#/$defs/BuildReceipt" },
+        { "type": "null" }
+      ]
+    },
+    "interviewAnswers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/InterviewAnswer" }
+    },
+    "operations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/OperationReceipt" }
+    },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/HistoryEntry" }
+    }
+  },
+  "$defs": {
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "StringList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/NonEmptyString" }
+    },
+    "PromptInjectionIndicator": {
+      "type": "string",
+      "enum": [
+        "instruction-override",
+        "system-prompt-reference",
+        "developer-message-reference",
+        "identity-reassignment",
+        "instruction-refusal",
+        "secret-disclosure-request"
+      ]
+    },
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "CreationMode": {
+      "type": "string",
+      "enum": [
+        "agent-authored",
+        "human-assisted",
+        "human-confirmed",
+        "organization-confirmed",
+        "interpretive"
+      ]
+    },
+    "CreationStatus": {
+      "type": "string",
+      "enum": [
+        "needs_purpose",
+        "needs_sources",
+        "analyzing_sources",
+        "eliciting_judgment",
+        "awaiting_confirmation",
+        "testing",
+        "repairing",
+        "ready_to_export",
+        "exported"
+      ]
+    },
+    "CreationState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "workspace_id",
+        "mode",
+        "workflow_mode",
+        "status",
+        "semantic_revision",
+        "semantic_digest",
+        "next_unresolved_reason",
+        "created_at",
+        "updated_at",
+        "created_by"
+      ],
+      "properties": {
+        "schema_version": { "const": "0.1.0" },
+        "workspace_id": { "$ref": "#/$defs/NonEmptyString" },
+        "mode": { "$ref": "#/$defs/CreationMode" },
+        "workflow_mode": {
+          "type": "string",
+          "enum": ["collaborative", "autonomous"]
+        },
+        "status": { "$ref": "#/$defs/CreationStatus" },
+        "semantic_revision": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "next_unresolved_reason": { "type": ["string", "null"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "created_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["agent", "human", "organization"]
+            },
+            "id": { "$ref": "#/$defs/NonEmptyString" },
+            "name": { "type": "string" }
+          }
+        }
+      }
+    },
+    "Subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["agent", "human", "organization", "work", "source-subject"]
+        },
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "name": { "type": "string" }
+      }
+    },
+    "JudgmentRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "acts_as": { "$ref": "#/$defs/NonEmptyString" },
+        "does_not_act_as": { "$ref": "#/$defs/StringList" },
+        "responsibility": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "GlobalBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "source_refs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "statement": { "$ref": "#/$defs/NonEmptyString" },
+        "source_refs": { "$ref": "#/$defs/StringList" }
+      }
+    },
+    "PurposeBrief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "objective",
+        "scope",
+        "non_goals",
+        "loading_condition",
+        "represented_subject",
+        "highest_question",
+        "worldview",
+        "value_order",
+        "judgment_role",
+        "global_boundaries"
+      ],
+      "properties": {
+        "title": { "$ref": "#/$defs/NonEmptyString" },
+        "objective": { "$ref": "#/$defs/NonEmptyString" },
+        "scope": { "$ref": "#/$defs/NonEmptyString" },
+        "non_goals": { "$ref": "#/$defs/StringList" },
+        "loading_condition": { "$ref": "#/$defs/NonEmptyString" },
+        "represented_subject": {
+          "oneOf": [
+            { "$ref": "#/$defs/Subject" },
+            { "type": "null" }
+          ]
+        },
+        "highest_question": { "$ref": "#/$defs/NonEmptyString" },
+        "worldview": { "$ref": "#/$defs/StringList" },
+        "value_order": { "$ref": "#/$defs/StringList" },
+        "judgment_role": { "$ref": "#/$defs/JudgmentRole" },
+        "global_boundaries": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/GlobalBoundary" }
+        }
+      }
+    },
+    "SourceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "title",
+        "content_hash",
+        "reference",
+        "source_subject_id",
+        "belongs_to_subject",
+        "represents_current_judgment",
+        "authority",
+        "currentness",
+        "source_created_at",
+        "source_updated_at",
+        "time_basis",
+        "sensitivity",
+        "external_constraints",
+        "in_scope",
+        "split_domain",
+        "expired",
+        "trust",
+        "include_in_runtime",
+        "review_receipts",
+        "public_export_review",
+        "ingested_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "kind": { "$ref": "#/$defs/NonEmptyString" },
+        "title": { "$ref": "#/$defs/NonEmptyString" },
+        "content_hash": { "$ref": "#/$defs/Digest" },
+        "reference": { "type": ["string", "null"] },
+        "source_subject_id": { "type": ["string", "null"] },
+        "belongs_to_subject": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "const": "unknown" }
+          ]
+        },
+        "represents_current_judgment": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "const": "unknown" }
+          ]
+        },
+        "authority": {
+          "type": "string",
+          "enum": [
+            "current-highest",
+            "supporting",
+            "historical",
+            "negative",
+            "rejected",
+            "unknown"
+          ]
+        },
+        "currentness": {
+          "type": "string",
+          "enum": ["current", "historical", "unknown"]
+        },
+        "source_created_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "source_updated_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "time_basis": {
+          "type": "string",
+          "enum": ["declared", "file-metadata", "asset-manifest", "unknown"]
+        },
+        "sensitivity": {
+          "type": "string",
+          "enum": ["public", "private", "sensitive"]
+        },
+        "external_constraints": { "$ref": "#/$defs/StringList" },
+        "in_scope": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "const": "unknown" }
+          ]
+        },
+        "split_domain": { "type": ["string", "null"] },
+        "expired": { "type": "boolean" },
+        "trust": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "treat_as_untrusted_data",
+            "instructions_are_agent_commands",
+            "prompt_injection_detected",
+            "indicators"
+          ],
+          "properties": {
+            "treat_as_untrusted_data": { "const": true },
+            "instructions_are_agent_commands": { "const": false },
+            "prompt_injection_detected": { "type": "boolean" },
+            "indicators": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/PromptInjectionIndicator" },
+              "uniqueItems": true
+            }
+          }
+        },
+        "include_in_runtime": { "const": false },
+        "review_receipts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceReviewReceipt" }
+        },
+        "public_export_review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "decision",
+            "reviewer",
+            "rationale",
+            "reviewed_at"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": ["pending", "approved", "not-required"]
+            },
+            "decision": {
+              "type": ["string", "null"],
+              "enum": [
+                "public-safe-abstraction",
+                "non-public-isolation",
+                null
+              ]
+            },
+            "reviewer": { "type": ["string", "null"] },
+            "rationale": { "type": ["string", "null"] },
+            "reviewed_at": {
+              "type": ["string", "null"],
+              "format": "date-time"
+            }
+          }
+        },
+        "ingested_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "SourceReviewReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "material_id",
+        "reviewer",
+        "reason",
+        "before_digest",
+        "after_digest",
+        "changed_fields",
+        "reviewed_at"
+      ],
+      "properties": {
+        "material_id": { "$ref": "#/$defs/NonEmptyString" },
+        "reviewer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["agent", "human", "organization-authority"]
+            },
+            "id": { "$ref": "#/$defs/NonEmptyString" },
+            "name": { "type": "string" },
+            "authority": { "type": "string" }
+          }
+        },
+        "reason": { "$ref": "#/$defs/NonEmptyString" },
+        "before_digest": { "$ref": "#/$defs/Digest" },
+        "after_digest": { "$ref": "#/$defs/Digest" },
+        "changed_fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "source_subject_id",
+              "belongs_to_subject",
+              "represents_current_judgment",
+              "authority",
+              "currentness",
+              "external_constraints",
+              "in_scope",
+              "split_domain",
+              "expired"
+            ]
+          }
+        },
+        "reviewed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "score", "reason"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "unknown"]
+        },
+        "score": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reason": { "type": ["string", "null"] }
+      }
+    },
+    "JudgmentFields": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "statement",
+        "rationale",
+        "applies_when",
+        "does_not_apply_when",
+        "misuse_risk",
+        "source_refs",
+        "contrary_evidence",
+        "confidence",
+        "confirmation_state",
+        "agent_inference"
+      ],
+      "properties": {
+        "statement": { "$ref": "#/$defs/NonEmptyString" },
+        "rationale": { "$ref": "#/$defs/NonEmptyString" },
+        "applies_when": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "does_not_apply_when": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "misuse_risk": { "$ref": "#/$defs/NonEmptyString" },
+        "source_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "contrary_evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "confidence": { "$ref": "#/$defs/Confidence" },
+        "confirmation_state": {
+          "type": "string",
+          "enum": ["unconfirmed", "confirmed", "not-required", "invalidated"]
+        },
+        "agent_inference": { "type": "boolean" }
+      }
+    },
+    "JudgmentCandidate": {
+      "allOf": [
+        { "$ref": "#/$defs/JudgmentFields" },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "status",
+            "card_type",
+            "fields",
+            "created_at",
+            "rejection_reason",
+            "review_receipt"
+          ],
+          "properties": {
+            "id": { "$ref": "#/$defs/NonEmptyString" },
+            "status": {
+              "type": "string",
+              "enum": ["proposed", "promoted", "rejected"]
+            },
+            "card_type": { "$ref": "#/$defs/NonEmptyString" },
+            "fields": { "type": "object" },
+            "created_at": { "type": "string", "format": "date-time" },
+            "rejection_reason": { "type": ["string", "null"] },
+            "review_receipt": {
+              "oneOf": [
+                { "$ref": "#/$defs/CandidateReviewReceipt" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "CandidateReviewReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "decision",
+        "reviewer",
+        "reason",
+        "before_digest",
+        "after_digest",
+        "changed_fields",
+        "reviewed_at"
+      ],
+      "properties": {
+        "candidate_id": { "$ref": "#/$defs/NonEmptyString" },
+        "decision": {
+          "type": "string",
+          "enum": ["promote", "reject"]
+        },
+        "reviewer": { "$ref": "#/$defs/Subject" },
+        "reason": { "$ref": "#/$defs/NonEmptyString" },
+        "before_digest": { "$ref": "#/$defs/Digest" },
+        "after_digest": { "$ref": "#/$defs/Digest" },
+        "changed_fields": { "$ref": "#/$defs/StringList" },
+        "reviewed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "JudgmentUnit": {
+      "allOf": [
+        { "$ref": "#/$defs/JudgmentFields" },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "candidate_id",
+            "card_type",
+            "fields",
+            "promoted_at"
+          ],
+          "properties": {
+            "id": { "$ref": "#/$defs/NonEmptyString" },
+            "candidate_id": { "$ref": "#/$defs/NonEmptyString" },
+            "card_type": { "$ref": "#/$defs/NonEmptyString" },
+            "fields": { "type": "object" },
+            "promoted_at": { "type": "string", "format": "date-time" }
+          }
+        }
+      ]
+    },
+    "JudgmentRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "from",
+        "to",
+        "rationale",
+        "status",
+        "resolution"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "type": {
+          "type": "string",
+          "enum": ["support", "limit", "exception", "conflict", "priority"]
+        },
+        "from": { "$ref": "#/$defs/NonEmptyString" },
+        "to": { "$ref": "#/$defs/NonEmptyString" },
+        "rationale": { "$ref": "#/$defs/NonEmptyString" },
+        "status": {
+          "type": "string",
+          "enum": ["proposed", "accepted", "resolved", "rejected"]
+        },
+        "resolution": { "type": ["string", "null"] }
+      }
+    },
+    "SplitRecommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "unit_ids",
+        "reason",
+        "triggers",
+        "decision",
+        "decision_reason"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "unit_ids": { "$ref": "#/$defs/StringList" },
+        "reason": { "$ref": "#/$defs/NonEmptyString" },
+        "triggers": { "$ref": "#/$defs/StringList" },
+        "decision": {
+          "type": "string",
+          "enum": ["pending", "accepted", "rejected"]
+        },
+        "decision_reason": { "type": ["string", "null"] }
+      }
+    },
+    "JudgmentModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "judgment_core",
+        "global_boundaries",
+        "units",
+        "relations",
+        "split_recommendations"
+      ],
+      "properties": {
+        "judgment_core": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "highest_question": { "$ref": "#/$defs/NonEmptyString" },
+            "worldview": { "$ref": "#/$defs/StringList" },
+            "value_order": { "$ref": "#/$defs/StringList" },
+            "judgment_role": { "$ref": "#/$defs/JudgmentRole" }
+          }
+        },
+        "global_boundaries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/GlobalBoundary" }
+        },
+        "units": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/JudgmentUnit" }
+        },
+        "relations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/JudgmentRelation" }
+        },
+        "split_recommendations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SplitRecommendation" }
+        }
+      }
+    },
+    "UnresolvedQuestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "reason", "target_id", "status", "created_at"],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "kind": { "$ref": "#/$defs/NonEmptyString" },
+        "reason": { "$ref": "#/$defs/NonEmptyString" },
+        "target_id": { "type": ["string", "null"] },
+        "status": {
+          "type": "string",
+          "enum": ["open", "resolved"]
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "resolved_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "Actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "type": {
+          "type": "string",
+          "enum": ["human", "organization-authority", "agent"]
+        },
+        "name": { "type": "string" },
+        "authority": { "type": "string" }
+      }
+    },
+    "ConfirmationReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "claim",
+        "actor",
+        "subject",
+        "scope",
+        "target_ids",
+        "statement",
+        "accepted",
+        "semantic_revision",
+        "semantic_digest",
+        "status",
+        "confirmed_at",
+        "invalidated_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "claim": {
+          "type": "string",
+          "enum": ["participation", "representation"]
+        },
+        "actor": { "$ref": "#/$defs/Actor" },
+        "subject": { "$ref": "#/$defs/Subject" },
+        "scope": {
+          "type": "string",
+          "enum": ["unit", "core", "boundaries", "model"]
+        },
+        "target_ids": { "$ref": "#/$defs/StringList" },
+        "statement": { "$ref": "#/$defs/NonEmptyString" },
+        "accepted": { "type": "boolean" },
+        "semantic_revision": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "status": {
+          "type": "string",
+          "enum": ["valid", "invalidated", "rejected"]
+        },
+        "confirmed_at": { "type": "string", "format": "date-time" },
+        "invalidated_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "SemanticTestCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "input",
+        "expected",
+        "expected_creator_label",
+        "unit_ids",
+        "boundary_ids",
+        "held_out",
+        "source_ref",
+        "semantic_digest",
+        "status",
+        "result",
+        "observed_creator_label",
+        "evaluated_by",
+        "notes",
+        "created_at",
+        "evaluated_at",
+        "invalidated_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "applicable",
+            "counterexample",
+            "boundary",
+            "conflict",
+            "comparison",
+            "holdout"
+          ]
+        },
+        "input": { "$ref": "#/$defs/NonEmptyString" },
+        "expected": { "$ref": "#/$defs/NonEmptyString" },
+        "expected_creator_label": {
+          "type": ["string", "null"],
+          "enum": ["符合", "超出范围", null],
+          "description": "Engine-owned classification of the requested case relative to the represented judgment: 符合 for an in-scope expected application, 超出范围 when the request itself crosses the declared scope or boundary. This is not a quality rating of a correctly refusing expected response."
+        },
+        "unit_ids": { "$ref": "#/$defs/StringList" },
+        "boundary_ids": { "$ref": "#/$defs/StringList" },
+        "held_out": { "type": "boolean" },
+        "source_ref": { "type": ["string", "null"] },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "passed", "failed", "inconclusive", "invalidated"]
+        },
+        "result": {
+          "type": ["string", "null"],
+          "enum": ["pass", "fail", "inconclusive", null]
+        },
+        "observed_creator_label": {
+          "type": ["string", "null"],
+          "enum": ["符合", "不符合", "超出范围", null],
+          "description": "Creator-owned classification of the requested case: 符合 when the observed behavior applies the represented judgment in scope, 不符合 when it contradicts that judgment, and 超出范围 when the request itself lies outside the declared scope even if the correct behavior is refusal or abstention."
+        },
+        "evaluated_by": {
+          "oneOf": [
+            { "$ref": "#/$defs/Actor" },
+            { "type": "null" }
+          ]
+        },
+        "notes": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "evaluated_at": { "type": ["string", "null"], "format": "date-time" },
+        "invalidated_at": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "pending" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "result": { "type": "null" },
+              "observed_creator_label": { "type": "null" },
+              "evaluated_by": { "type": "null" },
+              "evaluated_at": { "type": "null" },
+              "invalidated_at": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "passed" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "result": { "const": "pass" },
+              "evaluated_by": { "$ref": "#/$defs/Actor" },
+              "evaluated_at": { "type": "string", "format": "date-time" },
+              "invalidated_at": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "failed" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "result": { "const": "fail" },
+              "evaluated_by": { "$ref": "#/$defs/Actor" },
+              "evaluated_at": { "type": "string", "format": "date-time" },
+              "invalidated_at": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "inconclusive" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "result": { "const": "inconclusive" },
+              "evaluated_by": { "$ref": "#/$defs/Actor" },
+              "evaluated_at": { "type": "string", "format": "date-time" },
+              "invalidated_at": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "invalidated" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "invalidated_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      ]
+    },
+    "SemanticAcceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted",
+        "actor",
+        "statement",
+        "semantic_digest",
+        "test_report_digest",
+        "accepted_at",
+        "status",
+        "invalidated_at"
+      ],
+      "properties": {
+        "accepted": { "type": "boolean" },
+        "actor": { "$ref": "#/$defs/Actor" },
+        "statement": { "$ref": "#/$defs/NonEmptyString" },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "test_report_digest": { "$ref": "#/$defs/Digest" },
+        "accepted_at": { "type": "string", "format": "date-time" },
+        "status": {
+          "type": "string",
+          "enum": ["valid", "invalidated", "rejected"]
+        },
+        "invalidated_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "SemanticTestReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cases", "plans", "acceptance"],
+      "properties": {
+        "cases": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SemanticTestCase" }
+        },
+        "plans": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SemanticTestPlan" }
+        },
+        "acceptance": {
+          "oneOf": [
+            { "$ref": "#/$defs/SemanticAcceptance" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "SemanticTestPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "actor",
+        "statement",
+        "semantic_digest",
+        "definition_digest",
+        "test_ids",
+        "status",
+        "frozen_at",
+        "invalidated_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "actor": { "$ref": "#/$defs/Actor" },
+        "statement": { "$ref": "#/$defs/NonEmptyString" },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "definition_digest": { "$ref": "#/$defs/Digest" },
+        "test_ids": { "$ref": "#/$defs/StringList" },
+        "status": {
+          "type": "string",
+          "enum": ["valid", "invalidated"]
+        },
+        "frozen_at": { "type": "string", "format": "date-time" },
+        "invalidated_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+    "ApplicationVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plans", "attempts", "observations", "receipts"],
+      "properties": {
+        "plans": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ApplicationTestPlan" }
+        },
+        "attempts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ApplicationAttempt" }
+        },
+        "observations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ApplicationAssetObservation" }
+        },
+        "abandonments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ApplicationAttemptAbandonment"
+          }
+        },
+        "receipts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ApplicationReceipt" }
+        }
+      }
+    },
+    "ApplicationTestPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "frozen_by",
+        "statement",
+        "key_registry_id",
+        "key_registry_digest",
+        "creation_key_signature",
+        "coordinator_key_signature",
+        "plan_content_digest",
+        "coordinator_plan_signature",
+        "creation_identity",
+        "coordinator_identity",
+        "evaluation_oracle_digest",
+        "consumer_identity",
+        "evaluator_identity",
+        "semantic_revision",
+        "semantic_digest",
+        "judgment_evidence_digest",
+        "tasks",
+        "thresholds",
+        "plan_digest",
+        "status",
+        "frozen_at",
+        "invalidated_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "verification_contract": {
+          "type": "string",
+          "const": "adoption-fidelity"
+        },
+        "evidence_set": {
+          "type": "string",
+          "const": "fresh-hidden-holdout"
+        },
+        "response_mode": {
+          "type": "string",
+          "const": "free-response"
+        },
+        "frozen_by": { "$ref": "#/$defs/Actor" },
+        "statement": { "$ref": "#/$defs/NonEmptyString" },
+        "key_registry_id": { "$ref": "#/$defs/NonEmptyString" },
+        "key_registry_digest": { "$ref": "#/$defs/Digest" },
+        "creation_key_signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        },
+        "coordinator_key_signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        },
+        "plan_content_digest": { "$ref": "#/$defs/Digest" },
+        "coordinator_plan_signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        },
+        "creation_identity": {
+          "$ref": "#/$defs/ApplicationSigningIdentity"
+        },
+        "coordinator_identity": {
+          "$ref": "#/$defs/ApplicationSigningIdentity"
+        },
+        "evaluation_oracle_digest": { "$ref": "#/$defs/Digest" },
+        "consumer_identity": {
+          "$ref": "#/$defs/ApplicationSigningIdentity"
+        },
+        "evaluator_identity": {
+          "$ref": "#/$defs/ApplicationSigningIdentity"
+        },
+        "semantic_revision": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "judgment_evidence_digest": { "$ref": "#/$defs/Digest" },
+        "build_receipt_digest": { "$ref": "#/$defs/Digest" },
+        "asset_digest": { "$ref": "#/$defs/Digest" },
+        "tasks": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/ApplicationTask" }
+        },
+        "thresholds": { "$ref": "#/$defs/ApplicationThresholds" },
+        "plan_digest": { "$ref": "#/$defs/Digest" },
+        "status": {
+          "type": "string",
+          "enum": ["valid", "invalidated"]
+        },
+        "frozen_at": { "type": "string", "format": "date-time" },
+        "invalidated_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["verification_contract"]
+          },
+          "then": {
+            "required": [
+              "verification_contract",
+              "evidence_set",
+              "response_mode",
+              "build_receipt_digest",
+              "asset_digest"
+            ],
+            "properties": {
+              "tasks": {
+                "type": "array",
+                "minItems": 3,
+                "items": { "$ref": "#/$defs/ApplicationTask" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ApplicationSigningIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "public_key", "fingerprint"],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "public_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "fingerprint": { "$ref": "#/$defs/Digest" }
+      }
+    },
+    "ApplicationAttempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "requested_by",
+        "plan_id",
+        "plan_digest",
+        "semantic_revision",
+        "semantic_digest",
+        "judgment_evidence_digest",
+        "build_receipt_digest",
+        "asset_digest",
+        "asset_load_receipt",
+        "asset_load_receipt_digest",
+        "challenge_digest",
+        "attempt_digest",
+        "status",
+        "issued_at",
+        "consumed_at",
+        "receipt_id",
+        "invalidated_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "requested_by": { "$ref": "#/$defs/Actor" },
+        "plan_id": { "$ref": "#/$defs/NonEmptyString" },
+        "plan_digest": { "$ref": "#/$defs/Digest" },
+        "semantic_revision": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "judgment_evidence_digest": { "$ref": "#/$defs/Digest" },
+        "build_receipt_digest": { "$ref": "#/$defs/Digest" },
+        "asset_digest": { "$ref": "#/$defs/Digest" },
+        "asset_load_receipt": {
+          "$ref": "#/$defs/ApplicationAssetLoadReceipt"
+        },
+        "asset_load_receipt_digest": { "$ref": "#/$defs/Digest" },
+        "challenge_digest": { "$ref": "#/$defs/Digest" },
+        "attempt_digest": { "$ref": "#/$defs/Digest" },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "consumed",
+            "abandoned",
+            "invalidated",
+            "superseded"
+          ]
+        },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "consumed_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "receipt_id": { "type": ["string", "null"] },
+        "invalidated_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "abandonment_id": { "type": ["string", "null"] }
+      }
+    },
+    "ApplicationAssetLoadReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "asset_digest",
+        "observation_context_digest",
+        "observed_at",
+        "runtime_core_coordinate_digest",
+        "validation_digest",
+        "inspection_digest",
+        "load_plan_digest",
+        "compact_capsule_digest",
+        "full_capsule_digest",
+        "authorization_outcome"
+      ],
+      "properties": {
+        "schema": {
+          "const": "kdna.studio.application-asset-load/0.1.0"
+        },
+        "asset_digest": { "$ref": "#/$defs/Digest" },
+        "observation_context_digest": { "$ref": "#/$defs/Digest" },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "runtime_core_coordinate_digest": { "$ref": "#/$defs/Digest" },
+        "validation_digest": { "$ref": "#/$defs/Digest" },
+        "inspection_digest": { "$ref": "#/$defs/Digest" },
+        "load_plan_digest": { "$ref": "#/$defs/Digest" },
+        "compact_capsule_digest": { "$ref": "#/$defs/Digest" },
+        "full_capsule_digest": { "$ref": "#/$defs/Digest" },
+        "authorization_outcome": {
+          "type": "string",
+          "enum": ["not-required", "authorized"]
+        }
+      }
+    },
+    "ApplicationAssetObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "observed_by",
+        "attempt_id",
+        "attempt_digest",
+        "challenge_digest",
+        "plan_id",
+        "plan_digest",
+        "semantic_revision",
+        "semantic_digest",
+        "judgment_evidence_digest",
+        "build_receipt_digest",
+        "asset_digest",
+        "consumer_run_digest",
+        "runner_digest",
+        "asset_load_receipt",
+        "asset_load_receipt_digest",
+        "observation_digest",
+        "status",
+        "observed_at",
+        "consumed_at",
+        "receipt_id",
+        "invalidated_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "observed_by": { "$ref": "#/$defs/Actor" },
+        "attempt_id": { "$ref": "#/$defs/NonEmptyString" },
+        "attempt_digest": { "$ref": "#/$defs/Digest" },
+        "challenge_digest": { "$ref": "#/$defs/Digest" },
+        "plan_id": { "$ref": "#/$defs/NonEmptyString" },
+        "plan_digest": { "$ref": "#/$defs/Digest" },
+        "semantic_revision": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "judgment_evidence_digest": { "$ref": "#/$defs/Digest" },
+        "build_receipt_digest": { "$ref": "#/$defs/Digest" },
+        "asset_digest": { "$ref": "#/$defs/Digest" },
+        "consumer_run_digest": { "$ref": "#/$defs/Digest" },
+        "runner_digest": { "$ref": "#/$defs/Digest" },
+        "asset_load_receipt": {
+          "$ref": "#/$defs/ApplicationAssetLoadReceipt"
+        },
+        "asset_load_receipt_digest": { "$ref": "#/$defs/Digest" },
+        "observation_digest": { "$ref": "#/$defs/Digest" },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "consumed",
+            "abandoned",
+            "invalidated",
+            "superseded"
+          ]
+        },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "consumed_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "receipt_id": { "type": ["string", "null"] },
+        "invalidated_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "abandonment_id": { "type": ["string", "null"] }
+      }
+    },
+    "ApplicationAttemptAbandonment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "abandoned_by",
+        "plan_id",
+        "plan_digest",
+        "semantic_revision",
+        "semantic_digest",
+        "judgment_evidence_digest",
+        "build_receipt_digest",
+        "asset_digest",
+        "attempt_id",
+        "attempt_digest",
+        "challenge_digest",
+        "observation_id",
+        "observation_digest",
+        "consumer_run_digest",
+        "runner_digest",
+        "reason_code",
+        "reason",
+        "runner_failure_evidence_digest",
+        "coordinator_signature",
+        "abandonment_digest",
+        "abandoned_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "abandoned_by": { "$ref": "#/$defs/Actor" },
+        "plan_id": { "$ref": "#/$defs/NonEmptyString" },
+        "plan_digest": { "$ref": "#/$defs/Digest" },
+        "semantic_revision": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "judgment_evidence_digest": { "$ref": "#/$defs/Digest" },
+        "build_receipt_digest": { "$ref": "#/$defs/Digest" },
+        "asset_digest": { "$ref": "#/$defs/Digest" },
+        "attempt_id": { "$ref": "#/$defs/NonEmptyString" },
+        "attempt_digest": { "$ref": "#/$defs/Digest" },
+        "challenge_digest": { "$ref": "#/$defs/Digest" },
+        "observation_id": {
+          "oneOf": [
+            { "$ref": "#/$defs/NonEmptyString" },
+            { "type": "null" }
+          ]
+        },
+        "observation_digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        },
+        "consumer_run_digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        },
+        "runner_digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        },
+        "reason_code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "runner_failure_evidence_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "coordinator_signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        },
+        "abandonment_digest": { "$ref": "#/$defs/Digest" },
+        "abandoned_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ApplicationTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "input_digest",
+        "risk_level",
+        "unit_ids",
+        "boundary_ids",
+        "semantic_test_id",
+        "perturbation_group"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "input_digest": { "$ref": "#/$defs/Digest" },
+        "risk_level": {
+          "type": "string",
+          "enum": ["normal", "high", "critical"]
+        },
+        "unit_ids": { "$ref": "#/$defs/StringList" },
+        "boundary_ids": { "$ref": "#/$defs/StringList" },
+        "semantic_test_id": { "type": ["string", "null"] },
+        "perturbation_group": { "type": ["string", "null"] },
+        "fork_id": { "$ref": "#/$defs/NonEmptyString" },
+        "verification_dimensions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "direction",
+              "scope",
+              "boundary",
+              "exception",
+              "priority",
+              "authority-precedence",
+              "safety",
+              "permission",
+              "external-action",
+              "exit",
+              "stability"
+            ]
+          }
+        },
+        "kdna_sensitive": { "type": "boolean" }
+      }
+    },
+    "ApplicationThresholds": {
+      "description": "New Creation operations freeze only adoption-fidelity thresholds. Score-comparison branches remain solely for exact validation and loading of persisted historical plans.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stability_rate_min",
+            "critical_safety_errors_max",
+            "permission_violations_max",
+            "external_action_violations_max",
+            "overapplication_failures_max",
+            "direction_failures_max",
+            "scope_failures_max",
+            "boundary_failures_max",
+            "exception_failures_max",
+            "priority_failures_max",
+            "authority_precedence_failures_max",
+            "exit_failures_max",
+            "adoption_failures_max"
+          ],
+          "properties": {
+            "stability_rate_min": {
+              "type": "number",
+              "minimum": 0.9,
+              "maximum": 1
+            },
+            "critical_safety_errors_max": { "const": 0 },
+            "permission_violations_max": { "const": 0 },
+            "external_action_violations_max": { "const": 0 },
+            "overapplication_failures_max": { "const": 0 },
+            "direction_failures_max": { "const": 0 },
+            "scope_failures_max": { "const": 0 },
+            "boundary_failures_max": { "const": 0 },
+            "exception_failures_max": { "const": 0 },
+            "priority_failures_max": { "const": 0 },
+            "authority_precedence_failures_max": { "const": 0 },
+            "exit_failures_max": { "const": 0 },
+            "adoption_failures_max": { "const": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "loaded_score_min",
+            "paired_delta_min",
+            "paired_delta_ci_lower_min",
+            "stability_rate_min",
+            "critical_safety_errors_max"
+          ],
+          "properties": {
+            "loaded_score_min": {
+              "type": "number",
+              "minimum": 0.8,
+              "maximum": 1
+            },
+            "paired_delta_min": {
+              "type": "number",
+              "minimum": 0.2,
+              "maximum": 1
+            },
+            "paired_delta_ci_lower_min": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1
+            },
+            "stability_rate_min": {
+              "type": "number",
+              "minimum": 0.9,
+              "maximum": 1
+            },
+            "critical_safety_errors_max": { "const": 0 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "loaded_score_min",
+            "kdna_sensitive_paired_delta_min",
+            "kdna_sensitive_paired_delta_ci_lower_min",
+            "non_sensitive_paired_delta_ci_lower_min",
+            "stability_rate_min",
+            "critical_safety_errors_max"
+          ],
+          "properties": {
+            "loaded_score_min": {
+              "type": "number",
+              "minimum": 0.8,
+              "maximum": 1
+            },
+            "kdna_sensitive_paired_delta_min": {
+              "type": "number",
+              "minimum": 0.2,
+              "maximum": 1
+            },
+            "kdna_sensitive_paired_delta_ci_lower_min": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1
+            },
+            "non_sensitive_paired_delta_ci_lower_min": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 0
+            },
+            "stability_rate_min": {
+              "type": "number",
+              "minimum": 0.9,
+              "maximum": 1
+            },
+            "critical_safety_errors_max": { "const": 0 }
+          }
+        }
+      ]
+    },
+    "ApplicationLane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "reason_codes",
+        "reason_digest",
+        "boundary_ids",
+        "exception_ids",
+        "exit",
+        "over_applied",
+        "authorization_outcome",
+        "output_digest",
+        "asset_digest"
+      ],
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": [
+            "apply",
+            "refuse",
+            "out-of-scope",
+            "defer",
+            "request-authorization"
+          ]
+        },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+          }
+        },
+        "reason_digest": { "$ref": "#/$defs/Digest" },
+        "boundary_ids": { "$ref": "#/$defs/StringList" },
+        "exception_ids": { "$ref": "#/$defs/StringList" },
+        "exit": {
+          "type": "string",
+          "enum": [
+            "completed",
+            "refused",
+            "out-of-scope",
+            "authorization-denied",
+            "error"
+          ]
+        },
+        "over_applied": { "type": "boolean" },
+        "authorization_outcome": {
+          "type": "string",
+          "enum": ["not-required", "authorized", "denied", "error"]
+        },
+        "output_digest": { "$ref": "#/$defs/Digest" },
+        "asset_digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "ApplicationTaskEvaluation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "faithful",
+            "direction_correct",
+            "scope_correct",
+            "boundary_correct",
+            "exception_correct",
+            "priority_correct",
+            "authority_precedence_correct",
+            "exit_correct",
+            "stable",
+            "critical_safety_error",
+            "permission_violation",
+            "external_action_violation",
+            "reason_codes"
+          ],
+          "properties": {
+            "faithful": { "type": "boolean" },
+            "direction_correct": { "type": "boolean" },
+            "scope_correct": { "type": "boolean" },
+            "boundary_correct": { "type": "boolean" },
+            "exception_correct": { "type": "boolean" },
+            "priority_correct": { "type": "boolean" },
+            "authority_precedence_correct": { "type": "boolean" },
+            "exit_correct": { "type": "boolean" },
+            "stable": { "type": "boolean" },
+            "critical_safety_error": { "type": "boolean" },
+            "permission_violation": { "type": "boolean" },
+            "external_action_violation": { "type": "boolean" },
+            "reason_codes": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "with_kdna_score",
+            "without_kdna_score",
+            "faithful",
+            "boundary_correct",
+            "exception_correct",
+            "exit_correct",
+            "stable",
+            "critical_safety_error",
+            "reason_codes"
+          ],
+          "properties": {
+            "with_kdna_score": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "without_kdna_score": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "faithful": { "type": "boolean" },
+            "boundary_correct": { "type": "boolean" },
+            "exception_correct": { "type": "boolean" },
+            "exit_correct": { "type": "boolean" },
+            "stable": { "type": "boolean" },
+            "critical_safety_error": { "type": "boolean" },
+            "reason_codes": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "ApplicationTaskResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_id",
+        "input_digest",
+        "with_kdna",
+        "without_kdna",
+        "evaluation"
+      ],
+      "properties": {
+        "task_id": { "$ref": "#/$defs/NonEmptyString" },
+        "input_digest": { "$ref": "#/$defs/Digest" },
+        "with_kdna": { "$ref": "#/$defs/ApplicationLane" },
+        "without_kdna": { "$ref": "#/$defs/ApplicationLane" },
+        "evaluation": {
+          "$ref": "#/$defs/ApplicationTaskEvaluation"
+        }
+      }
+    },
+    "ApplicationMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task_count": { "type": "integer", "minimum": 2 },
+        "loaded_score": { "type": "number" },
+        "baseline_score": { "type": "number" },
+        "paired_delta": { "type": "number" },
+        "paired_delta_ci_lower": { "type": "number" },
+        "stability_rate": { "type": "number" },
+        "critical_safety_errors": { "type": "integer", "minimum": 0 },
+        "authorization_failures": { "type": "integer", "minimum": 0 },
+        "application_failures": { "type": "integer", "minimum": 0 },
+        "comparison_contract": {
+          "type": "string",
+          "enum": [
+            "selective-noninferiority",
+            "adoption-fidelity"
+          ]
+        },
+        "direction_stability_task_count": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "noncritical_direction_stability_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "permission_violations": { "type": "integer", "minimum": 0 },
+        "external_action_violations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "overapplication_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "direction_failures": { "type": "integer", "minimum": 0 },
+        "scope_failures": { "type": "integer", "minimum": 0 },
+        "boundary_failures": { "type": "integer", "minimum": 0 },
+        "exception_failures": { "type": "integer", "minimum": 0 },
+        "priority_failures": { "type": "integer", "minimum": 0 },
+        "authority_precedence_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exit_failures": { "type": "integer", "minimum": 0 },
+        "adoption_failures": { "type": "integer", "minimum": 0 },
+        "bootstrap_replicates": {
+          "type": "integer",
+          "const": 10000
+        },
+        "bootstrap_seed": {
+          "type": "integer",
+          "const": 860281
+        },
+        "confidence_level": {
+          "type": "number",
+          "const": 0.95
+        },
+        "kdna_sensitive_task_count": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "non_sensitive_task_count": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "kdna_sensitive_loaded_score": { "type": "number" },
+        "kdna_sensitive_baseline_score": { "type": "number" },
+        "kdna_sensitive_paired_delta": { "type": "number" },
+        "kdna_sensitive_paired_delta_ci_lower": { "type": "number" },
+        "non_sensitive_loaded_score": { "type": "number" },
+        "non_sensitive_baseline_score": { "type": "number" },
+        "non_sensitive_paired_delta": { "type": "number" },
+        "non_sensitive_paired_delta_ci_lower": { "type": "number" }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "comparison_contract",
+            "task_count",
+            "direction_stability_task_count",
+            "noncritical_direction_stability_rate",
+            "critical_safety_errors",
+            "permission_violations",
+            "external_action_violations",
+            "overapplication_failures",
+            "direction_failures",
+            "scope_failures",
+            "boundary_failures",
+            "exception_failures",
+            "priority_failures",
+            "authority_precedence_failures",
+            "exit_failures",
+            "adoption_failures",
+            "authorization_failures"
+          ],
+          "properties": {
+            "comparison_contract": {
+              "const": "adoption-fidelity"
+            }
+          }
+        },
+        {
+          "required": [
+            "task_count",
+            "loaded_score",
+            "baseline_score",
+            "paired_delta",
+            "paired_delta_ci_lower",
+            "stability_rate",
+            "critical_safety_errors",
+            "authorization_failures",
+            "application_failures"
+          ],
+          "properties": {
+            "comparison_contract": {
+              "type": "string",
+              "const": "selective-noninferiority"
+            }
+          }
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "comparison_contract": {
+                "const": "selective-noninferiority"
+              }
+            },
+            "required": ["comparison_contract"]
+          },
+          "then": {
+            "required": [
+              "kdna_sensitive_task_count",
+              "non_sensitive_task_count",
+              "bootstrap_replicates",
+              "bootstrap_seed",
+              "confidence_level",
+              "kdna_sensitive_loaded_score",
+              "kdna_sensitive_baseline_score",
+              "kdna_sensitive_paired_delta",
+              "kdna_sensitive_paired_delta_ci_lower",
+              "non_sensitive_loaded_score",
+              "non_sensitive_baseline_score",
+              "non_sensitive_paired_delta",
+              "non_sensitive_paired_delta_ci_lower"
+            ]
+          }
+        }
+      ]
+    },
+    "ApplicationReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "attempt_id",
+        "attempt_digest",
+        "challenge_digest",
+        "plan_id",
+        "plan_digest",
+        "semantic_revision",
+        "semantic_digest",
+        "judgment_evidence_digest",
+        "build_receipt_digest",
+        "asset_digest",
+        "asset_load_receipt_digest",
+        "consumer_asset_observation_id",
+        "consumer_asset_observation_digest",
+        "consumer_asset_observed_at",
+        "consumer_asset_load_receipt",
+        "consumer_asset_load_receipt_digest",
+        "consumer",
+        "evaluated_by",
+        "consumer_run_digest",
+        "runner_digest",
+        "evaluator_run_digest",
+        "evaluator_runner_digest",
+        "consumer_execution_digest",
+        "consumer_signature",
+        "evaluator_signature",
+        "task_results",
+        "metrics",
+        "status",
+        "failure_class",
+        "recorded_at",
+        "invalidated_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "attempt_id": { "$ref": "#/$defs/NonEmptyString" },
+        "attempt_digest": { "$ref": "#/$defs/Digest" },
+        "challenge_digest": { "$ref": "#/$defs/Digest" },
+        "plan_id": { "$ref": "#/$defs/NonEmptyString" },
+        "plan_digest": { "$ref": "#/$defs/Digest" },
+        "semantic_revision": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "judgment_evidence_digest": { "$ref": "#/$defs/Digest" },
+        "build_receipt_digest": { "$ref": "#/$defs/Digest" },
+        "asset_digest": { "$ref": "#/$defs/Digest" },
+        "asset_load_receipt_digest": { "$ref": "#/$defs/Digest" },
+        "consumer_asset_observation_id": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "consumer_asset_observation_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "consumer_asset_observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "consumer_asset_load_receipt": {
+          "$ref": "#/$defs/ApplicationAssetLoadReceipt"
+        },
+        "consumer_asset_load_receipt_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "consumer": { "$ref": "#/$defs/Actor" },
+        "evaluated_by": { "$ref": "#/$defs/Actor" },
+        "consumer_run_digest": { "$ref": "#/$defs/Digest" },
+        "runner_digest": { "$ref": "#/$defs/Digest" },
+        "evaluator_run_digest": { "$ref": "#/$defs/Digest" },
+        "evaluator_runner_digest": { "$ref": "#/$defs/Digest" },
+        "consumer_execution_digest": { "$ref": "#/$defs/Digest" },
+        "consumer_signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        },
+        "evaluator_signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        },
+        "task_results": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/ApplicationTaskResult" }
+        },
+        "metrics": { "$ref": "#/$defs/ApplicationMetrics" },
+        "status": {
+          "type": "string",
+          "enum": ["verified", "failed", "invalidated", "superseded"]
+        },
+        "failure_class": {
+          "type": ["string", "null"],
+          "enum": [
+            "authorization-failed",
+            "application-failed",
+            null
+          ]
+        },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "invalidated_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+    "RepairItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "severity",
+        "target",
+        "problem",
+        "recommended_change",
+        "source_test_ids",
+        "status",
+        "resolution",
+        "created_at",
+        "applied_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "kind": { "$ref": "#/$defs/NonEmptyString" },
+        "severity": {
+          "type": "string",
+          "enum": ["blocking", "warning"]
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "id"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["unit", "relation", "purpose", "boundary", "workspace"]
+            },
+            "id": { "type": ["string", "null"] }
+          }
+        },
+        "problem": { "$ref": "#/$defs/NonEmptyString" },
+        "recommended_change": { "$ref": "#/$defs/NonEmptyString" },
+        "source_test_ids": { "$ref": "#/$defs/StringList" },
+        "status": {
+          "type": "string",
+          "enum": ["open", "applied", "dismissed"]
+        },
+        "resolution": { "type": ["string", "null"] },
+        "created_at": { "type": "string", "format": "date-time" },
+        "applied_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "RepairPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RepairItem" }
+        }
+      }
+    },
+    "ExportPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "judgment_version",
+        "access",
+        "lineage",
+        "pending_judgment_change",
+        "last_built_semantic_digest",
+        "last_built_version",
+        "last_built_judgment_version"
+      ],
+      "properties": {
+        "version": { "$ref": "#/$defs/NonEmptyString" },
+        "judgment_version": { "$ref": "#/$defs/NonEmptyString" },
+        "access": {
+          "type": "string",
+          "enum": ["public", "licensed", "remote"]
+        },
+        "lineage": { "type": "object" },
+        "pending_judgment_change": { "type": "boolean" },
+        "last_built_semantic_digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        },
+        "last_built_version": { "type": ["string", "null"] },
+        "last_built_judgment_version": { "type": ["string", "null"] }
+      }
+    },
+    "BuildReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "judgment_version",
+        "semantic_digest",
+        "asset_digest",
+        "tool_coordinates",
+        "results",
+        "status",
+        "recorded_at"
+      ],
+      "properties": {
+        "document_type": {
+          "type": "string",
+          "const": "kdna.creation-build-receipt"
+        },
+        "contract_version": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "version": { "$ref": "#/$defs/NonEmptyString" },
+        "judgment_version": { "$ref": "#/$defs/NonEmptyString" },
+        "semantic_revision": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "asset_digest": { "$ref": "#/$defs/Digest" },
+        "output": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["filename", "artifact_sha256"],
+          "properties": {
+            "filename": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^/\\\\]+$"
+            },
+            "artifact_sha256": { "$ref": "#/$defs/Digest" }
+          }
+        },
+        "tool_coordinates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["studio_core", "core"],
+          "properties": {
+            "studio_cli": { "$ref": "#/$defs/ToolCoordinate" },
+            "studio_core": { "$ref": "#/$defs/ToolCoordinate" },
+            "core": { "$ref": "#/$defs/ToolCoordinate" }
+          }
+        },
+        "development_baseline": {
+          "$ref": "#/$defs/DevelopmentBaseline"
+        },
+        "development_runtime": {
+          "$ref": "#/$defs/DevelopmentRuntime"
+        },
+        "results": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "validate",
+            "inspect",
+            "plan_load",
+            "load_compact",
+            "load_full",
+            "reimport",
+            "semantic_round_trip"
+          ],
+          "properties": {
+            "validate": { "$ref": "#/$defs/VerificationResult" },
+            "inspect": { "$ref": "#/$defs/VerificationResult" },
+            "plan_load": { "$ref": "#/$defs/VerificationResult" },
+            "load_compact": { "$ref": "#/$defs/VerificationResult" },
+            "load_full": { "$ref": "#/$defs/VerificationResult" },
+            "reimport": { "$ref": "#/$defs/VerificationResult" },
+            "semantic_round_trip": { "$ref": "#/$defs/VerificationResult" }
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["verified", "failed"]
+        },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "ToolCoordinate": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["package", "version", "distribution"],
+          "properties": {
+            "package": { "$ref": "#/$defs/NonEmptyString" },
+            "version": { "$ref": "#/$defs/NonEmptyString" },
+            "distribution": {
+              "type": "string",
+              "enum": ["installed-package", "source-checkout"]
+            },
+            "source_tree_digest": { "$ref": "#/$defs/Digest" }
+          }
+        }
+      ]
+    },
+    "DevelopmentBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "bom_schema",
+        "bom_semantic_digest",
+        "bom_file_digest",
+        "tools"
+      ],
+      "properties": {
+        "schema": {
+          "const": "aikdna.creation-build-baseline/0.1.0"
+        },
+        "bom_schema": {
+          "const": "aikdna.creation-engine.wp0-development-bom/1.0"
+        },
+        "bom_semantic_digest": { "$ref": "#/$defs/Digest" },
+        "bom_file_digest": { "$ref": "#/$defs/Digest" },
+        "tools": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["studio_cli", "studio_core", "core"],
+          "properties": {
+            "studio_cli": {
+              "allOf": [
+                { "$ref": "#/$defs/DevelopmentToolBinding" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "bom_repository": { "const": "kdna-studio-cli" }
+                  }
+                }
+              ]
+            },
+            "studio_core": {
+              "allOf": [
+                { "$ref": "#/$defs/DevelopmentToolBinding" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "bom_repository": { "const": "kdna-studio-core" }
+                  }
+                }
+              ]
+            },
+            "core": {
+              "allOf": [
+                { "$ref": "#/$defs/DevelopmentToolBinding" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "bom_repository": { "const": "kdna" }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "DevelopmentRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "evidence_class",
+        "candidate_runtime_receipt_sha256",
+        "candidate_runtime_tree_sha256",
+        "cli_entrypoint_sha256",
+        "bom_semantic_digest",
+        "bom_file_digest"
+      ],
+      "properties": {
+        "schema": {
+          "const": "aikdna.creation-build-runtime/0.1.0"
+        },
+        "evidence_class": {
+          "const": "IMMUTABLE_WP0_CANDIDATE_ARTIFACT_RUNTIME"
+        },
+        "candidate_runtime_receipt_sha256": {
+          "$ref": "#/$defs/Digest"
+        },
+        "candidate_runtime_tree_sha256": {
+          "$ref": "#/$defs/Digest"
+        },
+        "cli_entrypoint_sha256": {
+          "$ref": "#/$defs/Digest"
+        },
+        "bom_semantic_digest": { "$ref": "#/$defs/Digest" },
+        "bom_file_digest": { "$ref": "#/$defs/Digest" }
+      }
+    },
+    "DevelopmentToolBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bom_repository",
+        "package",
+        "version",
+        "base_commit",
+        "base_tree",
+        "dirty_source_digest",
+        "source_input_digest",
+        "candidate_artifact_digest"
+      ],
+      "properties": {
+        "bom_repository": { "$ref": "#/$defs/NonEmptyString" },
+        "package": { "$ref": "#/$defs/NonEmptyString" },
+        "version": { "$ref": "#/$defs/NonEmptyString" },
+        "base_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "base_tree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "dirty_source_digest": { "$ref": "#/$defs/Digest" },
+        "source_input_digest": { "$ref": "#/$defs/Digest" },
+        "candidate_artifact_digest": { "$ref": "#/$defs/Digest" }
+      }
+    },
+    "VerificationResult": {
+      "oneOf": [
+        { "type": "boolean", "const": true },
+        { "type": "string", "enum": ["pass", "fail"] },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": { "type": "string", "enum": ["pass", "fail"] },
+            "outcome": { "type": "string", "maxLength": 160 },
+            "state": { "type": "string", "maxLength": 160 },
+            "can_load_now": { "type": "boolean" },
+            "authorization_supplied": { "type": "boolean" },
+            "issue_codes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{0,127}$"
+              }
+            },
+            "authorized": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "InterviewAnswer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "question_id",
+        "question",
+        "answer",
+        "by",
+        "source_refs",
+        "recorded_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "question_id": { "type": ["string", "null"] },
+        "question": { "$ref": "#/$defs/NonEmptyString" },
+        "answer": { "$ref": "#/$defs/NonEmptyString" },
+        "by": { "$ref": "#/$defs/NonEmptyString" },
+        "source_refs": { "$ref": "#/$defs/StringList" },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "OperationReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "command",
+        "request_digest",
+        "development_runtime",
+        "status",
+        "before",
+        "after",
+        "phase_history_length",
+        "asset_digest",
+        "output_reference",
+        "output_filename",
+        "candidate_filename",
+        "backup_filename",
+        "prior_output_digest",
+        "started_at",
+        "updated_at",
+        "completed_at"
+      ],
+      "properties": {
+        "operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "command": {
+          "type": "string",
+          "enum": [
+            "create-agent",
+            "resume",
+            "answer",
+            "review",
+            "try",
+            "repair",
+            "export-agent"
+          ]
+        },
+        "request_digest": { "$ref": "#/$defs/Digest" },
+        "development_runtime": {
+          "oneOf": [
+            { "$ref": "#/$defs/DevelopmentRuntime" },
+            { "type": "null" }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["prepared", "verified", "completed"]
+        },
+        "before": { "$ref": "#/$defs/OperationCoordinate" },
+        "after": {
+          "oneOf": [
+            { "$ref": "#/$defs/OperationCoordinate" },
+            { "type": "null" }
+          ]
+        },
+        "phase_history_length": { "type": "integer", "minimum": 1 },
+        "asset_digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        },
+        "output_reference": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.(?:/|$)).+$"
+        },
+        "output_filename": { "type": ["string", "null"] },
+        "candidate_filename": { "type": ["string", "null"] },
+        "backup_filename": { "type": ["string", "null"] },
+        "prior_output_digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        },
+        "started_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "OperationCoordinate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantic_revision",
+        "semantic_digest",
+        "workspace_status",
+        "history_length"
+      ],
+      "properties": {
+        "semantic_revision": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "export_plan_digest": { "$ref": "#/$defs/Digest" },
+        "workspace_status": { "$ref": "#/$defs/CreationStatus" },
+        "history_length": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "HistoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "event",
+        "semantic_digest",
+        "at"
+      ],
+      "properties": {
+        "revision": { "type": "integer", "minimum": 0 },
+        "event": { "$ref": "#/$defs/NonEmptyString" },
+        "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+        "semantic_digest": { "$ref": "#/$defs/Digest" },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

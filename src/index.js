@@ -21,6 +21,7 @@ const project = require('./project');
 const provenance = require('./provenance');
 const distillation = require('./distillation');
 const protocolContract = require('./protocol-contract');
+const creationEngine = require('./creation-engine');
 
 module.exports = {
   authoring,
@@ -34,4 +35,5 @@ module.exports = {
   distillation,
   evidence,
   protocolContract,
+  creationEngine,
 };

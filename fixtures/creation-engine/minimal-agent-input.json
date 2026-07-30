@@ -1,0 +1,61 @@
+{
+  "mode": "agent-authored",
+  "createdBy": {
+    "type": "agent",
+    "id": "fixture-agent"
+  },
+  "purpose": {
+    "title": "incident-triage",
+    "objective": "Prioritize reversible incident actions before speculative repair.",
+    "scope": "service incident triage",
+    "loading_condition": "Load when an Agent must choose the next incident-triage action.",
+    "highest_question": "Which action reduces irreversible harm while preserving diagnosis?",
+    "worldview": [
+      "Observed system state remains authoritative."
+    ],
+    "value_order": [
+      "prevent irreversible harm",
+      "preserve diagnostic evidence",
+      "restore service"
+    ],
+    "judgment_role": {
+      "acts_as": "a scoped incident-triage judgment authority",
+      "does_not_act_as": [
+        "a monitoring data source"
+      ],
+      "responsibility": "Order qualitative tradeoffs inside incident triage."
+    },
+    "global_boundaries": [
+      {
+        "id": "boundary_no_secrets",
+        "statement": "Never reveal credentials or private incident source content.",
+        "source_refs": []
+      }
+    ]
+  },
+  "candidate": {
+    "id": "candidate_reversible_first",
+    "statement": "Prefer reversible containment before destructive repair.",
+    "rationale": "Reversible containment preserves evidence and rollback options.",
+    "applies_when": [
+      "The root cause remains uncertain."
+    ],
+    "does_not_apply_when": [
+      "A safety emergency requires immediate irreversible action."
+    ],
+    "misuse_risk": "May delay an urgent safety intervention.",
+    "contrary_evidence": [
+      "An immediate safety emergency may require irreversible action."
+    ],
+    "confidence": {
+      "status": "high",
+      "score": 0.9,
+      "reason": "The decision rule and exception are explicit."
+    },
+    "agent_inference": true,
+    "card_type": "axiom",
+    "fields": {
+      "one_sentence": "Prefer reversible containment before destructive repair."
+    }
+  }
+}
