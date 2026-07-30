@@ -1,0 +1,108 @@
+{
+  "card_types": [
+    "axiom",
+    "boundary",
+    "risk",
+    "aesthetic",
+    "ontology",
+    "misunderstanding",
+    "self_check",
+    "scenario",
+    "case",
+    "stance",
+    "framework",
+    "term",
+    "banned_term",
+    "reasoning",
+    "evolution_stage",
+    "pattern"
+  ],
+  "fields_by_type": {
+    "axiom": {
+      "full_statement": "fixture::axiom::full_statement",
+      "why": "fixture::axiom::why"
+    },
+    "boundary": {
+      "scope": "fixture::boundary::scope",
+      "out_of_scope": "fixture::boundary::out_of_scope",
+      "acceptable_exceptions": ["fixture::boundary::acceptable_exceptions"]
+    },
+    "risk": {
+      "name": "fixture::risk::name",
+      "description": "fixture::risk::description",
+      "mitigation": "fixture::risk::mitigation"
+    },
+    "aesthetic": {
+      "name": "fixture::aesthetic::name",
+      "description": "fixture::aesthetic::description"
+    },
+    "ontology": {
+      "essence": "fixture::ontology::essence",
+      "boundary": "fixture::ontology::boundary"
+    },
+    "misunderstanding": {
+      "wrong": "fixture::misunderstanding::wrong",
+      "correct": "fixture::misunderstanding::correct",
+      "key_distinction": "fixture::misunderstanding::key_distinction"
+    },
+    "self_check": {
+      "question": "fixture::self_check::question?"
+    },
+    "scenario": {
+      "situation": "fixture::scenario::situation",
+      "judgment": "fixture::scenario::judgment"
+    },
+    "case": {
+      "title": "fixture::case::title",
+      "lesson": "fixture::case::lesson"
+    },
+    "stance": {
+      "position": "fixture::stance::position"
+    },
+    "framework": {
+      "name": "fixture::framework::name",
+      "steps": ["fixture::framework::steps"]
+    },
+    "term": {
+      "term": "fixture::term::term",
+      "definition": "fixture::term::definition"
+    },
+    "banned_term": {
+      "term": "fixture::banned_term::term",
+      "why": "fixture::banned_term::why",
+      "replace_with": "fixture::banned_term::replace_with"
+    },
+    "reasoning": {
+      "one_sentence": "fixture::reasoning::one_sentence",
+      "chain": ["fixture::reasoning::chain"],
+      "principle": "fixture::reasoning::principle",
+      "concrete_action": "fixture::reasoning::concrete_action"
+    },
+    "evolution_stage": {
+      "name": "fixture::evolution_stage::name",
+      "description": "fixture::evolution_stage::description",
+      "indicators": ["fixture::evolution_stage::indicators"]
+    },
+    "pattern": {
+      "name": "fixture::pattern::name",
+      "one_sentence": "fixture::pattern::one_sentence",
+      "what_it_looks_like": "fixture::pattern::what_it_looks_like",
+      "how_to_fix": "fixture::pattern::how_to_fix"
+    }
+  },
+  "common": {
+    "rationale": "This fixture proves the semantic unit survives project compile and Runtime projection.",
+    "applies_when": [
+      "The declared domain is active."
+    ],
+    "does_not_apply_when": [
+      "The task is outside the declared domain."
+    ],
+    "misuse_risk": "Applying the judgment outside its declared boundary.",
+    "confidence": {
+      "status": "high",
+      "score": 0.95
+    },
+    "agent_inference": true
+  }
+}

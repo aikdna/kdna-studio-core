@@ -1,5 +1,120 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Bind the Creation candidate to Core commit
+  `1b919605988eb514f2491195d6a77b96b17151c4`, including the structured
+  `core_structure.relations` contract and exact source-equivalent package.
+
+### Added
+
+- Add the unreleased, UI-independent `creationEngine` source candidate for terminal-Agent
+  creation workflows. It provides immutable purpose, source ingestion,
+  candidate promotion, relation and split analysis, mode-specific
+  participation/confirmation, semantic test, repair, readiness, compile,
+  build-receipt, and next-action operations.
+- Add `schemas/creation-workspace.schema.json` for the eight first-class
+  creation objects, five modes, nine states, semantic acceptance reports, and
+  the recoverable workspace.
+- Add an atomic 11-artifact workspace format with canonical semantic digests,
+  semantic-revision invalidation, mixed-snapshot rejection, and recovery from
+  a complete interrupted directory replacement. Optimistic concurrency rejects
+  a stale, divergent, or different-workspace save with
+  `CREATION_WORKSPACE_CONFLICT`.
+- Add a private replay ledger in `creation-state.json`. Canonical
+  `operation_id` receipts make exact retries inert without changing semantic
+  revision and reject conflicting or stale-semantic ID reuse; they never enter
+  Runtime output. Export receipts persist private
+  `prepared → verified → completed` phases that bind the prior output,
+  deterministic recovery files, exact packed bytes, current export plan,
+  current build receipt and operation history. Advancing an export plan makes
+  every earlier incomplete or completed export operation non-replayable.
+- Preserve explicit non-goals as compile-bound boundaries, candidate
+  before/after review receipts, and creator-label test definitions frozen by
+  a pre-evaluation test-plan receipt. Purpose and boundary repairs enforce the
+  same non-goal/boundary invariant as initial purpose creation.
+- Persist the observed creator label for frozen creator-labelled tests and
+  derive result/status from that label and the predeclared expectation.
+  Contradictory caller results and re-digested label/result corruption fail
+  closed.
+- Define creator labels as classifications of the requested case, not ratings
+  of a correctly refusing expected response: an out-of-scope request remains
+  `超出范围` even when refusal or abstention is faithful.
+- Require representational source grounding to bind an in-scope, non-expired,
+  current eligible source to the exact represented subject; wrong, unknown,
+  historical, negative and rejected source declarations no longer satisfy
+  Creation Accepted.
+- Permit a distinct represented Agent to accept an `interpretive` synthetic
+  semantic-test report while rejecting the creating Agent and unrelated Agents;
+  the private receipt never becomes Runtime authorship, Human Lock, or human
+  evidence.
+- Allow a source-grounded flow to begin with an interview, while still
+  requiring the exact answer to become a classified interview source before
+  it can ground a judgment. Add private post-ingest source review for subject,
+  ownership, representativeness, authority, currentness, constraints, scope,
+  split suggestion and expiry, with immutable source bytes and digest-bound
+  before/after receipts.
+- Let ingestion bind a content digest to original file bytes while scanning
+  separately supplied transient extracted text for prompt injection and
+  sensitivity. Neither byte stream nor any matched source excerpt is persisted;
+  detection records schema-closed stable indicator codes only, with the
+  detection flag required to match indicator presence.
+- Add source isolation and prompt-injection metadata. Ingested bodies remain
+  untrusted data, are reduced to digests and declared interpretation metadata,
+  and never enter the compiled project or Runtime payload. Open source-safety
+  questions block creation acceptance. In-scope sensitive material additionally
+  blocks public export until a structured public-safe abstraction review is
+  recorded; non-public isolation remains available.
+- Add lossless Creation Engine mapping to all 16 existing Studio card types.
+  The declared judgment core, admitted Runtime relations, release pair, and
+  creating-Agent provenance survive compile and Runtime projection. The
+  private loading condition survives the compile project without adding a new
+  public Runtime field. Private confirmation receipts constrain Creation
+  Accepted but never become Runtime creator identity, Human Lock, or a public
+  human-confirmation flag. Existing non-Creation-Engine self-check and
+  terminology compile shapes remain unchanged.
+- Keep support, limit, and resolved-conflict relations in private creation
+  evidence. Only explicitly accepted priority and exception relations are
+  projected into Runtime `core_structure` at this checkpoint.
+- Add executable fixtures for minimal Agent creation, complete human-confirmed
+  creation, all five modes, mixed private/hostile sources, and all 16 card
+  types, plus lifecycle, hostile-input, persistence, recovery, version, and
+  Runtime round-trip tests.
+- Separate private `workflow_mode` (`collaborative` or `autonomous`) from the
+  five source/claim modes, without projecting workflow state into Runtime.
+- Replace the former two-step completion shortcut with three derived gates:
+  exact-byte `FORMAT_VALID`, current `JUDGMENT_ACCEPTED`, and signed
+  dual-lane `APPLICATION_VERIFIED`. Pre-frozen Consumer/evaluator Ed25519 keys,
+  plan/judgment/build/asset digests, real lane outputs, evaluator scores, and
+  fixed thresholds are all required; caller-provided pass booleans are
+  rejected. Signatures are explicitly key-possession evidence, not identity
+  authentication or proof of process independence.
+- Make `FORMAT_VALID` a Studio Core fact rather than a caller assertion.
+  `recordBuildReceipt` now requires the exact final `.kdna` byte snapshot,
+  recomputes its digest, independently validates and reads it through Runtime
+  Core, and compares the loaded semantic payload with the current Creation
+  workspace. Caller-provided seven-step pass fields, plaintext shadows,
+  different assets, digest substitution, missing bytes, and stale receipt
+  replay cannot mint a verified build receipt.
+- Add a backward-compatible private selective application contract. A
+  pre-result plan classifies every task as KDNA-sensitive or non-sensitive;
+  Core mechanically enforces loaded absolute quality, zero critical-safety
+  errors, KDNA-sensitive paired advantage and confidence lower bound, strict
+  non-sensitive non-inferiority, and stability. Existing whole-set
+  paired-difference plans keep their original meaning and failure history.
+  Selective receipts expose the frozen 10,000-replicate, 95%-confidence,
+  seed-`860281` inference coordinate instead of silently inheriting the
+  legacy 4,000-replicate plan-digest seed.
+- Add a private, coordinator-signed abandonment receipt for a one-use
+  application attempt whose isolated Consumer runner failed before a signed
+  application receipt. The receipt binds the current plan, semantic, build,
+  asset, challenge, optional exact observation, reason, and runner-failure
+  evidence digest, Consumer run/runner coordinates, and canonical signed UTC
+  time; Core atomically closes the open attempt/observation and permits a
+  fresh attempt without semantic or build changes.
+
 ## 3.0.0 (2026-07-23)
 
 ### Corrections

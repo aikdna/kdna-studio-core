@@ -122,11 +122,11 @@ test('runtime export keeps authored evolution and excludes Studio lock audit pro
 test('runtime export preserves declared core relations and extended reasoning semantics', () => {
   const project = createRuntimeProject();
   project.source_core_structure = [{
-    id: 'relation_runtime_001',
     from: 'ax_runtime_001',
     to: 'sc_runtime_001',
-    relation: 'verified_by',
-    via: { mode: 'explicit_self_check' },
+    via: 'priority',
+    applies_when: ['The self-check can validate the proposed action.'],
+    does_not_apply_when: ['The action is already rejected.'],
   }];
   project.cards.push(makeLockedCard('reasoning', {
     axiom: 'ax_runtime_001',

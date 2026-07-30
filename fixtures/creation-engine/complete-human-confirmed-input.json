@@ -1,0 +1,39 @@
+{
+  "mode": "human-confirmed",
+  "createdBy": {
+    "type": "agent",
+    "id": "interview-agent"
+  },
+  "representedSubject": {
+    "type": "human",
+    "id": "expert-001",
+    "name": "Named Expert"
+  },
+  "material": {
+    "id": "source_interview",
+    "kind": "interview",
+    "title": "Expert incident-triage interview",
+    "content": "Preserve evidence before changing a system whose failure mode is uncertain.",
+    "authority": "current-highest",
+    "currentness": "current",
+    "sensitivity": "private",
+    "belongs_to_subject": true,
+    "represents_current_judgment": true,
+    "in_scope": true
+  },
+  "confirmation": {
+    "claim": "representation",
+    "actor": {
+      "type": "human",
+      "id": "expert-001",
+      "name": "Named Expert"
+    },
+    "subject": {
+      "type": "human",
+      "id": "expert-001",
+      "name": "Named Expert"
+    },
+    "scope": "model",
+    "statement": "I confirm that this semantic revision represents my judgment."
+  }
+}

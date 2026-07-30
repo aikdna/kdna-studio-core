@@ -1,5 +1,10 @@
 # KDNA Studio Core
 
+> **Status:** The Creation Engine described below is an unreleased
+> dirty-source candidate. The npm `latest` package does not contain this
+> candidate API. Source tests and candidate tarballs are not publication,
+> clean-install or compatibility evidence.
+
 **KDNA Studio Core is the JS authoring kernel for `.kdna` files.** It turns scattered notes, documents, works, and feedback into loadable judgment assets by distilling stable judgment patterns into a declared domain and loading scope.
 
 Open-source Studio-compatible authoring kernel for creating reviewable `.kdna` assets — JS/npm package. Supports two authoring paths: interview-first (direct expression) and distillation-first (pattern extraction from existing content). Both end with the current canonical KDNA runtime export.
@@ -75,6 +80,10 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
   evolution survive Runtime export without being reduced to a field
   allow-list. Human Lock fingerprints cover the complete authored field tree.
 - **Provenance** — content fingerprinting, build tracking, audit trail
+- **Creation Engine candidate** — an unreleased, UI-independent state machine that guides
+  terminal Agents from purpose and untrusted source material through
+  elicitation, confirmation, semantic tests, repair, and accepted project
+  compile.
 
 ## What it is not
 
@@ -101,6 +110,97 @@ If a task needs several judgment domains, create multiple domain assets and
 use an explicit, separately admitted Host contract rather than making one broad
 file. Route cards and consumer indexes are historical advanced sidecars under
 recertification; they do not belong in the runtime asset export.
+
+## Creation Engine
+
+The public `creationEngine` module is the terminal-Agent creation contract. It
+does not require the Studio App:
+
+```js
+const { creationEngine } = require('@aikdna/kdna-studio-core');
+
+let workspace = creationEngine.createWorkspace(null, {
+  mode: 'agent-authored',
+  createdBy: { type: 'agent', id: 'terminal-agent' }
+});
+
+workspace = creationEngine.setPurpose(workspace, {
+  objective: 'Choose reversible incident actions before speculative repair.',
+  scope: 'service incident triage',
+  non_goals: ['Never reveal credentials or private source content.'],
+  loading_condition: 'Load while choosing the next incident action.',
+  highest_question: 'Which action preserves safety and diagnostic evidence?',
+  worldview: ['Observed system state remains authoritative.'],
+  value_order: ['prevent irreversible harm', 'preserve evidence'],
+  judgment_role: { acts_as: 'a scoped incident-triage judgment authority' },
+  global_boundaries: ['Never reveal credentials or private source content.']
+});
+
+console.log(creationEngine.nextAction(workspace));
+```
+
+All mutations return a new workspace. `saveWorkspace` atomically persists 11
+digest-bound JSON artifacts. Public validation and `loadWorkspace` enforce the
+shipped JSON Schema, reject mixed or schema-invalid snapshots with useful
+JSON-pointer paths, and recover a complete interrupted replacement. Private
+source bodies are never stored in the materials index or copied into Runtime
+output. Source text is untrusted data; detected instruction-like text creates
+a blocking safety question. Optimistic save concurrency rejects stale or
+divergent Agent snapshots instead of silently losing a newer handoff.
+Source-grounded work may start from a recorded interview, but the exact answer
+must then be ingested as a classified interview source. `reviewMaterial`
+supports a later classification correction with a before/after receipt while
+keeping source identity, bytes, time, trust scan, and sensitivity immutable.
+The private operation ledger binds each write ID to its canonical request
+digest: exact retry is inert only while its semantic coordinate remains
+current, and conflicting or stale ID reuse fails closed without changing
+semantic revision or Runtime output. Export uses private
+`prepared → verified → completed` receipts so a fresh process can resume the
+exact verified encrypted bytes after termination rather than regenerating or
+substituting an asset.
+
+An in-scope sensitive source blocks public export until a reviewer records a
+public-safe abstraction disposition. Non-public plans may isolate the source
+without copying its body into Runtime.
+
+The five modes are `agent-authored`, `human-assisted`, `human-confirmed`,
+`organization-confirmed`, and `interpretive`. Human participation is not
+human confirmation. Representation receipts stay in private Creation evidence:
+they gate Creation Accepted but cannot become Runtime creator identity, Human
+Lock, or public human-confirmation evidence. Only a creating Agent is projected
+as technical creator provenance; a declared human or organization `createdBy`
+identity is omitted.
+
+Semantic-test acceptance binds both the judgment semantic digest and a
+canonical digest of the complete evaluated test report. Adding or re-evaluating
+a case invalidates the old acceptance until an allowed actor re-accepts the
+current report. Optional `comparison` cases model an explicit with-KDNA versus
+without-KDNA run for the same task and bind the expected judgment difference to
+specific units.
+Creator-label expectations can be frozen in a separate pre-evaluation test
+plan, and candidate review receipts retain creator-owned before/after
+corrections. An `interpretive` workspace may name an Agent as its source
+subject; only that distinct represented Agent (not the creating Agent or an
+unrelated Agent) may accept its synthetic semantic-test report. This remains
+private synthetic evidence and never becomes Runtime authorship, Human Lock,
+or a human claim.
+
+Official Creation completion is stricter than judgment acceptance or export:
+`JUDGMENT_ACCEPTED`, `FORMAT_VALID`, and `APPLICATION_VERIFIED` must bind the
+same semantic revision/digest and exact final asset bytes. `format_ready`
+remains only a legacy alias for compile readiness. Application verification
+uses post-`FORMAT_VALID`, build- and asset-bound fresh-hidden free-response
+tasks plus distinct Ed25519 Consumer/evaluator keys. Core verifies the
+signatures and mechanically derives adoption fidelity, zero safety/permission/
+external-action/over-application violations, and direction stability rather
+than accepting a caller-provided pass or requiring a model-quality gain.
+Signatures attest key possession, not
+real-world identity or role independence, so Hosts retain separate isolation
+evidence. These private workflow fields and receipts never enter Runtime.
+
+See [Creation Engine contracts](docs/creation-contracts.md) for the complete
+object model, state machine, acceptance rules, persistence contract, compile
+mapping, and independently verified build receipt.
 
 ## Public package boundary
 

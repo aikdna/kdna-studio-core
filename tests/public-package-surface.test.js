@@ -42,9 +42,12 @@ test('npm tarball excludes unvalidated Studio workshops', () => {
   for (const required of [
     'src/index.js',
     'src/authoring/index.js',
+    'src/creation-engine/index.js',
     'src/compile/index.js',
     'src/export-runtime/index.js',
     'src/project/index.js',
+    'schemas/creation-workspace.schema.json',
+    'docs/creation-contracts.md',
   ]) {
     assert.ok(files.includes(required), `public authoring primitive missing from npm tarball: ${required}`);
   }

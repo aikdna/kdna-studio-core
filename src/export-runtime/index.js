@@ -217,21 +217,6 @@ function buildPayload(compiled) {
   const evolution = parseJsonFile(compiled.files, 'KDNA_Evolution.json', { changelog: [], version_notes: [] });
 
   const firstAxiom = Array.isArray(core.axioms) ? core.axioms[0] : null;
-  // PC-3 (2026-06-27): the legacy default load_condition
-  // ("Load when the task matches applies_when on domain axioms.")
-  // is the project-bootstrap placeholder, not a real question. Treat
-  // it as "unset" so the published asset surfaces either the author's
-  // real load_condition (if they overrode the default), the first
-  // axiom's one_sentence as a derived question, or an explicit
-  // "(unset)" marker.
-  const LEGACY_DEFAULT_LOAD_CONDITION =
-    'Load when the task matches applies_when on domain axioms.';
-  const authorSet =
-    core.meta?.load_condition &&
-    core.meta.load_condition !== LEGACY_DEFAULT_LOAD_CONDITION
-      ? core.meta.load_condition
-      : null;
-
   // Bug (2026-06-28 audit follow-up): prior buildPayload omitted every
   // type that compile added after the original 6-type launch — aesthetics,
   // frameworks, term / banned_term, ontology — and additionally mis-mapped
@@ -245,7 +230,9 @@ function buildPayload(compiled) {
     profile_version: PAYLOAD_PROFILE_VERSION,
     core: {
       highest_question:
-        authorSet || firstAxiom?.one_sentence || '(unset — author should set load_condition in project meta)',
+        core.highest_question ||
+        firstAxiom?.one_sentence ||
+        '(unset — author should set highest_question in judgment_core)',
       ...pickJudgmentCore(core),
       axioms: Array.isArray(core.axioms) ? core.axioms : [],
       ontology: Array.isArray(core.ontology) ? core.ontology : [],
