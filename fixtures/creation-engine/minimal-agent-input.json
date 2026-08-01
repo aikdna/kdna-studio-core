@@ -47,6 +47,12 @@
     "contrary_evidence": [
       "An immediate safety emergency may require irreversible action."
     ],
+    "counterexample_search": {
+      "scope": "Declared triage scope and urgent safety boundaries.",
+      "method": "Review an applicable case and a safety counterexample.",
+      "result": "found",
+      "uncertainty": "Scenarios outside the declared triage scope were not evaluated."
+    },
     "confidence": {
       "status": "high",
       "score": 0.9,

@@ -71,16 +71,16 @@ function lockCard(card, lockPayload) {
   // which let boundary / risk / aesthetic lock with empty fields and produce
   // fingerprints that do not reflect their actual content.
   if (card.type === 'axiom') {
-    if (!card.fields?.full_statement || card.fields.full_statement.length < 20) {
-      throw new Error(`Axiom ${card.id} cannot be locked: missing or too-short full_statement. SPEC requires a complete, testable explanation.`);
+    if (!String(card.fields?.full_statement || '').trim()) {
+      throw new Error(`Axiom ${card.id} cannot be locked: missing full_statement. SPEC requires a complete, testable explanation.`);
     }
-    if (!card.fields?.why || card.fields.why.length < 20) {
-      throw new Error(`Axiom ${card.id} cannot be locked: missing or too-short why. SPEC requires an explanation of failure mode.`);
+    if (!String(card.fields?.why || '').trim()) {
+      throw new Error(`Axiom ${card.id} cannot be locked: missing why. SPEC requires an explanation of failure mode.`);
     }
   }
   if (card.type === 'misunderstanding') {
-    if (!card.fields?.key_distinction || card.fields.key_distinction.length < 20) {
-      throw new Error(`Misunderstanding ${card.id} cannot be locked: missing or too-short key_distinction. SPEC requires a clear conceptual boundary.`);
+    if (!String(card.fields?.key_distinction || '').trim()) {
+      throw new Error(`Misunderstanding ${card.id} cannot be locked: missing key_distinction. SPEC requires a clear conceptual boundary.`);
     }
   }
   if (card.type === 'boundary') {
@@ -95,8 +95,8 @@ function lockCard(card, lockPayload) {
     if (!card.fields?.name || String(card.fields.name).trim().length < 1) {
       throw new Error(`Risk ${card.id} cannot be locked: missing name. SPEC requires a named risk.`);
     }
-    if (!card.fields?.description || String(card.fields.description).length < 20) {
-      throw new Error(`Risk ${card.id} cannot be locked: missing or too-short description. SPEC requires a complete description.`);
+    if (!String(card.fields?.description || '').trim()) {
+      throw new Error(`Risk ${card.id} cannot be locked: missing description. SPEC requires a complete description.`);
     }
     if (!card.fields?.mitigation || String(card.fields.mitigation).trim().length < 1) {
       throw new Error(`Risk ${card.id} cannot be locked: missing mitigation. SPEC requires a mitigation strategy.`);

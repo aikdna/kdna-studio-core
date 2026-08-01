@@ -285,7 +285,7 @@ function compilePatterns(cards, project) {
     applies_when: stringList(c.fields?.applies_when),
     does_not_apply_when: stringList(c.fields?.does_not_apply_when),
   }));
-  const preserveCreationIdentity = Boolean(project.creation_acceptance);
+  const preserveCreationIdentity = project.source_mode === 'creation-engine';
   const lockedSelfChecks = cards.filter(c => c.type === 'self_check' && c.locked).map(c => {
     const fields = JSON.parse(JSON.stringify(c.fields || {}));
     if (preserveCreationIdentity) {

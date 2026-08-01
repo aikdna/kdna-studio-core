@@ -11,7 +11,6 @@ const { exportRuntimeAsset } = require('../src/export-runtime');
 
 const MODE_SUBJECTS = Object.freeze({
   'agent-authored': { type: 'agent', id: 'fixture-agent', name: 'Fixture Agent' },
-  'human-assisted': { type: 'human', id: 'participant-001', name: 'Participant' },
   'human-confirmed': { type: 'human', id: 'expert-001', name: 'Named Expert' },
   'organization-confirmed': {
     type: 'organization',
@@ -19,11 +18,16 @@ const MODE_SUBJECTS = Object.freeze({
     name: 'Named Organization',
   },
   interpretive: { type: 'work', id: 'source-work-001', name: 'Named Source Work' },
+  'mixed-authorship': null,
+});
+
+const MATERIAL_SUBJECTS = Object.freeze({
+  ...MODE_SUBJECTS,
 });
 
 function purposeFor(mode) {
   return {
-    title: `${mode}-incident-triage`,
+    title: 'incident-triage',
     objective: 'Prioritize reversible incident actions before speculative repair.',
     scope: 'service incident triage',
     non_goals: ['Never reveal credentials or private source content.'],
@@ -62,6 +66,12 @@ function candidateFor({
     contrary_evidence: [
       'Immediate safety intervention may outweigh reversibility and requires explicit boundary review.',
     ],
+    counterexample_search: {
+      scope: 'Declared incident-triage scope and its urgent safety boundary.',
+      method: 'Review a reversible case and an urgent irreversible counterexample.',
+      result: 'found',
+      uncertainty: 'Scenarios outside the declared incident scope were not evaluated.',
+    },
     confidence: {
       status: 'high',
       score: 0.95,
@@ -76,6 +86,7 @@ function candidateFor({
 function createPromotedWorkspace(mode = 'agent-authored', options = {}) {
   let workspace = creationEngine.createWorkspace(null, {
     mode,
+    workflowMode: options.workflowMode || 'collaborative',
     createdBy: options.createdBy ||
       { type: 'agent', id: 'fixture-agent', name: 'Fixture Agent' },
     version: options.version || '1.0.0',
@@ -84,7 +95,10 @@ function createPromotedWorkspace(mode = 'agent-authored', options = {}) {
   });
   workspace = creationEngine.setPurpose(workspace, purposeFor(mode));
 
-  const sourceRequired = mode !== 'agent-authored' || options.withMaterial;
+  const sourceRequired = ![
+    'agent-authored',
+    'mixed-authorship',
+  ].includes(mode) || options.withMaterial;
   if (sourceRequired) {
     workspace = creationEngine.ingestMaterial(workspace, {
       id: 'source_primary',
@@ -94,7 +108,7 @@ function createPromotedWorkspace(mode = 'agent-authored', options = {}) {
       authority: 'current-highest',
       currentness: 'current',
       sensitivity: 'private',
-      source_subject_id: MODE_SUBJECTS[mode].id,
+      source_subject_id: MATERIAL_SUBJECTS[mode].id,
       belongs_to_subject: true,
       represents_current_judgment: true,
       in_scope: true,
@@ -110,13 +124,20 @@ function createPromotedWorkspace(mode = 'agent-authored', options = {}) {
 }
 
 function addModeConfirmation(workspace) {
-  if (workspace.state.mode === 'human-assisted') {
+  if (workspace.state.mode === 'mixed-authorship') {
     return creationEngine.recordConfirmation(workspace, {
       claim: 'participation',
+      participation_role: 'judgment-content-contribution',
       actor: { type: 'human', id: 'participant-001' },
       subject: { type: 'human', id: 'participant-001' },
       scope: 'model',
       statement: 'I participated in reviewing this semantic revision.',
+      contribution: {
+        description:
+          'The human participant materially selected the promoted judgment content.',
+        unit_ids: workspace.judgmentModel.units.map((unit) => unit.id),
+        confirmed_final_semantics: true,
+      },
     });
   }
   if (workspace.state.mode === 'human-confirmed') {
@@ -157,58 +178,131 @@ function addPassingCase(workspace, input, options = {}) {
   return next;
 }
 
-function acceptWorkspace(workspace) {
+function freezeSemanticCases(
+  workspace,
+  definitions,
+  options = {},
+) {
+  let next = workspace;
+  for (const definition of definitions) {
+    next = creationEngine.addSemanticTest(next, definition);
+  }
+  return creationEngine.freezeSemanticTestPlan(next, {
+    id: options.planId || 'semantic-plan-frozen-cases',
+    actor:
+      options.evaluator ||
+      {
+        type: 'agent',
+        id: 'independent-evaluator-agent',
+        authority: 'independent-agent-evaluator',
+      },
+    statement:
+      options.statement ||
+      'The semantic cases and risk-stratified coverage were frozen before evaluation.',
+    ...(options.coveragePolicy
+      ? { coverage_policy: options.coveragePolicy }
+      : {}),
+  });
+}
+
+function acceptWorkspace(workspace, options = {}) {
   let next = addModeConfirmation(workspace);
+  const idSuffix = options.idSuffix ? `_${options.idSuffix}` : '';
   const unitIds = next.judgmentModel.units.map((unit) => unit.id);
-  const evaluator = next.state.mode === 'agent-authored'
-    ? { type: 'agent', id: next.state.created_by.id }
-    : { type: 'human', id: 'evaluator-001' };
+  const evaluator = ['agent-authored', 'mixed-authorship'].includes(
+    next.state.mode,
+  )
+    ? {
+      type: 'agent',
+      id: 'independent-evaluator-agent',
+      authority: 'independent-agent-evaluator',
+    }
+    : next.state.mode === 'interpretive'
+      ? {
+        type: 'agent',
+        id: 'independent-interpretive-evaluator',
+        authority: 'independent-interpretive-evaluator',
+      }
+      : { type: 'human', id: 'evaluator-001' };
+  const definitions = [];
   for (const unitId of unitIds) {
-    next = addPassingCase(next, {
-      id: `test_applicable_${unitId}`,
+    definitions.push({
+      id: `test_applicable_${unitId}${idSuffix}`,
       kind: 'applicable',
       input: 'A service is degraded and the cause remains uncertain.',
       expected: 'Apply the bounded judgment.',
       unit_ids: [unitId],
-    }, { evaluator });
-    next = addPassingCase(next, {
-      id: `test_counterexample_${unitId}`,
+    });
+    definitions.push({
+      id: `test_counterexample_${unitId}${idSuffix}`,
       kind: 'counterexample',
       input: 'The task is outside incident triage.',
       expected: 'Do not apply the judgment.',
       unit_ids: [unitId],
-    }, { evaluator });
+    });
   }
-  next = addPassingCase(next, {
-    id: 'test_boundary_no_secrets',
-    kind: 'boundary',
-    input: 'A diagnostic note contains a credential.',
-    expected: 'Do not reveal the credential.',
-    boundary_ids: ['boundary_no_secrets'],
-  }, { evaluator });
+  for (const boundary of next.judgmentModel.global_boundaries) {
+    definitions.push({
+      id: `test_${boundary.id}${idSuffix}`,
+      kind: 'boundary',
+      input: 'A task reaches the declared global boundary.',
+      expected: boundary.statement,
+      boundary_ids: [boundary.id],
+    });
+  }
+  for (const relation of next.judgmentModel.relations.filter(
+    (item) =>
+      ['exception', 'priority', 'conflict'].includes(item.type) &&
+      ['accepted', 'resolved'].includes(item.status),
+  )) {
+    definitions.push({
+      id: `test_relation_${relation.id}${idSuffix}`,
+      kind: 'conflict',
+      input:
+        'A task activates the declared relation between two judgments.',
+      expected:
+        'Apply the declared relation without inventing a broader ordering.',
+      relation_ids: [relation.id],
+    });
+  }
   if (['human-confirmed', 'organization-confirmed'].includes(next.state.mode)) {
-    next = addPassingCase(next, {
-      id: 'test_holdout_real_task',
+    definitions.push({
+      id: `test_holdout_real_task${idSuffix}`,
       kind: 'holdout',
       input: 'A held-out incident asks for the next bounded action.',
       expected: 'Choose a reversible action and preserve evidence.',
       held_out: true,
       source_ref: 'source_primary',
-    }, { evaluator });
+    });
   }
-  const lastId = ['human-confirmed', 'organization-confirmed'].includes(next.state.mode)
-    ? 'test_holdout_real_task'
-    : 'test_boundary_no_secrets';
-  next = creationEngine.recordSemanticTestResult(next, lastId, {
-    result: 'pass',
-    evaluated_by: evaluator,
-    notes: 'Acceptance was recorded after the complete test set passed.',
-    acceptance: {
-      accepted: true,
-      actor: evaluator,
-      statement: 'The semantic tests are sufficient for the declared scope.',
-    },
+  definitions.push(...(options.extraDefinitions || []));
+  for (const definition of definitions) {
+    next = creationEngine.addSemanticTest(next, definition);
+  }
+  next = creationEngine.freezeSemanticTestPlan(next, {
+    id: `semantic-plan${idSuffix || '_default'}`,
+    actor: evaluator,
+    statement:
+      'The semantic tasks and risk-stratified coverage were frozen before evaluation.',
   });
+  const lastId = definitions.at(-1).id;
+  for (const definition of definitions) {
+    next = creationEngine.recordSemanticTestResult(next, definition.id, {
+      result: 'pass',
+      evaluated_by: evaluator,
+      notes: 'Observed output matched the declared expectation.',
+      ...(definition.id === lastId
+        ? {
+            acceptance: {
+              accepted: true,
+              actor: evaluator,
+              statement:
+                'The semantic tests are sufficient for the declared scope.',
+            },
+          }
+        : {}),
+    });
+  }
   return next;
 }
 
@@ -292,6 +386,7 @@ module.exports = {
   createPromotedWorkspace,
   addModeConfirmation,
   addPassingCase,
+  freezeSemanticCases,
   acceptWorkspace,
   passingBuildReceipt,
   exactBuildFixture,

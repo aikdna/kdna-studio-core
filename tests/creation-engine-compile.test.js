@@ -13,6 +13,7 @@ const {
   createPromotedWorkspace,
   acceptWorkspace,
   addPassingCase,
+  freezeSemanticCases,
 } = require('./creation-engine-helpers');
 
 const allTypesFixture = JSON.parse(fs.readFileSync(
@@ -117,6 +118,83 @@ test('compileProject preserves judgment core, relations, load condition, and hon
   );
 });
 
+test('a narrow one-unit asset compiles without invented worldview or global core fields', () => {
+  let workspace = creationEngine.createWorkspace(null, {
+    mode: 'agent-authored',
+    workflowMode: 'autonomous',
+    access: 'public',
+    createdBy: {
+      type: 'agent',
+      id: 'agent:narrow-fixture',
+    },
+  });
+  workspace = creationEngine.setPurpose(workspace, {
+    title: 'short-title-boundary',
+    objective: 'Keep a title at eight characters or fewer.',
+    scope: 'Draft title length',
+    loading_condition: 'Before finalizing a draft title.',
+  });
+  workspace = creationEngine.addCandidate(workspace, {
+    ...candidateFor({
+      id: 'candidate-short-title',
+      agentInference: true,
+    }),
+    statement: 'Keep the final title at eight characters or fewer.',
+    rationale: 'The declared format needs a compact title.',
+    applies_when: ['A final title is being selected.'],
+    does_not_apply_when: ['Body copy or metadata is being written.'],
+    misuse_risk: 'Applying the limit to body copy would truncate meaning.',
+  });
+  workspace = creationEngine.promoteCandidate(
+    workspace,
+    'candidate-short-title',
+  );
+  workspace = acceptWorkspace(workspace);
+
+  const readiness = creationEngine.assessReadiness(workspace);
+  assert.equal(readiness.judgment_accepted, true);
+  assert.deepEqual(workspace.judgmentModel.judgment_core, {});
+  assert.deepEqual(workspace.judgmentModel.global_boundaries, []);
+  const { project } = creationEngine.compileProject(workspace);
+  const payload = buildPayload(
+    compileDomain(project, { strictAuthority: false }),
+  );
+  assert.equal(
+    Object.hasOwn(payload.core, 'highest_question'),
+    false,
+  );
+  assert.equal(Object.hasOwn(payload.core, 'worldview'), false);
+  assert.equal(Object.hasOwn(payload.core, 'value_order'), false);
+  assert.equal(Object.hasOwn(payload.core, 'judgment_role'), false);
+  assert.equal(payload.core.axioms.length, 1);
+  assert.deepEqual(
+    payload.core.axioms[0].does_not_apply_when,
+    ['Body copy or metadata is being written.'],
+  );
+
+  let hollow = creationEngine.createWorkspace(null, {
+    mode: 'agent-authored',
+    workflowMode: 'autonomous',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'agent:hollow-fixture' },
+  });
+  hollow = creationEngine.setPurpose(hollow, {
+    objective: 'Sound comprehensive without a judgment.',
+    scope: 'Empty demonstration',
+    loading_condition: 'Always',
+    highest_question: 'What is everything?',
+    worldview: ['Everything matters.'],
+    value_order: ['importance'],
+    judgment_role: { acts_as: 'a grand worldview' },
+    global_boundaries: ['Do nothing outside everything.'],
+  });
+  assert.ok(
+    creationEngine.assessReadiness(hollow).blocking.some(
+      (item) => item.code === 'NO_JUDGMENTS',
+    ),
+  );
+});
+
 test('compileDomain rejects unknown, private, and malformed Runtime relations', () => {
   const workspace = acceptWorkspace(createPromotedWorkspace('interpretive'));
   const { project } = creationEngine.compileProject(workspace);
@@ -146,7 +224,7 @@ test('compileDomain rejects unknown, private, and malformed Runtime relations', 
 test('declared human and organization confirmation cannot become Runtime identity evidence', () => {
   for (const mode of ['human-confirmed', 'organization-confirmed']) {
     const unconfirmed = createPromotedWorkspace(mode);
-    assert.equal(creationEngine.assessReadiness(unconfirmed).creation_accepted, false);
+    assert.equal(creationEngine.assessReadiness(unconfirmed).judgment_accepted, false);
     assert.throws(
       () => creationEngine.compileProject(unconfirmed),
       (error) => error.code === 'CREATION_NOT_ACCEPTED',
@@ -156,6 +234,8 @@ test('declared human and organization confirmation cannot become Runtime identit
     const confirmationIds = workspace.confirmationReceipts.map((receipt) => receipt.id);
     assert.ok(confirmationIds.length > 0);
     const { project } = creationEngine.compileProject(workspace);
+    assert.equal(project.status, 'ready_for_test');
+    assert.notEqual(project.status, 'ready_for_release');
     assert.equal(project.author.id, workspace.state.created_by.id);
     assert.notEqual(project.author.id, workspace.purposeBrief.represented_subject.id);
     assert.ok(project.cards.every((card) => card.human_lock === null));
@@ -194,6 +274,44 @@ test('declared human and organization confirmation cannot become Runtime identit
         !runtimeText.includes(forbidden),
         `${mode} Runtime leaked private marker: ${forbidden}`,
       );
+    }
+  }
+});
+
+test('all authority and workflow coordinates stay outside Runtime bytes', () => {
+  let fixtureIndex = 0;
+  for (const mode of creationEngine.CREATION_MODES) {
+    for (const workflowMode of creationEngine.WORKFLOW_MODES) {
+      const workspace = acceptWorkspace(createPromotedWorkspace(mode, {
+        workflowMode,
+      }));
+      const { project } = creationEngine.compileProject(workspace);
+      const exported = exportRuntimeAsset(project, {
+        asset_id: `kdna:fixture:private-coordinate-${fixtureIndex++}`,
+        timestamp: '2026-07-31T00:00:00.000Z',
+      });
+      const runtimeText = [
+        exported.files['kdna.json'],
+        JSON.stringify(exported.payload),
+      ].join('\n');
+      for (const forbidden of [
+        mode,
+        workflowMode,
+        'participation_role',
+        'confirmationReceipts',
+        'confirmation_receipt_ids',
+        'represented_subject',
+        ...workspace.confirmationReceipts.flatMap((receipt) => [
+          receipt.id,
+          receipt.actor.id,
+          receipt.subject.id,
+        ]),
+      ]) {
+        assert.ok(
+          !runtimeText.includes(forbidden),
+          `${mode}/${workflowMode} leaked private Creation coordinate: ${forbidden}`,
+        );
+      }
     }
   }
 });
@@ -281,16 +399,22 @@ test('private source bodies and source paths never enter project or Runtime payl
     in_scope: true,
   });
   const sensitiveQuestion = workspace.unresolvedQuestions.find(
-    (item) => item.kind === 'source_safety_sensitive_public',
+    (item) => item.kind === 'source_safety_output_disclosure',
   );
   workspace = creationEngine.recordInterviewAnswer(workspace, {
+    operation_id: 'interview:private-source-review',
+    recorded_against_semantic_revision:
+      workspace.state.semantic_revision,
+    recorded_against_semantic_digest: workspace.state.semantic_digest,
     question_id: sensitiveQuestion.id,
     question: sensitiveQuestion.reason,
     answer: 'Use only the abstract judgment and exclude all source detail.',
-    by: 'reviewer-001',
+    actor: { type: 'agent', id: 'reviewer-001' },
+    subject: { type: 'agent', id: 'reviewer-001' },
     source_disposition: {
       source_id: 'source_private_second',
-      decision: 'public-safe-abstraction',
+      decision: 'non-leaking-abstraction',
+      semantic_revision: workspace.state.semantic_revision,
       reviewer: 'reviewer-001',
       rationale: 'The compiled unit contains no source body, quote, or private reference.',
     },
@@ -327,30 +451,50 @@ test('all sixteen card types preserve identities and type-specific fields throug
     });
   }
 
-  const evaluator = { type: 'agent', id: workspace.state.created_by.id };
+  const evaluator = {
+    type: 'agent',
+    id: 'independent-card-type-evaluator',
+    authority: 'independent-agent-evaluator',
+  };
+  const definitions = [];
   for (const unit of workspace.judgmentModel.units) {
-    workspace = addPassingCase(workspace, {
+    definitions.push({
       id: `test_applicable_${unit.id}`,
       kind: 'applicable',
       input: `Applicable input for ${unit.card_type}.`,
       expected: 'Apply the unit.',
       unit_ids: [unit.id],
-    }, { evaluator });
-    workspace = addPassingCase(workspace, {
+    });
+    definitions.push({
       id: `test_counterexample_${unit.id}`,
       kind: 'counterexample',
       input: `Counterexample for ${unit.card_type}.`,
       expected: 'Do not apply the unit.',
       unit_ids: [unit.id],
-    }, { evaluator });
+    });
   }
-  workspace = addPassingCase(workspace, {
+  definitions.push({
     id: 'test_boundary_no_secrets',
     kind: 'boundary',
     input: 'A secret is present.',
     expected: 'Do not reveal it.',
     boundary_ids: ['boundary_no_secrets'],
-  }, { evaluator });
+  });
+  workspace = freezeSemanticCases(workspace, definitions, {
+    planId: 'semantic-plan-all-card-types',
+    evaluator,
+  });
+  for (const definition of definitions.slice(0, -1)) {
+    workspace = creationEngine.recordSemanticTestResult(
+      workspace,
+      definition.id,
+      {
+        result: 'pass',
+        evaluated_by: evaluator,
+        notes: 'The frozen card-type semantic case passed.',
+      },
+    );
+  }
   workspace = creationEngine.recordSemanticTestResult(
     workspace,
     'test_boundary_no_secrets',

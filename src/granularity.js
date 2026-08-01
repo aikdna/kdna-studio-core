@@ -1,11 +1,10 @@
 /**
- * Granularity diagnostics — detect too-broad, too-narrow, and mixed
- * judgments before authoring proceeds to Human Lock.
+ * Legacy authoring granularity diagnostics.
  *
- * A well-scoped judgment should:
- *   - Have a single clear decision point (not "everything about X")
- *   - Be broad enough to be reusable across similar situations
- *   - Not mix unrelated judgment dimensions
+ * This module is not used by the Creation Engine acceptance path. Its lexical
+ * hints are advisory only: conjunctions and text length cannot decide whether
+ * one asset must be split. A split needs evidence of independent scope,
+ * authorization, lifecycle, or an unresolved semantic conflict.
  */
 
 
@@ -19,11 +18,6 @@ const TOO_BROAD_SIGNALS = [
 const TOO_NARROW_SIGNALS = [
   'exactly', 'precisely this one', 'never again', 'one-time',
   'only this instance', '仅此一次', '只有这个', '特例',
-];
-
-const MIXED_SIGNALS = [
-  // When multiple unrelated judgment verbs appear
-  'and also', 'additionally', 'besides', 'not only', '同时', '此外',
 ];
 
 const VAGUE_SIGNALS = [
@@ -49,7 +43,6 @@ function diagnoseGranularity(project) {
   const diagnostics = [];
   let broadHits = 0;
   let narrowHits = 0;
-  let mixedHits = 0;
   let vagueHits = 0;
 
   // Gather all judgment text
@@ -83,18 +76,6 @@ function diagnoseGranularity(project) {
     }
   }
 
-  // Check mixed signals
-  for (const signal of MIXED_SIGNALS) {
-    if (allText.includes(signal)) {
-      mixedHits++;
-      diagnostics.push({
-        severity: 'error',
-        message: `Mixed signal detected: "${signal}" — judgment may cover unrelated dimensions`,
-        suggestion: 'Split into separate assets. Each KDNA asset should cover one judgment dimension.',
-      });
-    }
-  }
-
   // Check vague signals
   for (const signal of VAGUE_SIGNALS) {
     if (allText.includes(signal)) {
@@ -111,10 +92,7 @@ function diagnoseGranularity(project) {
   let level = 'well_scoped';
   let score = 8;
 
-  if (mixedHits > 0) {
-    level = 'mixed';
-    score = Math.max(1, 5 - mixedHits);
-  } else if (broadHits >= 3) {
+  if (broadHits >= 3) {
     level = 'broad';
     score = Math.max(1, 6 - broadHits);
   } else if (narrowHits >= 3) {
@@ -132,9 +110,7 @@ function diagnoseGranularity(project) {
 
   // Recommended action
   let recommendedAction = 'Ready for Human Lock.';
-  if (level === 'mixed') {
-    recommendedAction = 'STOP: Split this project into separate assets before locking. Each KDNA should cover one judgment dimension.';
-  } else if (level === 'broad') {
+  if (level === 'broad') {
     recommendedAction = 'WARNING: Consider narrowing the judgment scope before locking. Define what specific decision this helps with.';
   } else if (level === 'narrow') {
     recommendedAction = 'INFO: Judgment may be too specific. Ensure it generalizes to similar situations before locking.';
@@ -145,7 +121,7 @@ function diagnoseGranularity(project) {
     score,
     diagnostics,
     recommended_action: recommendedAction,
-    passed: level !== 'mixed',
+    passed: true,
   };
 }
 
@@ -169,12 +145,6 @@ function evaluateOpeningQuestion(answer) {
     // Good sign — conditional judgment
   } else {
     issues.push('Consider framing as "When X happens, should Y?" rather than a general statement.');
-  }
-
-  const words = answer.trim().split(/\s+/).length;
-  if (words > 200) {
-    issues.push('Answer is very long — may cover too many judgment dimensions.');
-    return { scoped: false, issues, suggestion: 'Try to express the core judgment in one paragraph. If you need multiple paragraphs, you may need multiple KDNA assets.' };
   }
 
   return {
