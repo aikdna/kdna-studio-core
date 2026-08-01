@@ -135,7 +135,10 @@ function generateKdnaCard(project, compiledStats, provenance, gates) {
       feynman_restatements: lockedCards.filter(c => c.feynman_restatement).length,
       locked_by: (project.author && project.author.id) || 'unknown',
     },
-    quality_badge: (compiledStats && compiledStats.locked_cards > 0) ? 'tested' : 'untested',
+    quality_badge: (
+      compiledStats &&
+      compiledStats.quality_gate_passed === true
+    ) ? 'tested' : 'untested',
     review_status: gov.review_status || 'community',
     requires_expert_review: requiresExpertReview(gov.risk_level || 'R1'),
     provenance: provenance || {},

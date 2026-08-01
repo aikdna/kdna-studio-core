@@ -1,5 +1,10 @@
 # Compile Gates (SAG / TC)
 
+> **Status:** Retired historical design. The fixed card, test-count,
+> Human Lock, and score thresholds described here are not the current KDNA
+> Creation contract. Current Creation uses the three independent gates and
+> risk-adaptive application testing documented by the Creation Engine.
+
 The PR-3 add for kdna-studio-core adds two compile-time gates that
 enforce the Source Authority Graph and Truth Charter constraints from
 RFC-0013 §3.1 / §3.2.

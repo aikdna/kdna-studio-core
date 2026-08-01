@@ -7,12 +7,6 @@
       "human_lock": false
     },
     {
-      "mode": "human-assisted",
-      "claim": "A human participated without a representation claim.",
-      "confirmation": "participation",
-      "human_lock": false
-    },
-    {
       "mode": "human-confirmed",
       "claim": "The named human confirmed the current semantic digest.",
       "confirmation": "representation",
@@ -28,6 +22,12 @@
       "mode": "interpretive",
       "claim": "This interprets named material without representing its source subject.",
       "confirmation": "none",
+      "human_lock": false
+    },
+    {
+      "mode": "mixed-authorship",
+      "claim": "Human and Agent contributions jointly shaped the judgment without representing or confirming a named human.",
+      "confirmation": "participation",
       "human_lock": false
     }
   ]

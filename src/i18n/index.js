@@ -136,8 +136,8 @@ function computeI18nCoverage(project) {
   let level = 'L0';
   if (totalFields > 0) level = 'L1'; // Has translatable content
   if (coverage >= 30) level = 'L2';  // Key fields covered
-  if (coverage >= 70) level = 'L3';  // Full coverage
-  if (coverage >= 90 && (project.tests || []).length >= 5) level = 'L4'; // Full coverage + evals
+  if (coverage >= 70) level = 'L3';  // Broad coverage
+  if (coverage >= 90) level = 'L4';  // Full coverage; test counts never gate language quality
 
   return { level, coverage: Math.min(100, coverage), translatable_fields: totalFields, translated_fields: translatedCount };
 }

@@ -73,9 +73,13 @@ function addSourceJudgment(project, input = {}) {
   }
 
   const statement = nonEmpty(input.statement, 'statement');
-  if (statement.length < 20) throw new Error('statement must contain at least 20 characters');
+  if (!String(statement).trim().includes(' ')) {
+    throw new Error('statement must be a complete testable explanation, not a single label');
+  }
   const rationale = nonEmpty(input.rationale, 'rationale');
-  if (rationale.length < 20) throw new Error('rationale must contain at least 20 characters');
+  if (!String(rationale).trim().includes(' ')) {
+    throw new Error('rationale must be a complete explanation, not a single label');
+  }
 
   const source = {
     type: sourceType,

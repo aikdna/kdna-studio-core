@@ -96,6 +96,19 @@ test('public validation and direct loads enforce schema paths before digest acce
   );
 });
 
+test('older private Creation workspace schemas require an explicit migration', () => {
+  const legacy = acceptWorkspace(createPromotedWorkspace());
+  legacy.state.schema_version = '0.1.0';
+  assert.throws(
+    () => creationEngine.loadWorkspace(legacy),
+    (error) => (
+      error.code === 'CREATION_WORKSPACE_SCHEMA_UNSUPPORTED' &&
+      /workspace_schema_unsupported.*migration_required/.test(error.message)
+    ),
+  );
+  assert.equal(creationEngine.SCHEMA_VERSION, '0.2.0');
+});
+
 test('artifact load rejects invalid access even when the semantic digest remains valid', () => {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'creation-hostile-access-'));
   const target = path.join(parent, 'workspace');
@@ -176,6 +189,58 @@ test('save/load persists exactly eleven digest-bound artifacts', () => {
   assert.equal(stateEnvelope.data.operations[0].operation_id, 'operation:persistence');
 });
 
+test('managed candidate bytes are atomic, digest-bound, and invalidated by revision', () => {
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'creation-managed-candidate-'));
+  const target = path.join(parent, 'workspace');
+  let workspace = acceptWorkspace(createPromotedWorkspace());
+  const fixture = exactBuildFixture(workspace);
+  fixture.receipt.output.filename = creationEngine.MANAGED_CANDIDATE_FILE;
+  workspace = creationEngine.recordBuildReceipt(
+    workspace,
+    fixture.receipt,
+    fixture.verification,
+  );
+  workspace = creationEngine.saveWorkspace(target, workspace, {
+    managedCandidateBytes: fixture.verification.asset_bytes,
+  });
+
+  const managed = creationEngine.readManagedCandidate(target, workspace);
+  assert.equal(managed.asset_digest, workspace.buildReceipt.asset_digest);
+  assert.deepEqual(managed.bytes, fixture.verification.asset_bytes);
+  assert.equal(
+    managed.path,
+    path.join(
+      target,
+      creationEngine.MANAGED_CANDIDATE_DIRECTORY,
+      creationEngine.MANAGED_CANDIDATE_FILE,
+    ),
+  );
+  assert.deepEqual(creationEngine.loadWorkspace(target), workspace);
+
+  const originalBytes = Buffer.from(managed.bytes);
+  fs.writeFileSync(managed.path, Buffer.concat([originalBytes, Buffer.from([0])]));
+  assert.throws(
+    () => creationEngine.readManagedCandidate(target, workspace),
+    /do not match the current build receipt/,
+  );
+  assert.throws(
+    () => creationEngine.loadWorkspace(target),
+    /do not match the current build receipt/,
+  );
+  fs.writeFileSync(managed.path, originalBytes);
+
+  const next = creationEngine.updateExportPlan(workspace, {
+    version: '1.0.1',
+  });
+  const saved = creationEngine.saveWorkspace(target, next);
+  assert.notEqual(saved.buildReceipt.version, saved.exportPlan.version);
+  assert.equal(fs.existsSync(managed.path), false);
+  assert.throws(
+    () => creationEngine.readManagedCandidate(target, saved),
+    /no managed candidate bytes/,
+  );
+});
+
 test('load rejects mixed snapshots and recovers a complete interrupted backup', () => {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'creation-recovery-'));
   const target = path.join(parent, 'workspace');
@@ -216,17 +281,25 @@ test('optimistic save concurrency rejects stale and divergent Agent snapshots', 
   let agentB = creationEngine.loadWorkspace(target);
 
   agentA = creationEngine.recordInterviewAnswer(agentA, {
+    operation_id: 'interview:agent-a',
+    recorded_against_semantic_revision: agentA.state.semantic_revision,
+    recorded_against_semantic_digest: agentA.state.semantic_digest,
+    subject: { type: 'agent', id: 'agent-a' },
     question: 'Which evidence was checked by Agent A?',
     answer: 'The primary source digest and declared currentness.',
-    by: 'agent-a',
+    actor: { type: 'agent', id: 'agent-a' },
   });
   agentA = creationEngine.saveWorkspace(target, agentA);
   assert.doesNotThrow(() => creationEngine.saveWorkspace(target, agentA));
 
   agentB = creationEngine.recordInterviewAnswer(agentB, {
+    operation_id: 'interview:agent-b',
+    recorded_against_semantic_revision: agentB.state.semantic_revision,
+    recorded_against_semantic_digest: agentB.state.semantic_digest,
+    subject: { type: 'agent', id: 'agent-b' },
     question: 'Which evidence was checked by Agent B?',
     answer: 'The represented-subject declaration.',
-    by: 'agent-b',
+    actor: { type: 'agent', id: 'agent-b' },
   });
   assert.throws(
     () => creationEngine.saveWorkspace(target, agentB),
@@ -238,9 +311,13 @@ test('optimistic save concurrency rejects stale and divergent Agent snapshots', 
 
   let agentC = creationEngine.loadWorkspace(target);
   agentC = creationEngine.recordInterviewAnswer(agentC, {
+    operation_id: 'interview:agent-c',
+    recorded_against_semantic_revision: agentC.state.semantic_revision,
+    recorded_against_semantic_digest: agentC.state.semantic_digest,
+    subject: { type: 'agent', id: 'agent-c' },
     question: 'Can the current snapshot be extended?',
     answer: 'Yes, because it retains the exact persisted history prefix.',
-    by: 'agent-c',
+    actor: { type: 'agent', id: 'agent-c' },
   });
   const saved = creationEngine.saveWorkspace(target, agentC);
   assert.equal(saved.history.length, base.history.length + 2);
@@ -323,6 +400,7 @@ test('FORMAT_VALID fails closed without exact current Core-verified asset bytes'
 
   let foreignWorkspace = creationEngine.createWorkspace(null, {
     mode: 'agent-authored',
+    workflowMode: 'collaborative',
     createdBy: {
       type: 'agent',
       id: 'foreign-fixture-agent',
@@ -353,6 +431,12 @@ test('FORMAT_VALID fails closed without exact current Core-verified asset bytes'
       misuse_risk: 'It could be confused with the target semantics.',
       source_refs: [],
       contrary_evidence: ['The target workspace declares another rule.'],
+      counterexample_search: {
+        scope: 'The hostile foreign workspace and target workspace.',
+        method: 'Compare their declared judgments.',
+        result: 'found',
+        uncertainty: 'No other workspaces were examined.',
+      },
       confidence: {
         status: 'high',
         score: 0.9,
@@ -513,109 +597,5 @@ test('build receipts reject raw private material and secret-shaped fields', () =
   assert.throws(
     () => creationEngine.recordBuildReceipt(workspace, coordinateNote),
     /tool_coordinates\.studio_core contains unsupported fields: note/,
-  );
-});
-
-test('private development baseline binds exact WP0 tool sources without paths', () => {
-  const workspace = acceptWorkspace(createPromotedWorkspace());
-  const digest = (character) => `sha256:${character.repeat(64)}`;
-  const binding = (repository, packageName, version, character) => ({
-    bom_repository: repository,
-    package: packageName,
-    version,
-    base_commit: character.repeat(40),
-    base_tree: character.repeat(40),
-    dirty_source_digest: digest(character),
-    source_input_digest: digest(character),
-    candidate_artifact_digest: digest(character),
-  });
-  const fixture = exactBuildFixture(workspace, {
-    tool_coordinates: {
-      studio_cli: '@aikdna/kdna-studio-cli@0.11.0',
-      studio_core: '@aikdna/kdna-studio-core@3.0.0',
-      core: '@aikdna/kdna-core@0.21.0',
-    },
-    development_baseline: {
-      schema: 'aikdna.creation-build-baseline/0.1.0',
-      bom_schema: 'aikdna.creation-engine.wp0-development-bom/1.0',
-      bom_semantic_digest: digest('a'),
-      bom_file_digest: digest('b'),
-      tools: {
-        studio_cli: binding(
-          'kdna-studio-cli',
-          '@aikdna/kdna-studio-cli',
-          '0.11.0',
-          'c',
-        ),
-        studio_core: binding(
-          'kdna-studio-core',
-          '@aikdna/kdna-studio-core',
-          '3.0.0',
-          'd',
-        ),
-        core: binding('kdna', '@aikdna/kdna-core', '0.21.0', 'e'),
-      },
-    },
-    development_runtime: {
-      schema: 'aikdna.creation-build-runtime/0.1.0',
-      evidence_class: 'IMMUTABLE_WP0_CANDIDATE_ARTIFACT_RUNTIME',
-      candidate_runtime_receipt_sha256: digest('f'),
-      candidate_runtime_tree_sha256: digest('1'),
-      cli_entrypoint_sha256: digest('2'),
-      bom_semantic_digest: digest('a'),
-      bom_file_digest: digest('b'),
-    },
-  });
-  const { receipt } = fixture;
-  const recorded = creationEngine.recordBuildReceipt(
-    workspace,
-    receipt,
-    fixture.verification,
-  );
-  assert.equal(
-    recorded.buildReceipt.development_baseline.bom_semantic_digest,
-    digest('a'),
-  );
-  assert.equal(
-    recorded.buildReceipt.development_runtime
-      .candidate_runtime_receipt_sha256,
-    digest('f'),
-  );
-
-  const crossWired = structuredClone(receipt);
-  crossWired.development_baseline.tools.core.bom_repository =
-    'kdna-studio-core';
-  assert.throws(
-    () => creationEngine.recordBuildReceipt(workspace, crossWired),
-    /bom_repository is cross-wired/,
-  );
-
-  const pathInjected = structuredClone(receipt);
-  pathInjected.development_baseline.tools.core.repository_path =
-    '/private/source';
-  assert.throws(
-    () => creationEngine.recordBuildReceipt(workspace, pathInjected),
-    /contains unsupported fields: repository_path/,
-  );
-
-  const staleVersion = structuredClone(receipt);
-  staleVersion.development_baseline.tools.studio_cli.version = '0.10.0';
-  assert.throws(
-    () => creationEngine.recordBuildReceipt(workspace, staleVersion),
-    /does not match the loaded tool coordinate/,
-  );
-
-  const mismatchedRuntime = structuredClone(receipt);
-  mismatchedRuntime.development_runtime.bom_file_digest = digest('9');
-  assert.throws(
-    () => creationEngine.recordBuildReceipt(workspace, mismatchedRuntime),
-    /does not bind the development baseline/,
-  );
-
-  const runtimePathInjected = structuredClone(receipt);
-  runtimePathInjected.development_runtime.runtime_path = '/private/runtime';
-  assert.throws(
-    () => creationEngine.recordBuildReceipt(workspace, runtimePathInjected),
-    /contains unsupported fields: runtime_path/,
   );
 });

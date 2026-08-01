@@ -77,9 +77,6 @@ function validateJudgmentCore(value) {
       }
     }
   }
-  if (Object.keys(value).length === 0) {
-    issues.push('judgment_core: expected at least one declared semantic field');
-  }
   return issues;
 }
 

@@ -121,19 +121,17 @@ const { creationEngine } = require('@aikdna/kdna-studio-core');
 
 let workspace = creationEngine.createWorkspace(null, {
   mode: 'agent-authored',
+  workflowMode: 'autonomous',
+  access: 'public',
   createdBy: { type: 'agent', id: 'terminal-agent' }
 });
 
 workspace = creationEngine.setPurpose(workspace, {
-  objective: 'Choose reversible incident actions before speculative repair.',
-  scope: 'service incident triage',
-  non_goals: ['Never reveal credentials or private source content.'],
-  loading_condition: 'Load while choosing the next incident action.',
-  highest_question: 'Which action preserves safety and diagnostic evidence?',
-  worldview: ['Observed system state remains authoritative.'],
-  value_order: ['prevent irreversible harm', 'preserve evidence'],
-  judgment_role: { acts_as: 'a scoped incident-triage judgment authority' },
-  global_boundaries: ['Never reveal credentials or private source content.']
+  objective: 'Keep generated titles to eight words or fewer.',
+  scope: 'headline drafting',
+  non_goals: ['Do not shorten quoted titles.'],
+  loading_condition: 'Load while drafting a new headline.',
+  global_boundaries: ['Quoted titles remain unchanged.']
 });
 
 console.log(creationEngine.nextAction(workspace));
@@ -147,10 +145,10 @@ source bodies are never stored in the materials index or copied into Runtime
 output. Source text is untrusted data; detected instruction-like text creates
 a blocking safety question. Optimistic save concurrency rejects stale or
 divergent Agent snapshots instead of silently losing a newer handoff.
-Source-grounded work may start from a recorded interview, but the exact answer
-must then be ingested as a classified interview source. `reviewMaterial`
-supports a later classification correction with a before/after receipt while
-keeping source identity, bytes, time, trust scan, and sensitivity immutable.
+Source-grounded work may start from a structured, digest-bound interview answer
+by an explicit actor. `reviewMaterial` supports either a classification change
+or an honest `reviewed-no-change` receipt while keeping source identity, bytes,
+time, trust scan, and sensitivity immutable.
 The private operation ledger binds each write ID to its canonical request
 digest: exact retry is inert only while its semantic coordinate remains
 current, and conflicting or stale ID reuse fails closed without changing
@@ -159,17 +157,17 @@ semantic revision or Runtime output. Export uses private
 exact verified encrypted bytes after termination rather than regenerating or
 substituting an asset.
 
-An in-scope sensitive source blocks public export until a reviewer records a
-public-safe abstraction disposition. Non-public plans may isolate the source
-without copying its body into Runtime.
+Runtime `access: public` means possession of the file is sufficient to load it;
+it does not publish the file. Sensitive source handling, material processing,
+Runtime access protection, output-disclosure review, and later distribution
+are separate private decisions.
 
-The five modes are `agent-authored`, `human-assisted`, `human-confirmed`,
-`organization-confirmed`, and `interpretive`. Human participation is not
-human confirmation. Representation receipts stay in private Creation evidence:
-they gate Creation Accepted but cannot become Runtime creator identity, Human
-Lock, or public human-confirmation evidence. Only a creating Agent is projected
-as technical creator provenance; a declared human or organization `createdBy`
-identity is omitted.
+Execution (`collaborative` or `autonomous`) is separate from the five authority
+modes: `agent-authored`, `human-confirmed`, `organization-confirmed`,
+`interpretive`, and `mixed-authorship`. Human participation is a receipt, not
+an authority mode. Representation receipts stay in private Creation evidence
+and cannot become Runtime creator identity, Human Lock, or public
+human-confirmation evidence.
 
 Semantic-test acceptance binds both the judgment semantic digest and a
 canonical digest of the complete evaluated test report. Adding or re-evaluating
@@ -177,18 +175,15 @@ a case invalidates the old acceptance until an allowed actor re-accepts the
 current report. Optional `comparison` cases model an explicit with-KDNA versus
 without-KDNA run for the same task and bind the expected judgment difference to
 specific units.
-Creator-label expectations can be frozen in a separate pre-evaluation test
-plan, and candidate review receipts retain creator-owned before/after
-corrections. An `interpretive` workspace may name an Agent as its source
-subject; only that distinct represented Agent (not the creating Agent or an
-unrelated Agent) may accept its synthetic semantic-test report. This remains
-private synthetic evidence and never becomes Runtime authorship, Human Lock,
-or a human claim.
+Candidate review receipts retain digest-bound before/after facts, including an
+honest no-change review. An autonomous interpretive workspace may be accepted
+by an independent evaluator Agent without treating that evaluator as the
+source author. The creating Agent may not self-accept.
 
 Official Creation completion is stricter than judgment acceptance or export:
 `JUDGMENT_ACCEPTED`, `FORMAT_VALID`, and `APPLICATION_VERIFIED` must bind the
-same semantic revision/digest and exact final asset bytes. `format_ready`
-remains only a legacy alias for compile readiness. Application verification
+same semantic revision/digest and exact final asset bytes. `compile_ready`
+means only readiness to build a managed candidate. Application verification
 uses post-`FORMAT_VALID`, build- and asset-bound fresh-hidden free-response
 tasks plus distinct Ed25519 Consumer/evaluator keys. Core verifies the
 signatures and mechanically derives adoption fidelity, zero safety/permission/
@@ -196,7 +191,8 @@ external-action/over-application violations, and direction stability rather
 than accepting a caller-provided pass or requiring a model-quality gain.
 Signatures attest key possession, not
 real-world identity or role independence, so Hosts retain separate isolation
-evidence. These private workflow fields and receipts never enter Runtime.
+evidence. The official Host hides this plumbing from ordinary users. These
+private workflow fields and receipts never enter Runtime.
 
 See [Creation Engine contracts](docs/creation-contracts.md) for the complete
 object model, state machine, acceptance rules, persistence contract, compile

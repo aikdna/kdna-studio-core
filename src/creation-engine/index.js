@@ -16,14 +16,14 @@ const CREATION_WORKSPACE_SCHEMA = require('../../schemas/creation-workspace.sche
 const RUNTIME_CORE = require('@aikdna/kdna-core');
 const RUNTIME_CORE_PACKAGE = require('@aikdna/kdna-core/package.json');
 
-const SCHEMA_VERSION = '0.1.0';
+const SCHEMA_VERSION = '0.2.0';
 
 const CREATION_MODES = Object.freeze([
   'agent-authored',
-  'human-assisted',
   'human-confirmed',
   'organization-confirmed',
   'interpretive',
+  'mixed-authorship',
 ]);
 
 const WORKFLOW_MODES = Object.freeze([
@@ -82,6 +82,7 @@ const CANDIDATE_REVIEW_FIELDS = Object.freeze([
   'misuse_risk',
   'source_refs',
   'contrary_evidence',
+  'counterexample_search',
   'confidence',
   'agent_inference',
   'card_type',
@@ -101,6 +102,8 @@ const ARTIFACT_FILES = Object.freeze([
   'export-plan.json',
   'build-receipt.json',
 ]);
+const MANAGED_CANDIDATE_DIRECTORY = 'managed-candidate';
+const MANAGED_CANDIDATE_FILE = 'managed-candidate.kdna';
 
 const VERIFICATION_STEPS = Object.freeze([
   'validate',
@@ -142,6 +145,10 @@ const PROMPT_INJECTION_PATTERNS = Object.freeze([
 const SENSITIVE_PATTERNS = Object.freeze([
   /medical condition|mental health|diagnosis|bank account|sexual orientation|political affiliation/i,
   /疾病|病史|诊断|心理疾病|银行卡号|账户余额|政治立场|性取向/,
+  /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/,
+  /\b(?:api[_ -]?key|access[_ -]?token|client[_ -]?secret|password)\b\s*[:=]/i,
+  /\b(?:social security|passport|national id|identity card)\b/i,
+  /\b(?:身份证号?|护照号?|社会保障号?)\b/,
 ]);
 
 const workspaceSchemaValidator = (() => {
@@ -249,6 +256,7 @@ function semanticUnit(unit) {
     misuse_risk: unit.misuse_risk,
     source_refs: unit.source_refs,
     contrary_evidence: unit.contrary_evidence,
+    counterexample_search: unit.counterexample_search,
     confidence: unit.confidence,
     agent_inference: unit.agent_inference,
     fields: unit.fields,
@@ -260,6 +268,25 @@ function semanticMaterial(material) {
     id: material.id,
     kind: material.kind,
     content_hash: material.content_hash,
+    ...(material.normalized_text_digest
+      ? {
+          normalized_text_digest:
+            material.normalized_text_digest,
+        }
+      : {}),
+    ...(material.observation
+      ? { observation: material.observation }
+      : {}),
+    ...(material.extraction
+      ? { extraction: material.extraction }
+      : {}),
+    ...(material.source_inventory_id
+      ? {
+          source_inventory_id: material.source_inventory_id,
+          source_inventory_entry_id:
+            material.source_inventory_entry_id,
+        }
+      : {}),
     source_subject_id: material.source_subject_id,
     belongs_to_subject: material.belongs_to_subject,
     represents_current_judgment: material.represents_current_judgment,
@@ -274,7 +301,7 @@ function semanticMaterial(material) {
     split_domain: material.split_domain,
     expired: material.expired,
     trust: material.trust,
-    public_export_review: material.public_export_review,
+    output_disclosure_review: material.output_disclosure_review,
   };
 }
 
@@ -284,6 +311,7 @@ const SOURCE_REVIEW_FIELDS = [
   'represents_current_judgment',
   'authority',
   'currentness',
+  'sensitivity',
   'external_constraints',
   'in_scope',
   'split_domain',
@@ -311,9 +339,41 @@ function semanticSnapshot(workspace) {
   return {
     mode: workspace.state.mode,
     purpose_brief: workspace.purposeBrief,
+    interview_sources: [...workspace.interviewAnswers]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((entry) => ({
+        id: entry.id,
+        question_id: entry.question_id,
+        actor: entry.actor,
+        subject: entry.subject,
+        answer_digest: entry.answer_digest,
+        source_refs: entry.source_refs,
+      })),
     materials: [...workspace.materials]
       .sort((a, b) => a.id.localeCompare(b.id))
       .map(semanticMaterial),
+    material_inventories: [...workspace.materialInventories]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((inventory) => ({
+        id: inventory.id,
+        approved_inventory_digest: inventory.approved_inventory_digest,
+        final_inventory_digest: inventory.final_inventory_digest,
+        processing_policy: inventory.processing_policy,
+        processing_policy_digest: inventory.processing_policy_digest,
+        summary: inventory.summary,
+        capabilities: inventory.capabilities,
+        entries: inventory.entries,
+      })),
+    import_mappings: [...workspace.importMappings]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((mapping) => ({
+        id: mapping.id,
+        source_material_id: mapping.source_material_id,
+        source_asset_digest: mapping.source_asset_digest,
+        mapping_digest: mapping.mapping_digest,
+        summary: mapping.summary,
+        entries: mapping.entries,
+      })),
     judgment_model: {
       judgment_core: workspace.judgmentModel.judgment_core,
       global_boundaries: workspace.judgmentModel.global_boundaries,
@@ -341,6 +401,7 @@ function semanticTestCaseSnapshot(testCase) {
     expected_creator_label: testCase.expected_creator_label,
     unit_ids: testCase.unit_ids,
     boundary_ids: testCase.boundary_ids,
+    relation_ids: testCase.relation_ids,
     held_out: testCase.held_out,
     source_ref: testCase.source_ref,
     semantic_digest: testCase.semantic_digest,
@@ -361,6 +422,7 @@ function semanticTestDefinitionSnapshot(testCase) {
     expected_creator_label: testCase.expected_creator_label,
     unit_ids: testCase.unit_ids,
     boundary_ids: testCase.boundary_ids,
+    relation_ids: testCase.relation_ids,
     held_out: testCase.held_out,
     source_ref: testCase.source_ref,
     semantic_digest: testCase.semantic_digest,
@@ -418,14 +480,20 @@ function invalidateChangedTestAcceptance(workspace, timestamp) {
   }
 }
 
-function normalizeCreator(value = {}) {
-  const type = value.type || 'agent';
+function normalizeCreator(value) {
+  if (!value) {
+    throw new Error(
+      'createdBy is required; Creation must not infer an author or participant',
+    );
+  }
+  assertPlainObject(value, 'createdBy');
+  const type = nonEmpty(value.type, 'createdBy.type');
   if (!['agent', 'human', 'organization'].includes(type)) {
     throw new Error('createdBy.type must be agent, human, or organization');
   }
   return {
     type,
-    id: nonEmpty(value.id || 'terminal-agent', 'createdBy.id'),
+    id: nonEmpty(value.id, 'createdBy.id'),
     ...(optionalString(value.name) ? { name: optionalString(value.name) } : {}),
   };
 }
@@ -483,7 +551,12 @@ function compareSemanticVersions(leftValue, rightValue) {
 }
 
 function initialExportPlan(options = {}) {
-  const access = options.access || 'public';
+  if (!Object.hasOwn(options, 'access')) {
+    throw new Error(
+      'access is required; choose unprotected file bytes, licensed encryption, or remote loading without implying publication',
+    );
+  }
+  const access = options.access;
   if (!['public', 'licensed', 'remote'].includes(access)) {
     throw new Error('access must be public, licensed, or remote');
   }
@@ -494,6 +567,7 @@ function initialExportPlan(options = {}) {
       'judgmentVersion',
     ),
     access,
+    publication_intent: 'not-requested',
     lineage: clone(options.lineage || { type: 'original' }),
     pending_judgment_change: false,
     last_built_semantic_digest: null,
@@ -506,11 +580,17 @@ function updateExportPlan(workspace, input = {}) {
   assertPlainObject(input, 'input');
   assertAllowedKeys(
     input,
-    new Set(['version', 'access']),
+    new Set(['version', 'access', 'publication_intent']),
     'export plan update',
   );
-  if (input.version === undefined && input.access === undefined) {
-    throw new Error('export plan update requires version or access');
+  if (
+    input.version === undefined &&
+    input.access === undefined &&
+    input.publication_intent === undefined
+  ) {
+    throw new Error(
+      'export plan update requires version, access, or publication_intent',
+    );
   }
   const version = input.version === undefined
     ? workspace.exportPlan.version
@@ -520,6 +600,17 @@ function updateExportPlan(workspace, input = {}) {
     : input.access;
   if (!['public', 'licensed', 'remote'].includes(access)) {
     throw new Error('access must be public, licensed, or remote');
+  }
+  const publicationIntent = input.publication_intent === undefined
+    ? workspace.exportPlan.publication_intent
+    : input.publication_intent;
+  if (![
+    'not-requested',
+    'public-distribution-requested',
+  ].includes(publicationIntent)) {
+    throw new Error(
+      'publication_intent must be not-requested or public-distribution-requested',
+    );
   }
   if (
     input.version !== undefined &&
@@ -543,59 +634,7 @@ function updateExportPlan(workspace, input = {}) {
   return evolve(workspace, 'export_plan_updated', (next) => {
     next.exportPlan.version = version;
     next.exportPlan.access = access;
-    for (const material of next.materials) {
-      if (material.sensitivity !== 'sensitive') continue;
-      if (access === 'public') {
-        if (
-          material.public_export_review.status !== 'approved' ||
-          material.public_export_review.decision !== 'public-safe-abstraction'
-        ) {
-          material.public_export_review = {
-            status: 'pending',
-            decision: null,
-            reviewer: null,
-            rationale: null,
-            reviewed_at: null,
-          };
-          const existingQuestion = next.unresolvedQuestions.some((question) => (
-            question.kind === 'source_safety_sensitive_public' &&
-            question.target_id === material.id &&
-            question.status === 'open'
-          ));
-          if (!existingQuestion) {
-            next.unresolvedQuestions.push({
-              id: id('question'),
-              kind: 'source_safety_sensitive_public',
-              reason:
-                `Sensitive source ${material.id} requires an explicit public-safe-abstraction ` +
-                `or non-public-isolation disposition before public export.`,
-              target_id: material.id,
-              status: 'open',
-              created_at: now(),
-              resolved_at: null,
-            });
-          }
-        }
-      } else {
-        material.public_export_review = {
-          status: 'not-required',
-          decision: 'non-public-isolation',
-          reviewer: null,
-          rationale: 'The export plan is not public and source bodies remain excluded.',
-          reviewed_at: now(),
-        };
-        for (const question of next.unresolvedQuestions) {
-          if (
-            question.kind === 'source_safety_sensitive_public' &&
-            question.target_id === material.id &&
-            question.status === 'open'
-          ) {
-            question.status = 'resolved';
-            question.resolved_at = now();
-          }
-        }
-      }
-    }
+    next.exportPlan.publication_intent = publicationIntent;
   });
 }
 
@@ -604,11 +643,21 @@ function createWorkspace(projectPath = null, options = {}) {
     options = projectPath;
     projectPath = null;
   }
-  const mode = options.mode || 'agent-authored';
+  if (!Object.hasOwn(options, 'mode')) {
+    throw new Error(
+      'mode is required; Creation must not infer authorship or participation',
+    );
+  }
+  const mode = options.mode;
   if (!CREATION_MODES.includes(mode)) {
     throw new Error(`mode must be one of: ${CREATION_MODES.join(', ')}`);
   }
-  const workflowMode = options.workflowMode || 'collaborative';
+  if (!Object.hasOwn(options, 'workflowMode')) {
+    throw new Error(
+      'workflowMode is required; Creation must not infer collaborative or autonomous execution',
+    );
+  }
+  const workflowMode = options.workflowMode;
   if (!WORKFLOW_MODES.includes(workflowMode)) {
     throw new Error(
       `workflowMode must be one of: ${WORKFLOW_MODES.join(', ')}`,
@@ -632,6 +681,9 @@ function createWorkspace(projectPath = null, options = {}) {
     },
     purposeBrief: null,
     materials: [],
+    materialInventories: [],
+    sourceDeliveries: [],
+    importMappings: [],
     candidates: [],
     judgmentModel: {
       judgment_core: {},
@@ -765,7 +817,7 @@ function validateWorkspace(workspace) {
         receipt.backup_filename,
         receipt.prior_output_digest,
       ];
-      if (receipt.command !== 'export-agent') {
+      if (receipt.command !== 'finalize-agent') {
         if (
           receipt.status !== 'completed' ||
           receipt.after === null ||
@@ -775,7 +827,7 @@ function validateWorkspace(workspace) {
         }
         if (exportOnlyValues.some((value) => value !== null)) {
           issues.push(
-            `${operationPath}: only export-agent may bind export recovery data`,
+            `${operationPath}: only finalize-agent may bind delivery recovery data`,
           );
         }
       } else {
@@ -1021,17 +1073,19 @@ function validateWorkspace(workspace) {
         }
         if (
           plan.status === 'valid' &&
-          plan.verification_contract === 'adoption-fidelity' &&
+          plan.verification_contract === 'application-adoption-fidelity' &&
           (
             plan.evidence_set !== 'fresh-hidden-holdout' ||
             plan.response_mode !== 'free-response' ||
             plan.build_receipt_digest !==
               canonicalBuildReceiptDigest(workspace.buildReceipt) ||
-            plan.asset_digest !== workspace.buildReceipt?.asset_digest
+            plan.asset_digest !== workspace.buildReceipt?.asset_digest ||
+            !plan.repetition_policy ||
+            !plan.risk_profile
           )
         ) {
           throw new Error(
-            'a current adoption-fidelity plan must bind the exact FORMAT_VALID build and asset',
+            'a current application-adoption-fidelity plan must bind the exact FORMAT_VALID build and asset',
           );
         }
       } catch (error) {
@@ -1434,14 +1488,19 @@ function validateWorkspace(workspace) {
               candidate.id === receipt.consumer_asset_observation_id,
           );
         if (
+          !Array.isArray(receipt.repetitions) ||
+          receipt.repetitions.length !==
+            plan.repetition_policy?.repetitions ||
           !observation ||
           observation.status !== 'consumed' ||
           observation.receipt_id !== receipt.id ||
           observation.observation_digest !==
             receipt.consumer_asset_observation_digest ||
           observation.attempt_id !== receipt.attempt_id ||
-          observation.consumer_run_digest !== receipt.consumer_run_digest ||
-          observation.runner_digest !== receipt.runner_digest ||
+          observation.consumer_run_digest !==
+            receipt.repetitions?.[0]?.consumer_run_digest ||
+          observation.runner_digest !==
+            receipt.repetitions?.[0]?.consumer_runner_digest ||
           observation.asset_load_receipt_digest !==
             receipt.consumer_asset_load_receipt_digest
         ) {
@@ -1461,8 +1520,10 @@ function validateWorkspace(workspace) {
           receipt.consumer_asset_load_receipt.observation_context_digest !==
             sha256(stableStringify({
               role: 'consumer-execution',
-              run_digest: receipt.consumer_run_digest,
-              runner_digest: receipt.runner_digest,
+              run_digest:
+                receipt.repetitions[0].consumer_run_digest,
+              runner_digest:
+                receipt.repetitions[0].consumer_runner_digest,
               observed_at: receipt.consumer_asset_observed_at,
             }))
         ) {
@@ -1470,16 +1531,62 @@ function validateWorkspace(workspace) {
             'receipt Consumer asset load observation is not canonical',
           );
         }
-        const executionTuple = stableStringify([
-          receipt.consumer_run_digest,
-          receipt.runner_digest,
-          receipt.evaluator_run_digest,
-          receipt.evaluator_runner_digest,
-        ]);
-        if (executionTuples.has(executionTuple)) {
-          throw new Error('duplicate application execution coordinates');
+        for (
+          const [offset, repetition] of receipt.repetitions.entries()
+        ) {
+          const expectedIndex = offset + 1;
+          if (repetition.index !== expectedIndex) {
+            throw new Error(
+              'application repetitions are not in the frozen order',
+            );
+          }
+          const normalizedResults = normalizeApplicationTaskResults(
+            repetition.task_results,
+            plan,
+            receipt.asset_digest,
+            `persisted application repetition ${expectedIndex}`,
+            expectedIndex,
+          );
+          if (
+            stableStringify(normalizedResults) !==
+              stableStringify(repetition.task_results) ||
+            repetition.consumer_output_digest !==
+              applicationConsumerOutputDigest(
+                expectedIndex,
+                normalizedResults,
+              ) ||
+            repetition.evaluator_output_digest !==
+              applicationEvaluatorOutputDigest(
+                expectedIndex,
+                normalizedResults,
+              )
+          ) {
+            throw new Error(
+              'application repetition output is not mechanically bound',
+            );
+          }
+          for (const executionTuple of [
+            `consumer:${repetition.consumer_run_digest}:${repetition.consumer_runner_digest}`,
+            `evaluator:${repetition.evaluator_run_digest}:${repetition.evaluator_runner_digest}`,
+          ]) {
+            if (executionTuples.has(executionTuple)) {
+              throw new Error(
+                'duplicate application execution coordinates',
+              );
+            }
+            executionTuples.add(executionTuple);
+          }
         }
-        executionTuples.add(executionTuple);
+        if (
+          plan.repetition_policy?.claim === 'stability' &&
+          new Set(receipt.repetitions.map(
+            (repetition) => repetition.consumer_output_digest,
+          )).size !== receipt.repetitions.length
+        ) {
+          throw new Error(
+            'stability evidence copied one Consumer output',
+          );
+        }
         const signatureTuple = stableStringify([
           receipt.consumer_signature,
           receipt.evaluator_signature,
@@ -1516,10 +1623,17 @@ function validateWorkspace(workspace) {
           receipt.evaluator_signature,
           'evaluator_signature',
         );
-        const assessment = applicationAssessment(
-          plan,
-          receipt.task_results,
-        );
+        const aggregateTaskResults =
+          aggregateApplicationTaskResults(plan, receipt.repetitions);
+        if (
+          stableStringify(aggregateTaskResults) !==
+            stableStringify(receipt.task_results)
+        ) {
+          throw new Error(
+            'application task aggregates are not mechanically derived',
+          );
+        }
+        const assessment = applicationAssessment(plan, aggregateTaskResults);
         if (stableStringify(assessment.metrics) !==
             stableStringify(receipt.metrics)) {
           throw new Error('application metrics are not mechanically derived');
@@ -1632,15 +1746,41 @@ function validateWorkspace(workspace) {
   }
   if (issues.length === 0) {
     if (workspace.purposeBrief) {
-      const boundaryStatements = new Set(
+      const boundaryIds = new Set(
         workspace.purposeBrief.global_boundaries.map(
-          (boundary) => boundary.statement,
+          (boundary) => boundary.id,
         ),
       );
+      const nonGoalMappings =
+        workspace.purposeBrief.non_goal_mappings || [];
       for (const nonGoal of workspace.purposeBrief.non_goals) {
-        if (!boundaryStatements.has(nonGoal)) {
+        const mappings = nonGoalMappings.filter(
+          (mapping) => mapping.non_goal === nonGoal,
+        );
+        if (
+          mappings.length !== 1 ||
+          mappings[0].boundary_ids.length === 0 ||
+          mappings[0].boundary_ids.some(
+            (boundaryId) => !boundaryIds.has(boundaryId),
+          )
+        ) {
           issues.push(
-            '/purposeBrief/non_goals: every entry must exactly match an explicit global boundary',
+            '/purposeBrief/non_goal_mappings: every non-goal must map once to one or more current boundaries',
+          );
+        } else if (
+          mappings[0].boundary_ids.some((boundaryId) => {
+            const boundary =
+              workspace.purposeBrief.global_boundaries.find(
+                (candidate) => candidate.id === boundaryId,
+              );
+            return boundary && constraintsClearlyContradict(
+              nonGoal,
+              boundary.statement,
+            );
+          })
+        ) {
+          issues.push(
+            '/purposeBrief/non_goal_mappings: mapped constraints contradict one another',
           );
         }
       }
@@ -1652,12 +1792,9 @@ function validateWorkspace(workspace) {
           '/judgmentModel/global_boundaries: must exactly mirror purposeBrief boundaries',
         );
       }
-      const expectedCore = {
-        highest_question: workspace.purposeBrief.highest_question,
-        worldview: workspace.purposeBrief.worldview,
-        value_order: workspace.purposeBrief.value_order,
-        judgment_role: workspace.purposeBrief.judgment_role,
-      };
+      const expectedCore = declaredJudgmentCore(
+        workspace.purposeBrief,
+      );
       if (
         stableStringify(expectedCore) !==
         stableStringify(workspace.judgmentModel.judgment_core)
@@ -1714,17 +1851,6 @@ function operationConflict(message) {
   return error;
 }
 
-function operationDevelopmentRuntime(input) {
-  if (
-    input.development_runtime === undefined ||
-    input.development_runtime === null
-  ) {
-    return null;
-  }
-  validateDevelopmentRuntime(input.development_runtime);
-  return clone(input.development_runtime);
-}
-
 function resolveOperation(workspace, input = {}) {
   assertWorkspace(workspace);
   const operationId = nonEmpty(input.operation_id, 'operation_id');
@@ -1736,7 +1862,10 @@ function resolveOperation(workspace, input = {}) {
     input.request_digest,
     'request_digest',
   );
-  const developmentRuntime = operationDevelopmentRuntime(input);
+  const invocationDigest = assertDigest(
+    input.invocation_digest || input.request_digest,
+    'invocation_digest',
+  );
   const receipt = workspace.operations.find(
     (candidate) => candidate.operation_id === operationId,
   );
@@ -1744,11 +1873,10 @@ function resolveOperation(workspace, input = {}) {
   if (
     receipt.command !== command ||
     receipt.request_digest !== requestDigest ||
-    stableStringify(receipt.development_runtime) !==
-      stableStringify(developmentRuntime)
+    receipt.invocation_digest !== invocationDigest
   ) {
     throw operationConflict(
-      'the operation_id was already used for a different command, request, or development runtime',
+      'the operation_id was already used for a different command or request',
     );
   }
   const applicableCoordinate =
@@ -1759,7 +1887,7 @@ function resolveOperation(workspace, input = {}) {
     applicableCoordinate.semantic_revision !== workspace.state.semantic_revision ||
     applicableCoordinate.semantic_digest !== workspace.state.semantic_digest ||
     (
-      receipt.command === 'export-agent' &&
+      receipt.command === 'finalize-agent' &&
       applicableCoordinate.export_plan_digest !==
         currentCoordinate.export_plan_digest
     )
@@ -1769,7 +1897,7 @@ function resolveOperation(workspace, input = {}) {
     );
   }
   if (
-    receipt.command === 'export-agent' &&
+    receipt.command === 'finalize-agent' &&
     receipt.status === 'completed' &&
     (
       workspace.buildReceipt?.asset_digest !== receipt.asset_digest ||
@@ -1777,7 +1905,7 @@ function resolveOperation(workspace, input = {}) {
         applicableCoordinate.semantic_revision ||
       workspace.buildReceipt?.semantic_digest !==
         applicableCoordinate.semantic_digest ||
-      assessReadiness(workspace).creation_accepted !== true ||
+      assessReadiness(workspace).judgment_accepted !== true ||
       assessReadiness(workspace).completion_gates.format_valid !== true
     )
   ) {
@@ -1832,13 +1960,16 @@ function completeOperation(workspace, input = {}) {
     operation_id: nonEmpty(input.operation_id, 'operation_id'),
     command: nonEmpty(input.command, 'command'),
     request_digest: assertDigest(input.request_digest, 'request_digest'),
-    development_runtime: operationDevelopmentRuntime(input),
+    invocation_digest: assertDigest(
+      input.invocation_digest || input.request_digest,
+      'invocation_digest',
+    ),
   };
   const existing = resolveOperation(workspace, request);
   if (existing) {
     if (existing.status === 'completed') return workspace;
     throw operationConflict(
-      'only export-agent operations may resume an incomplete phase',
+      'only finalize-agent operations may resume an incomplete phase',
     );
   }
   const assetDigest = input.asset_digest === undefined || input.asset_digest === null
@@ -1868,8 +1999,8 @@ function completeOperation(workspace, input = {}) {
     updated_at: null,
     completed_at: null,
   };
-  if (request.command === 'export-agent') {
-    throw new Error('export-agent must use the phased export operation contract');
+  if (request.command === 'finalize-agent') {
+    throw new Error('finalize-agent must use the phased delivery operation contract');
   }
   const action = computeNextAction(next);
   next.state.status = stateForAction(action);
@@ -1895,10 +2026,13 @@ function prepareExportOperation(workspace, input = {}) {
     operation_id: nonEmpty(input.operation_id, 'operation_id'),
     command: nonEmpty(input.command, 'command'),
     request_digest: assertDigest(input.request_digest, 'request_digest'),
-    development_runtime: operationDevelopmentRuntime(input),
+    invocation_digest: assertDigest(
+      input.invocation_digest || input.request_digest,
+      'invocation_digest',
+    ),
   };
-  if (request.command !== 'export-agent') {
-    throw new Error('prepareExportOperation requires export-agent');
+  if (request.command !== 'finalize-agent') {
+    throw new Error('prepareExportOperation requires finalize-agent');
   }
   const existing = resolveOperation(workspace, request);
   if (existing) return workspace;
@@ -1964,7 +2098,10 @@ function verifyExportOperation(workspace, input = {}) {
     operation_id: nonEmpty(input.operation_id, 'operation_id'),
     command: nonEmpty(input.command, 'command'),
     request_digest: assertDigest(input.request_digest, 'request_digest'),
-    development_runtime: operationDevelopmentRuntime(input),
+    invocation_digest: assertDigest(
+      input.invocation_digest || input.request_digest,
+      'invocation_digest',
+    ),
   };
   const existing = resolveOperation(workspace, request);
   if (!existing) {
@@ -2002,7 +2139,10 @@ function completeExportOperation(workspace, input = {}) {
     operation_id: nonEmpty(input.operation_id, 'operation_id'),
     command: nonEmpty(input.command, 'command'),
     request_digest: assertDigest(input.request_digest, 'request_digest'),
-    development_runtime: operationDevelopmentRuntime(input),
+    invocation_digest: assertDigest(
+      input.invocation_digest || input.request_digest,
+      'invocation_digest',
+    ),
   };
   const existing = resolveOperation(workspace, request);
   if (!existing) {
@@ -2058,25 +2198,37 @@ function assertWorkspace(workspace) {
   }
 }
 
+function assertSupportedWorkspaceSchema(workspace) {
+  if (workspace?.state?.schema_version !== SCHEMA_VERSION) {
+    const error = new Error(
+      `workspace_schema_unsupported: expected private Creation schema ${SCHEMA_VERSION}; migration_required and authority mode must be chosen explicitly`,
+    );
+    error.code = 'CREATION_WORKSPACE_SCHEMA_UNSUPPORTED';
+    throw error;
+  }
+}
+
 function confirmationRequired(mode) {
   return ['human-confirmed', 'organization-confirmed'].includes(mode);
 }
 
 function participationRequired(mode) {
-  return mode === 'human-assisted';
+  return mode === 'mixed-authorship';
 }
 
 function agentMayAcceptTestReport(workspace, actor) {
   if (actor.type !== 'agent') return true;
-  if (workspace.state.mode === 'agent-authored') {
-    return actor.id === workspace.state.created_by.id;
+  if (actor.id === workspace.state.created_by.id) return false;
+  if (['agent-authored', 'mixed-authorship'].includes(
+    workspace.state.mode,
+  )) {
+    return actor.authority === 'independent-agent-evaluator';
   }
   const subject = workspace.purposeBrief?.represented_subject;
   return Boolean(
     workspace.state.mode === 'interpretive' &&
-    subject?.type === 'agent' &&
-    actor.id === subject.id &&
-    actor.id !== workspace.state.created_by.id,
+    actor.authority === 'independent-interpretive-evaluator' &&
+    actor.id !== subject?.id,
   );
 }
 
@@ -2091,6 +2243,21 @@ function validReceipts(workspace) {
 function receiptCoversUnit(receipt, unitId) {
   return receipt.scope === 'model' ||
     (receipt.scope === 'unit' && receipt.target_ids.includes(unitId));
+}
+
+function contributionReceiptDigest(receipt) {
+  return sha256(stableStringify({
+    actor: receipt.actor,
+    subject: receipt.subject,
+    scope: receipt.scope,
+    target_ids: receipt.target_ids,
+    semantic_revision: receipt.semantic_revision,
+    semantic_digest: receipt.semantic_digest,
+    description: receipt.contribution?.description,
+    unit_ids: receipt.contribution?.unit_ids,
+    confirmed_final_semantics:
+      receipt.contribution?.confirmed_final_semantics,
+  }));
 }
 
 function refreshUnitConfirmationState(workspace) {
@@ -2259,9 +2426,12 @@ function completionGates(workspace, judgmentAccepted) {
     .reverse()
     .find((plan) => (
       plan.status === 'valid' &&
-      plan.verification_contract === 'adoption-fidelity' &&
+      plan.verification_contract === 'application-adoption-fidelity' &&
       plan.evidence_set === 'fresh-hidden-holdout' &&
       plan.response_mode === 'free-response' &&
+      plan.repetition_policy?.claim === 'stability' &&
+      plan.repetition_policy.repetitions >= 3 &&
+      plan.repetition_policy.task_ids.length > 0 &&
       plan.semantic_digest === workspace.state.semantic_digest &&
       plan.semantic_revision === workspace.state.semantic_revision &&
       plan.judgment_evidence_digest === judgmentEvidenceDigest &&
@@ -2380,7 +2550,15 @@ function completeUnit(unit) {
     optionalString(unit.misuse_risk) &&
     Array.isArray(unit.source_refs) && unit.source_refs.length > 0 &&
     Array.isArray(unit.contrary_evidence) &&
-      unit.contrary_evidence.length > 0 &&
+    unit.counterexample_search &&
+    (
+      (unit.contrary_evidence.length > 0 &&
+        unit.counterexample_search.result === 'found') ||
+      (unit.contrary_evidence.length === 0 &&
+        ['none-found', 'inconclusive'].includes(
+          unit.counterexample_search.result,
+        ))
+    ) &&
     unit.confidence && ['low', 'medium', 'high', 'unknown'].includes(unit.confidence.status),
   );
 }
@@ -2411,18 +2589,51 @@ function groundingMaterialEligible(workspace, material) {
 
 function confirmationAssessment(workspace) {
   if (participationRequired(workspace.state.mode)) {
-    const participation = validReceipts(workspace).some((receipt) => (
+    const contributions = validReceipts(workspace).filter((receipt) => (
       receipt.claim === 'participation' &&
+      receipt.participation_role === 'judgment-content-contribution' &&
       receipt.actor.type === 'human' &&
       receipt.subject.type === 'human' &&
-      receipt.subject.id === receipt.actor.id
+      receipt.subject.id === receipt.actor.id &&
+      receipt.contribution?.confirmed_final_semantics === true &&
+      receipt.contribution?.contribution_digest ===
+        contributionReceiptDigest(receipt)
     ));
-    return participation
-      ? { satisfied: true, reason: null }
-      : {
-          satisfied: false,
-          reason: 'Human-assisted mode requires a current record of human participation; it does not claim representation.',
-        };
+    const humanCovered = new Set(
+      contributions.flatMap(
+        (receipt) => receipt.contribution.unit_ids.filter(
+          (unitId) => receiptCoversUnit(receipt, unitId),
+        ),
+      ),
+    );
+    const unknownTargets = [...humanCovered].filter(
+      (unitId) =>
+        !workspace.judgmentModel.units.some(
+          (unit) => unit.id === unitId,
+        ),
+    );
+    const hasAgentContribution = workspace.judgmentModel.units.some(
+      (unit) => unit.agent_inference === true,
+    );
+    const allUnitsAttributed = workspace.judgmentModel.units.every(
+      (unit) =>
+        humanCovered.has(unit.id) ||
+        unit.agent_inference === true,
+    );
+    if (
+      contributions.length > 0 &&
+      humanCovered.size > 0 &&
+      unknownTargets.length === 0 &&
+      hasAgentContribution &&
+      allUnitsAttributed
+    ) {
+      return { satisfied: true, reason: null };
+    }
+    return {
+      satisfied: false,
+      reason:
+        'Mixed-authorship requires digest-bound human judgment-content contributions plus honest Agent inference attribution for every remaining unit; process assistance is not co-authorship.',
+    };
   }
   if (!confirmationRequired(workspace.state.mode)) return { satisfied: true, reason: null };
   const purpose = workspace.purposeBrief;
@@ -2491,11 +2702,13 @@ function assessReadiness(workspace) {
     purpose &&
     optionalString(purpose.objective) &&
     optionalString(purpose.scope) &&
-    optionalString(purpose.loading_condition) &&
-    optionalString(purpose.highest_question),
+    optionalString(purpose.loading_condition),
   );
   if (!purposeComplete) {
-    problems.push(blocking('PURPOSE_INCOMPLETE', 'Purpose, scope, loading condition, and highest question are required.'));
+    problems.push(blocking(
+      'PURPOSE_INCOMPLETE',
+      'Purpose, scope, and loading condition are required.',
+    ));
   }
 
   const subject = purpose?.represented_subject || null;
@@ -2505,19 +2718,6 @@ function assessReadiness(workspace) {
       'AGENT_SUBJECT_MISMATCH',
       'Agent-authored mode must name the creating Agent as represented subject.',
     ));
-  }
-  if (workspace.state.mode === 'agent-authored') {
-    const foreignSource = workspace.materials.find((material) => (
-      material.source_subject_id !== null &&
-      material.source_subject_id !== workspace.state.created_by.id
-    ));
-    if (foreignSource) {
-      problems.push(blocking(
-        'AGENT_AUTHORSHIP_SOURCE_MISMATCH',
-        'Material attributed to another subject must use an honest source/claim mode such as interpretive; workflow mode never permits it to be reported as Agent-authored.',
-        foreignSource.id,
-      ));
-    }
   }
   if (workspace.state.mode === 'human-confirmed' && subject?.type !== 'human') {
     problems.push(blocking('HUMAN_SUBJECT_REQUIRED', 'Human-confirmed mode requires a named human subject.'));
@@ -2546,30 +2746,77 @@ function assessReadiness(workspace) {
       .filter((material) => groundingMaterialEligible(workspace, material))
       .map((material) => material.id),
   );
+  const interviewRefs = new Set(
+    workspace.interviewAnswers
+      .filter(
+        (entry) => entry.answer_digest === interviewAnswerDigest(entry),
+      )
+      .map(
+        (entry) =>
+          `interview-answer:${entry.id}@${entry.answer_digest}`,
+      ),
+  );
+  const eligibleInterviewRefs = new Set(
+    workspace.interviewAnswers
+      .filter((entry) => {
+        if (
+          entry.answer_digest !== interviewAnswerDigest(entry) ||
+          entry.subject?.id !== subject?.id
+        ) {
+          return false;
+        }
+        if (workspace.state.mode === 'human-confirmed') {
+          return (
+            entry.actor.type === 'human' &&
+            entry.actor.id === subject?.id &&
+            entry.subject.type === 'human'
+          );
+        }
+        if (workspace.state.mode === 'organization-confirmed') {
+          return (
+            entry.actor.type === 'organization-authority' &&
+            Boolean(optionalString(entry.actor.authority)) &&
+            entry.subject.type === 'organization'
+          );
+        }
+        return false;
+      })
+      .map(
+        (entry) =>
+          `interview-answer:${entry.id}@${entry.answer_digest}`,
+      ),
+  );
+  const traceableSourceRefs = new Set([
+    ...materialIds,
+    ...interviewRefs,
+  ]);
   const sourceGrounded = !sourceGroundingRequired || (
     units.length > 0 &&
     units.every((unit) => (
-      unit.agent_inference !== true &&
-      unit.source_refs.some((ref) => eligibleMaterialIds.has(ref))
+      unit.source_refs.some(
+        (ref) =>
+          eligibleMaterialIds.has(ref) ||
+          eligibleInterviewRefs.has(ref),
+      )
     ))
   );
   if (!sourceGrounded) {
     problems.push(blocking(
       'SOURCE_MATERIAL_REQUIRED',
-      'Interpretive and representational modes require at least one in-scope, non-expired source bound to the represented subject and a promoted judgment grounded in that eligible source. Representational sources must also declare current ownership and authority.',
+      'Interpretive mode requires eligible material. Representational modes require either eligible current material or a digest-bound interview answer from the represented authority, and each promoted judgment must cite that exact source.',
     ));
   }
-  const sensitivePublicSourcesPending = workspace.exportPlan.access === 'public'
-    ? workspace.materials.filter((material) => (
-        material.sensitivity === 'sensitive' &&
-        material.in_scope !== false &&
-        material.public_export_review?.status !== 'approved'
-      ))
-    : [];
-  for (const material of sensitivePublicSourcesPending) {
+  const sensitiveOutputSourcesPending = workspace.materials.filter(
+    (material) => (
+      material.sensitivity === 'sensitive' &&
+      material.in_scope !== false &&
+      material.output_disclosure_review?.status !== 'approved'
+    ),
+  );
+  for (const material of sensitiveOutputSourcesPending) {
     problems.push(blocking(
-      'SENSITIVE_PUBLIC_EXPORT_BLOCKED',
-      `Sensitive source ${material.id} is not approved as a public-safe abstraction.`,
+      'SENSITIVE_OUTPUT_REVIEW_REQUIRED',
+      `Sensitive source ${material.id} has not been reviewed for a non-leaking final asset abstraction.`,
       material.id,
     ));
   }
@@ -2590,7 +2837,8 @@ function assessReadiness(workspace) {
     }
     for (const ref of unit.source_refs || []) {
       const inference = ref.startsWith('agent-inference:');
-      if (!materialIds.has(ref) && !(unit.agent_inference && inference)) {
+      if (!traceableSourceRefs.has(ref) &&
+          !(unit.agent_inference && inference)) {
         traceable = false;
         problems.push(blocking(
           'SOURCE_REFERENCE_UNKNOWN',
@@ -2604,16 +2852,42 @@ function assessReadiness(workspace) {
   const core = workspace.judgmentModel.judgment_core;
   const coreComplete = Boolean(
     core &&
-    optionalString(core.highest_question) &&
-    Array.isArray(core.worldview) && core.worldview.length > 0 &&
-    Array.isArray(core.value_order) && core.value_order.length > 0 &&
-    core.judgment_role && Object.keys(core.judgment_role).length > 0 &&
-    workspace.judgmentModel.global_boundaries.length > 0,
+    typeof core === 'object' &&
+    !Array.isArray(core) &&
+    (
+      !Object.hasOwn(core, 'highest_question') ||
+      optionalString(core.highest_question)
+    ) &&
+    (
+      !Object.hasOwn(core, 'worldview') ||
+      (
+        Array.isArray(core.worldview) &&
+        core.worldview.length > 0 &&
+        core.worldview.every(optionalString)
+      )
+    ) &&
+    (
+      !Object.hasOwn(core, 'value_order') ||
+      (
+        Array.isArray(core.value_order) &&
+        core.value_order.length > 0 &&
+        core.value_order.every(optionalString)
+      )
+    ) &&
+    (
+      !Object.hasOwn(core, 'judgment_role') ||
+      (
+        core.judgment_role &&
+        typeof core.judgment_role === 'object' &&
+        !Array.isArray(core.judgment_role) &&
+        Object.keys(core.judgment_role).length > 0
+      )
+    ),
   );
   if (!coreComplete) {
     problems.push(blocking(
       'JUDGMENT_CORE_INCOMPLETE',
-      'Judgment core and at least one explicit global boundary are required.',
+      'Each judgment-core field that the asset declares must be complete; undeclared worldview, value order, role, or highest question are not required.',
     ));
   }
 
@@ -2683,15 +2957,10 @@ function assessReadiness(workspace) {
       plan.test_ids.every((testId) =>
         currentTestCases.some((testCase) => testCase.id === testId)),
   );
-  if (
-    currentTestCases.some(
-      (testCase) => testCase.expected_creator_label !== null,
-    ) &&
-    !currentPlan
-  ) {
+  if (!currentPlan) {
     problems.push(blocking(
       'SEMANTIC_TEST_PLAN_MISSING',
-      'Creator-label expectations must be frozen in a current test plan before evaluation.',
+      'Semantic tasks and their risk-stratified coverage policy must be frozen before evaluation.',
     ));
   }
   const unresolvedCurrentTests = workspace.semanticTestReport.cases.filter(
@@ -2732,34 +3001,55 @@ function assessReadiness(workspace) {
       ));
     }
   }
-  let unitCasesComplete = units.length > 0;
-  for (const unit of units) {
-    const applicable = passed.some((testCase) => (
-      testCase.kind === 'applicable' && testCase.unit_ids.includes(unit.id)
-    ));
-    const counterexample = passed.some((testCase) => (
-      testCase.kind === 'counterexample' && testCase.unit_ids.includes(unit.id)
-    ));
-    if (!applicable || !counterexample) {
-      unitCasesComplete = false;
+  let unitCasesComplete = false;
+  let boundaryCasesComplete = false;
+  let relationCasesComplete = false;
+  if (currentPlan) {
+    try {
+      const normalizedPolicy = normalizeSemanticCoveragePolicy(
+        workspace,
+        currentPlan.coverage_policy,
+        currentTestCases,
+      );
+      if (
+        stableStringify(normalizedPolicy) !==
+          stableStringify(currentPlan.coverage_policy)
+      ) {
+        throw new Error('stored semantic coverage policy is not canonical');
+      }
+      const passedIds = new Set(passed.map((testCase) => testCase.id));
+      unitCasesComplete = normalizedPolicy.unit_groups.every(
+        (group) => group.test_ids.every((testId) => passedIds.has(testId)),
+      );
+      boundaryCasesComplete = normalizedPolicy.boundary_groups.every(
+        (group) => group.test_ids.every((testId) => passedIds.has(testId)),
+      );
+      relationCasesComplete = normalizedPolicy.relation_groups.every(
+        (group) => group.test_ids.every((testId) => passedIds.has(testId)),
+      );
+      for (const [complete, code, message] of [
+        [
+          unitCasesComplete,
+          'UNIT_TEST_COVERAGE_INCOMPLETE',
+          'The frozen risk-stratified judgment sample is not fully passed.',
+        ],
+        [
+          boundaryCasesComplete,
+          'BOUNDARY_TEST_MISSING',
+          'The frozen key-boundary sample is not fully passed.',
+        ],
+        [
+          relationCasesComplete,
+          'RELATION_TEST_COVERAGE_INCOMPLETE',
+          'The frozen priority, exception, or conflict sample is not fully passed.',
+        ],
+      ]) {
+        if (!complete) problems.push(blocking(code, message));
+      }
+    } catch (error) {
       problems.push(blocking(
-        'UNIT_TEST_COVERAGE_INCOMPLETE',
-        `Judgment ${unit.id} needs a passed applicable case and counterexample.`,
-        unit.id,
-      ));
-    }
-  }
-  let boundaryCasesComplete = workspace.judgmentModel.global_boundaries.length > 0;
-  for (const boundary of workspace.judgmentModel.global_boundaries) {
-    const covered = passed.some((testCase) => (
-      testCase.kind === 'boundary' && testCase.boundary_ids.includes(boundary.id)
-    ));
-    if (!covered) {
-      boundaryCasesComplete = false;
-      problems.push(blocking(
-        'BOUNDARY_TEST_MISSING',
-        `Global boundary ${boundary.id} needs a passed semantic test.`,
-        boundary.id,
+        'SEMANTIC_COVERAGE_POLICY_INVALID',
+        error.message,
       ));
     }
   }
@@ -2796,13 +3086,16 @@ function assessReadiness(workspace) {
     problems.push(blocking(
       'SEMANTIC_TEST_ACCEPTANCE_MISSING',
       workspace.state.mode === 'agent-authored'
-        ? 'The declared creating Agent or a non-Agent actor must accept the current semantic test report.'
+        ? 'An independent evaluator Agent or a non-Agent actor must accept the current semantic test report; the creating Agent cannot self-accept.'
         : (
-            workspace.state.mode === 'interpretive' &&
-            workspace.purposeBrief?.represented_subject?.type === 'agent'
-          )
-          ? 'The distinct represented Agent subject or a non-Agent actor must accept the current semantic test report for the declared scope.'
-          : 'A non-Agent acceptance actor must accept the current semantic test report for the declared scope.',
+            workspace.state.mode === 'interpretive'
+              ? 'An independent interpretive evaluator Agent or a non-Agent actor must accept the current semantic test report without claiming to be the source subject.'
+              : (
+                  workspace.state.mode === 'mixed-authorship'
+                    ? 'A distinct independent evaluator Agent or a non-Agent actor must accept the current semantic test report; co-authorship does not imply representation or confirmation.'
+                    : 'A non-Agent acceptance actor must accept the current semantic test report for the declared representational scope.'
+                )
+          ),
     ));
   }
 
@@ -2827,15 +3120,14 @@ function assessReadiness(workspace) {
   }
 
   const formatReady = purposeComplete && sourceGrounded &&
-    sensitivePublicSourcesPending.length === 0 && unitsComplete && traceable &&
+    sensitiveOutputSourcesPending.length === 0 && unitsComplete && traceable &&
     coreComplete && unresolvedConflicts.length === 0 && unresolvedSplits.length === 0 &&
     openQuestions.length === 0;
-  const creationAccepted = problems.length === 0;
-  const gates = completionGates(workspace, creationAccepted);
+  const judgmentAccepted = problems.length === 0;
+  const gates = completionGates(workspace, judgmentAccepted);
   const result = {
     compile_ready: formatReady,
-    format_ready: formatReady,
-    creation_accepted: creationAccepted,
+    judgment_accepted: judgmentAccepted,
     completion_gates: gates,
     mode: workspace.state.mode,
     workflow_mode: workspace.state.workflow_mode,
@@ -2845,8 +3137,10 @@ function assessReadiness(workspace) {
     requirements: {
       purpose_explicit: purposeComplete,
       source_grounding_complete: sourceGrounded,
-      public_source_safety_complete: sensitivePublicSourcesPending.length === 0,
+      sensitive_output_review_complete:
+        sensitiveOutputSourcesPending.length === 0,
       judgments_complete_and_traceable: unitsComplete && traceable,
+      declared_judgment_core_valid: coreComplete,
       judgment_core_and_boundaries_explicit: coreComplete,
       conflicts_and_splits_resolved:
         unresolvedConflicts.length === 0 &&
@@ -2856,6 +3150,7 @@ function assessReadiness(workspace) {
       confirmations_current: confirmations.satisfied,
       unit_cases_complete: unitCasesComplete,
       boundary_cases_complete: boundaryCasesComplete,
+      relation_cases_complete: relationCasesComplete,
       holdout_complete: holdoutComplete,
       declared_tests_complete: unresolvedCurrentTests.length === 0,
       semantic_test_acceptance_current: testAcceptanceComplete,
@@ -2868,7 +3163,13 @@ function assessReadiness(workspace) {
   return result;
 }
 
-function computeNextAction(workspace, assessment = null) {
+function independentAgentMayDecide(workspace) {
+  return ['agent-authored', 'interpretive', 'mixed-authorship'].includes(
+    workspace.state.mode,
+  );
+}
+
+function computeNextActionBase(workspace, assessment = null) {
   if (!workspace.purposeBrief) {
     return {
       action: 'set_purpose',
@@ -2883,25 +3184,104 @@ function computeNextAction(workspace, assessment = null) {
     workspace.candidates.length === 0 &&
     workspace.judgmentModel.units.length === 0
   ) {
-    const canInfer = workspace.state.mode === 'agent-authored';
+    const authorityMode = workspace.state.mode;
+    const canInfer = authorityMode === 'agent-authored';
+    const interpretationNeedsSource = authorityMode === 'interpretive';
     const hasInterview = workspace.interviewAnswers.length > 0;
     return {
       action: canInfer
         ? 'add_candidate'
-        : (hasInterview ? 'ingest_material' : 'record_interview_answer'),
+        : (
+            interpretationNeedsSource || hasInterview
+              ? 'ingest_material'
+              : 'record_interview_answer'
+          ),
       state: 'needs_sources',
       reason: canInfer
         ? 'Add a complete Agent-inferred candidate or ingest source material.'
         : (
+            interpretationNeedsSource
+              ? 'Interpretive creation requires authorized source material; an interview cannot substitute for the work being interpreted.'
+              :
             hasInterview
               ? 'Bind the recorded interview answer as a classified interview source before proposing judgments.'
               : 'Start a source interview or ingest existing material for this creation mode.'
           ),
-      requires_user: !canInfer,
+      requires_user: !canInfer && !interpretationNeedsSource,
       unresolved_ids: [],
     };
   }
   const proposed = workspace.candidates.filter((candidate) => candidate.status === 'proposed');
+  const sourceQuestion = workspace.unresolvedQuestions.find(
+    (question) =>
+      question.status === 'open' &&
+      [
+        'source_reauthorization_required',
+        'source_safety',
+        'source_safety_output_disclosure',
+        'import_mapping_review',
+      ].includes(question.kind),
+  );
+  if (sourceQuestion) {
+    const actionByKind = {
+      source_reauthorization_required: 'deliver_material',
+      source_safety: 'resolve_source_safety',
+      source_safety_output_disclosure: 'review_output_disclosure',
+      import_mapping_review: 'review_import_mapping',
+    };
+    return {
+      action: actionByKind[sourceQuestion.kind],
+      state: 'analyzing_sources',
+      reason: sourceQuestion.reason,
+      requires_user: false,
+      unresolved_ids: [sourceQuestion.id],
+    };
+  }
+  const representedSubject =
+    workspace.purposeBrief?.represented_subject || null;
+  const sourceGroundingMode = [
+    'human-confirmed',
+    'organization-confirmed',
+    'interpretive',
+  ].includes(workspace.state.mode);
+  const materialsNeedingGroundingReview = workspace.materials.filter(
+    (material) => {
+      if (!sourceGroundingMode) return false;
+      if (material.in_scope === false) return false;
+      if (
+        material.in_scope !== true ||
+        !representedSubject ||
+        material.source_subject_id !== representedSubject.id ||
+        material.authority === 'unknown'
+      ) {
+        return true;
+      }
+      if (
+        ['human-confirmed', 'organization-confirmed'].includes(
+          workspace.state.mode,
+        )
+      ) {
+        return (
+          material.belongs_to_subject !== true ||
+          material.represents_current_judgment !== true ||
+          material.currentness !== 'current'
+        );
+      }
+      return false;
+    },
+  );
+  if (materialsNeedingGroundingReview.length > 0) {
+    return {
+      action: 'review_material',
+      state: 'analyzing_sources',
+      reason:
+        'Review source identity, authority, currentness, scope, and exclusions before using it as judgment grounding.',
+      requires_user: false,
+      unresolved_ids: materialsNeedingGroundingReview.map(
+        (material) => material.id,
+      ),
+    };
+  }
   if (workspace.materials.length > 0 && proposed.length === 0 &&
       workspace.judgmentModel.units.length === 0) {
     return {
@@ -2917,7 +3297,7 @@ function computeNextAction(workspace, assessment = null) {
       action: 'promote_candidate',
       state: 'eliciting_judgment',
       reason: 'Review, reject, or promote the proposed judgment candidates.',
-      requires_user: true,
+      requires_user: !independentAgentMayDecide(workspace),
       unresolved_ids: proposed.map((candidate) => candidate.id),
     };
   }
@@ -2925,12 +3305,24 @@ function computeNextAction(workspace, assessment = null) {
     ['low', 'unknown'].includes(unit.confidence.status)
   ));
   if (uncertain.length > 0) {
+    const uncertaintyQuestions = workspace.unresolvedQuestions.filter(
+      (question) =>
+        question.status === 'open' &&
+        question.kind === 'candidate_uncertainty' &&
+        uncertain.some(
+          (unit) => unit.candidate_id === question.target_id,
+        ),
+    );
     return {
-      action: 'record_interview_answer',
+      action: 'resolve_uncertainty',
       state: 'eliciting_judgment',
-      reason: 'Clarify the lowest-confidence promoted judgments before acceptance.',
-      requires_user: true,
-      unresolved_ids: uncertain.map((unit) => unit.id),
+      reason:
+        'Review the lowest-confidence judgment: gather more evidence, narrow its claim, or retain bounded uncertainty with an explicit reason.',
+      requires_user: false,
+      unresolved_ids:
+        uncertaintyQuestions.length > 0
+          ? uncertaintyQuestions.map((question) => question.id)
+          : uncertain.map((unit) => unit.id),
     };
   }
   const conflicts = workspace.judgmentModel.relations.filter((relation) => (
@@ -2945,7 +3337,7 @@ function computeNextAction(workspace, assessment = null) {
       action: 'analyze_relations',
       state: 'eliciting_judgment',
       reason: 'Resolve explicit conflicts and asset split recommendations.',
-      requires_user: true,
+      requires_user: !independentAgentMayDecide(workspace),
       unresolved_ids: [
         ...conflicts.map((relation) => relation.id),
         ...splits.map((split) => split.id),
@@ -2956,11 +3348,23 @@ function computeNextAction(workspace, assessment = null) {
     (question) => question.status === 'open',
   );
   if (openQuestions.length > 0) {
+    const question = openQuestions[0];
+    const actionByKind = {
+      candidate_uncertainty: 'resolve_uncertainty',
+      source_reauthorization_required: 'deliver_material',
+      source_safety: 'resolve_source_safety',
+      source_safety_output_disclosure: 'review_output_disclosure',
+      import_mapping_review: 'review_import_mapping',
+      semantic_test_failure: 'build_repair_plan',
+      unresolved_conflict: 'analyze_relations',
+      application_verification_failure: 'build_repair_plan',
+      elicitation: 'record_interview_answer',
+    };
     return {
-      action: 'record_interview_answer',
+      action: actionByKind[question.kind] || 'review_blockers',
       state: 'eliciting_judgment',
-      reason: openQuestions[0].reason,
-      requires_user: true,
+      reason: question.reason,
+      requires_user: false,
       unresolved_ids: openQuestions.map((question) => question.id),
     };
   }
@@ -2990,18 +3394,66 @@ function computeNextAction(workspace, assessment = null) {
         : failed.map((testCase) => testCase.id),
     };
   }
+  const currentTests = workspace.semanticTestReport.cases.filter(
+    (testCase) =>
+      testCase.semantic_digest === workspace.state.semantic_digest,
+  );
+  if (currentTests.length === 0) {
+    return {
+      action: 'add_semantic_test',
+      state: 'testing',
+      reason:
+        'Add risk-applicable semantic tasks that cover use, non-use or exit, and every actually declared high-risk boundary or relation.',
+      requires_user: false,
+      unresolved_ids: workspace.judgmentModel.units.map(
+        (unit) => unit.id,
+      ),
+    };
+  }
+  const currentDefinitionDigest =
+    canonicalTestDefinitionDigest(workspace);
+  const currentTestPlan = (
+    workspace.semanticTestReport.plans || []
+  ).find(
+    (plan) =>
+      plan.status === 'valid' &&
+      plan.semantic_digest === workspace.state.semantic_digest &&
+      plan.definition_digest === currentDefinitionDigest &&
+      plan.test_ids.length === currentTests.length &&
+      plan.test_ids.every((testId) =>
+        currentTests.some((testCase) => testCase.id === testId)),
+  );
+  if (!currentTestPlan) {
+    return {
+      action: 'freeze_semantic_test_plan',
+      state: 'testing',
+      reason:
+        'Freeze the exact semantic tasks and risk-stratified coverage mapping before an evaluator sees results.',
+      requires_user: false,
+      unresolved_ids: currentTests.map((testCase) => testCase.id),
+    };
+  }
   const pendingTests = workspace.semanticTestReport.cases.filter((testCase) => (
     ['pending', 'inconclusive'].includes(testCase.status) &&
     testCase.semantic_digest === workspace.state.semantic_digest
   ));
   if (pendingTests.length > 0) {
+    const independentAgentMayEvaluate = [
+      'agent-authored',
+      'interpretive',
+      'mixed-authorship',
+    ].includes(workspace.state.mode);
     return {
       action: 'record_semantic_test_result',
       state: 'testing',
       reason: pendingTests.some((testCase) => testCase.status === 'inconclusive')
         ? 'Inconclusive semantic tests require an explicit new evaluation.'
-        : 'Current semantic tests are waiting for evaluation.',
-      requires_user: true,
+        : (
+            independentAgentMayEvaluate
+              ? 'Current semantic tests are waiting for an Agent evaluator distinct from the creating Agent.'
+              : 'Current semantic tests are waiting for the represented authority evaluation.'
+          ),
+      requires_user: !independentAgentMayEvaluate,
       unresolved_ids: pendingTests.map((testCase) => testCase.id),
     };
   }
@@ -3021,29 +3473,26 @@ function computeNextAction(workspace, assessment = null) {
     };
   }
   if (!readiness.requirements.semantic_test_acceptance_current) {
-    const agentSubjectCanAccept =
-      workspace.state.mode === 'agent-authored' ||
-      (
-        workspace.state.mode === 'interpretive' &&
-        workspace.purposeBrief?.represented_subject?.type === 'agent' &&
-        workspace.purposeBrief.represented_subject.id !==
-          workspace.state.created_by.id
-      );
+    const independentAgentMayAccept = [
+      'agent-authored',
+      'interpretive',
+      'mixed-authorship',
+    ].includes(workspace.state.mode);
     return {
       action: 'record_semantic_test_result',
       state: 'testing',
       reason: workspace.state.mode === 'agent-authored'
-        ? 'The declared creating Agent or a non-Agent actor must accept the current semantic test report.'
+        ? 'An independent evaluator Agent or a non-Agent actor must accept the current semantic test report; the creating Agent cannot self-accept.'
         : (
-            agentSubjectCanAccept
-              ? 'The distinct represented Agent subject or a non-Agent actor must accept the current semantic test report.'
+            independentAgentMayAccept
+              ? 'A distinct independent evaluator Agent or a non-Agent actor must accept the current semantic test report.'
               : 'A non-Agent actor must accept the current semantic test report.'
           ),
-      requires_user: !agentSubjectCanAccept,
+      requires_user: !independentAgentMayAccept,
       unresolved_ids: [],
     };
   }
-  if (readiness.creation_accepted) {
+  if (readiness.judgment_accepted) {
     const gates = readiness.completion_gates ||
       completionGates(workspace, true);
     if (!gates.format_valid) {
@@ -3061,7 +3510,7 @@ function computeNextAction(workspace, assessment = null) {
         action: 'freeze_application_test_plan',
         state: 'testing',
         reason:
-          'After FORMAT_VALID, freeze a separately keyed fresh-hidden free-response adoption-fidelity plan bound to this exact asset and build receipt.',
+          'After FORMAT_VALID, freeze a separately keyed fresh-hidden free-response application-adoption-fidelity plan bound to this exact asset and build receipt.',
         requires_user: false,
         unresolved_ids: [],
       };
@@ -3081,7 +3530,7 @@ function computeNextAction(workspace, assessment = null) {
         action: 'record_application_verification',
         state: 'testing',
         reason:
-          'Run the frozen tasks in independent with-KDNA and without-KDNA Consumer lanes against the exact final asset, sign the Engine-issued single-use attempt, then record the evaluator receipt.',
+          'Run each frozen task according to its execution_mode: with-only uses the exact-asset Consumer lane, while paired-diagnostic additionally runs an isolated without-KDNA lane. Sign the Engine-issued single-use attempt, then record the independent evaluator receipt.',
         requires_user: false,
         unresolved_ids: [],
       };
@@ -3115,7 +3564,7 @@ function computeNextAction(workspace, assessment = null) {
               !result.evaluation.boundary_correct ||
               !result.evaluation.exception_correct ||
               !result.evaluation.exit_correct ||
-              result.with_kdna.over_applied ||
+              result.evaluation.over_application_error ||
               result.with_kdna.exit === 'error'
             ))
             .map((result) => result.task_id)
@@ -3147,6 +3596,155 @@ function computeNextAction(workspace, assessment = null) {
     reason: readiness.blocking[0]?.message || 'Creation requirements remain unresolved.',
     requires_user: true,
     unresolved_ids: readiness.blocking.map((item) => item.target_id).filter(Boolean),
+  };
+}
+
+function requiredActorForNextAction(workspace, action) {
+  const collaborative = workspace.state.workflow_mode === 'collaborative';
+  const authorityMode = workspace.state.mode;
+  const representedSubject = workspace.purposeBrief?.represented_subject;
+  const representedHuman = authorityMode === 'human-confirmed';
+  const representedOrganization =
+    authorityMode === 'organization-confirmed';
+  const representationDecision = [
+    'review_material',
+    'promote_candidate',
+    'resolve_uncertainty',
+    'analyze_relations',
+    'record_confirmation',
+    'record_semantic_test_result',
+    'review_blockers',
+  ].includes(action.action);
+  const sensitivePublicQuestion = workspace.unresolvedQuestions.some(
+    (question) =>
+      question.status === 'open' &&
+      question.kind === 'source_safety_output_disclosure' &&
+      action.unresolved_ids.includes(question.id),
+  );
+  if (representedHuman && representationDecision) {
+    return {
+      required_actor: representedSubject?.id
+        ? `represented-human:${representedSubject.id}`
+        : 'represented-human',
+      authority_reason:
+        'A human-representation claim requires the represented human; execution mode cannot substitute an Agent.',
+      requires_user: true,
+    };
+  }
+  if (representedOrganization && representationDecision) {
+    return {
+      required_actor: representedSubject?.id
+        ? `organization-authority:${representedSubject.id}`
+        : 'organization-authority',
+      authority_reason:
+        'An organization-representation claim requires a named organization authority; execution mode cannot substitute an Agent.',
+      requires_user: true,
+    };
+  }
+  if (sensitivePublicQuestion) {
+    return {
+      required_actor: 'authorized-output-disclosure-reviewer',
+      authority_reason:
+        'Sensitive material output review requires the appropriate authority and cannot be inferred from autonomous execution alone.',
+      requires_user: true,
+    };
+  }
+  if (action.action === 'review_output_disclosure') {
+    return {
+      required_actor: 'authorized-output-disclosure-reviewer',
+      authority_reason:
+        'A non-leaking output review requires the appropriate material authority; Runtime access mode does not imply publication.',
+      requires_user: true,
+    };
+  }
+  if (
+    action.action === 'record_semantic_test_result' &&
+    ['agent-authored', 'interpretive', 'mixed-authorship'].includes(
+      authorityMode,
+    )
+  ) {
+    return {
+      required_actor: 'independent-evaluator-agent',
+      authority_reason:
+        authorityMode === 'interpretive'
+          ? 'An Agent distinct from the creating Agent must evaluate source fidelity, uncertainty, and boundaries without claiming to be the source subject.'
+          : 'An Agent distinct from the creating Agent must evaluate the frozen semantic tasks.',
+      requires_user: false,
+    };
+  }
+  if (action.action === 'resolve_application_authorization') {
+    return {
+      required_actor: 'authorization-holder',
+      authority_reason:
+        'Only the authorization holder may supply or approve protected-asset access.',
+      requires_user: true,
+    };
+  }
+  if (collaborative && [
+    'set_purpose',
+    'record_interview_answer',
+    'promote_candidate',
+    'analyze_relations',
+    'record_confirmation',
+    'review_blockers',
+  ].includes(action.action)) {
+    return {
+      required_actor: 'collaborating-user',
+      authority_reason:
+        'The collaborative workflow pauses at this declared user decision.',
+      requires_user: true,
+    };
+  }
+  if (
+    workspace.state.workflow_mode === 'autonomous' &&
+    ['agent-authored', 'interpretive', 'mixed-authorship'].includes(
+      authorityMode,
+    ) &&
+    [
+      'review_material',
+      'promote_candidate',
+      'resolve_uncertainty',
+      'analyze_relations',
+      'add_semantic_test',
+      'freeze_semantic_test_plan',
+      'record_semantic_test_result',
+      'review_blockers',
+    ].includes(action.action)
+  ) {
+    return {
+      required_actor: 'independent-evaluator-agent',
+      authority_reason:
+        authorityMode === 'interpretive'
+          ? 'An Agent distinct from the creating Agent must evaluate source fidelity, uncertainty, and boundaries without claiming to be the source subject.'
+          : 'An Agent distinct from the creating Agent must review and evaluate the Agent-original judgment.',
+      requires_user: false,
+    };
+  }
+  const actorByAction = {
+    deliver_material: 'authorized-material-host',
+    review_material: 'creating-agent-or-independent-evaluator',
+    resolve_source_safety: 'creating-agent',
+    review_import_mapping: 'creating-agent-or-independent-evaluator',
+    freeze_semantic_test_plan: 'coordinator',
+    freeze_application_test_plan: 'coordinator',
+    issue_application_attempt: 'coordinator',
+    record_application_asset_observation: 'consumer',
+    record_application_verification: 'independent-evaluator-agent',
+  };
+  return {
+    required_actor:
+      actorByAction[action.action] || 'creating-agent',
+    authority_reason:
+      'The declared execution policy permits this reversible technical step without inventing human or organization authority.',
+    requires_user: false,
+  };
+}
+
+function computeNextAction(workspace, assessment = null) {
+  const action = computeNextActionBase(workspace, assessment);
+  return {
+    ...action,
+    ...requiredActorForNextAction(workspace, action),
   };
 }
 
@@ -3193,7 +3791,7 @@ function normalizeSubject(subject, label) {
   };
 }
 
-function normalizeRole(role = {}) {
+function normalizeRole(role) {
   assertPlainObject(role, 'judgment_role');
   const result = {};
   if (optionalString(role.acts_as)) result.acts_as = optionalString(role.acts_as);
@@ -3206,6 +3804,22 @@ function normalizeRole(role = {}) {
     throw new Error('judgment_role requires at least one declared field');
   }
   return result;
+}
+
+function declaredJudgmentCore(purpose) {
+  const core = {};
+  if (!purpose || typeof purpose !== 'object') return core;
+  for (const field of [
+    'highest_question',
+    'worldview',
+    'value_order',
+    'judgment_role',
+  ]) {
+    if (Object.hasOwn(purpose, field)) {
+      core[field] = clone(purpose[field]);
+    }
+  }
+  return core;
 }
 
 function normalizeBoundary(boundary, index) {
@@ -3227,28 +3841,172 @@ function normalizeBoundary(boundary, index) {
   };
 }
 
+function constraintPolarity(statement) {
+  const value = String(statement).toLowerCase();
+  return (
+    /\b(?:do not|don't|never|must not|cannot|avoid|exclude|without)\b/.test(value) ||
+    /(?:不得|禁止|避免|不可|不要)/.test(value)
+  )
+    ? 'negative'
+    : 'positive';
+}
+
+function constraintTokens(statement) {
+  const stop = new Set([
+    'a', 'an', 'and', 'always', 'be', 'do', 'does', 'for', 'from', 'in',
+    'is', 'must', 'never', 'no', 'not', 'of', 'only', 'or', 'should',
+    'the', 'to', 'without',
+  ]);
+  return new Set(
+    String(statement)
+      .toLowerCase()
+      .match(/[a-z0-9]+|[\u3400-\u9fff]/g)
+      ?.filter((token) => !stop.has(token)) || [],
+  );
+}
+
+function constraintsClearlyContradict(nonGoal, boundary) {
+  if (constraintPolarity(nonGoal) === constraintPolarity(boundary)) {
+    return false;
+  }
+  const left = constraintTokens(nonGoal);
+  const right = constraintTokens(boundary);
+  if (left.size === 0 || right.size === 0) return false;
+  const overlap = [...left].filter((token) => right.has(token)).length;
+  return overlap / Math.max(left.size, right.size) >= 0.75;
+}
+
+function normalizeNonGoalInput(value, index) {
+  if (typeof value === 'string') {
+    return {
+      statement: nonEmpty(value, `non_goals[${index}]`),
+      boundary_ids: [],
+      rationale: null,
+    };
+  }
+  assertPlainObject(value, `non_goals[${index}]`);
+  return {
+    statement: nonEmpty(value.statement, `non_goals[${index}].statement`),
+    boundary_ids: stringList(
+      value.boundary_ids,
+      `non_goals[${index}].boundary_ids`,
+    ),
+    rationale: optionalString(value.rationale),
+  };
+}
+
+function normalizeNonGoalMappings(nonGoalInputs, inputMappings, boundaries) {
+  const boundaryById = new Map(
+    boundaries.map((boundary) => [boundary.id, boundary]),
+  );
+  const suppliedMappings = Array.isArray(inputMappings)
+    ? inputMappings
+    : [];
+  return nonGoalInputs.map((nonGoalInput, index) => {
+    const supplied = suppliedMappings.find(
+      (mapping) => mapping?.non_goal === nonGoalInput.statement,
+    );
+    let boundaryIds = nonGoalInput.boundary_ids;
+    let rationale = nonGoalInput.rationale;
+    if (supplied) {
+      assertPlainObject(supplied, `non_goal_mappings[${index}]`);
+      boundaryIds = stringList(
+        supplied.boundary_ids,
+        `non_goal_mappings[${index}].boundary_ids`,
+        { required: true },
+      );
+      rationale = nonEmpty(
+        supplied.rationale,
+        `non_goal_mappings[${index}].rationale`,
+      );
+    }
+    if (boundaryIds.length === 0) {
+      const exact = boundaries.filter(
+        (boundary) => boundary.statement === nonGoalInput.statement,
+      );
+      if (exact.length === 1) {
+        boundaryIds = [exact[0].id];
+        rationale =
+          'The non-goal and boundary are the same declared constraint.';
+      } else if (
+        boundaries.length === 1 &&
+        constraintPolarity(nonGoalInput.statement) ===
+          constraintPolarity(boundaries[0].statement)
+      ) {
+        boundaryIds = [boundaries[0].id];
+        rationale =
+          'The single non-goal and single boundary express the same constraint direction; the Agent recorded this semantic mapping for review.';
+      } else {
+        throw new Error(
+          'non_goal_boundary_mapping_required: map each non-goal to one or more boundary ids; repeated wording is not required',
+        );
+      }
+    }
+    const mappedBoundaries = boundaryIds.map((boundaryId) => {
+      const boundary = boundaryById.get(boundaryId);
+      if (!boundary) {
+        throw new Error(
+          `non_goal mapping references unknown boundary: ${boundaryId}`,
+        );
+      }
+      return boundary;
+    });
+    if (
+      mappedBoundaries.some((boundary) =>
+        constraintsClearlyContradict(
+          nonGoalInput.statement,
+          boundary.statement,
+        ))
+    ) {
+      throw new Error(
+        'non_goal_boundary_contradiction: a non-goal cannot map to an opposing boundary',
+      );
+    }
+    return {
+      non_goal: nonGoalInput.statement,
+      boundary_ids: [...new Set(boundaryIds)],
+      rationale:
+        rationale ||
+        'The Agent mapped this non-goal to the named boundary for explicit review.',
+    };
+  });
+}
+
 function normalizePurposeBrief(workspace, input = {}) {
   const objective = nonEmpty(input.objective, 'objective');
   const scope = nonEmpty(input.scope, 'scope');
-  const nonGoals = stringList(input.non_goals, 'non_goals');
+  const nonGoalInputs = (input.non_goals || []).map(normalizeNonGoalInput);
+  const nonGoals = nonGoalInputs.map((nonGoal) => nonGoal.statement);
   const loadingCondition = nonEmpty(input.loading_condition, 'loading_condition');
-  const highestQuestion = nonEmpty(input.highest_question, 'highest_question');
-  const worldview = stringList(input.worldview, 'worldview', { required: true });
-  const valueOrder = stringList(input.value_order, 'value_order', { required: true });
-  const boundaries = (input.global_boundaries || []).map(normalizeBoundary);
-  if (boundaries.length === 0) {
-    throw new Error('global_boundaries requires at least one explicit boundary');
+  const highestQuestion =
+    input.highest_question === undefined
+      ? null
+      : nonEmpty(input.highest_question, 'highest_question');
+  const worldview =
+    input.worldview === undefined
+      ? null
+      : stringList(input.worldview, 'worldview', { required: true });
+  const valueOrder =
+    input.value_order === undefined
+      ? null
+      : stringList(input.value_order, 'value_order', { required: true });
+  const judgmentRole =
+    input.judgment_role === undefined
+      ? null
+      : normalizeRole(input.judgment_role);
+  let boundaries = (input.global_boundaries || []).map(normalizeBoundary);
+  if (boundaries.length === 0 && nonGoalInputs.length > 0) {
+    boundaries = nonGoalInputs.map((nonGoal, index) => ({
+      id: `boundary_${index + 1}`,
+      statement: nonGoal.statement,
+      source_refs: [],
+    }));
   }
-  const boundaryStatements = new Set(
-    boundaries.map((boundary) => boundary.statement),
+  const nonGoalMappings = normalizeNonGoalMappings(
+    nonGoalInputs,
+    input.non_goal_mappings,
+    boundaries,
   );
-  for (const nonGoal of nonGoals) {
-    if (!boundaryStatements.has(nonGoal)) {
-      throw new Error(
-        'every non_goals entry must exactly match an explicit global boundary',
-      );
-    }
-  }
   let representedSubject = normalizeSubject(input.represented_subject, 'represented_subject');
   if (workspace.state.mode === 'agent-authored' && !representedSubject) {
     representedSubject = {
@@ -3262,13 +4020,14 @@ function normalizePurposeBrief(workspace, input = {}) {
     objective,
     scope,
     non_goals: nonGoals,
+    non_goal_mappings: nonGoalMappings,
     loading_condition: loadingCondition,
     represented_subject: representedSubject,
-    highest_question: highestQuestion,
-    worldview,
-    value_order: valueOrder,
-    judgment_role: normalizeRole(input.judgment_role),
     global_boundaries: boundaries,
+    ...(highestQuestion ? { highest_question: highestQuestion } : {}),
+    ...(worldview ? { worldview } : {}),
+    ...(valueOrder ? { value_order: valueOrder } : {}),
+    ...(judgmentRole ? { judgment_role: judgmentRole } : {}),
   };
   return purpose;
 }
@@ -3277,12 +4036,8 @@ function setPurpose(workspace, input = {}) {
   const purpose = normalizePurposeBrief(workspace, input);
   return evolve(workspace, 'purpose_set', (next) => {
     next.purposeBrief = purpose;
-    next.judgmentModel.judgment_core = {
-      highest_question: purpose.highest_question,
-      worldview: clone(purpose.worldview),
-      value_order: clone(purpose.value_order),
-      judgment_role: clone(purpose.judgment_role),
-    };
+    next.judgmentModel.judgment_core =
+      declaredJudgmentCore(purpose);
     next.judgmentModel.global_boundaries = clone(purpose.global_boundaries);
   });
 }
@@ -3319,14 +4074,181 @@ function ingestMaterial(workspace, input = {}) {
     contentHash = computedHash;
   }
   assertDigest(contentHash, 'content_hash');
+  const normalizedText =
+    typeof inspectionContent === 'string'
+      ? inspectionContent
+        .normalize('NFKC')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+      : '';
+  const normalizedTextDigest = normalizedText
+    ? sha256(normalizedText)
+    : null;
+  let observation = null;
+  if (input.observation !== undefined) {
+    assertPlainObject(input.observation, 'observation');
+    if (kind !== 'host-observation') {
+      throw new Error(
+        'digest-bound material observations require kind host-observation',
+      );
+    }
+    const mediaType = nonEmpty(
+      input.observation.media_type,
+      'observation.media_type',
+    );
+    if (![
+      'image',
+      'audio',
+      'video',
+      'binary',
+      'pdf',
+      'document',
+    ].includes(mediaType)) {
+      throw new Error('observation.media_type is unsupported');
+    }
+    const observationDigest = assertDigest(
+      input.observation.observation_digest,
+      'observation.observation_digest',
+    );
+    if (observationDigest !== contentHash) {
+      throw new Error(
+        'observation_digest does not match the supplied observation bytes',
+      );
+    }
+    const toolCoordinate = assertPlainObject(
+      input.observation.tool_coordinate,
+      'observation.tool_coordinate',
+    );
+    observation = {
+      source_digest: assertDigest(
+        input.observation.source_digest,
+        'observation.source_digest',
+      ),
+      media_type: mediaType,
+      observation_digest: observationDigest,
+      observer: normalizeActor(
+        input.observation.observer,
+        'observation.observer',
+        true,
+      ),
+      tool_coordinate: {
+        name: nonEmpty(
+          toolCoordinate.name,
+          'observation.tool_coordinate.name',
+        ),
+        ...(optionalString(toolCoordinate.version)
+          ? {
+              version: optionalString(toolCoordinate.version),
+            }
+          : {}),
+      },
+      coverage: nonEmpty(
+        input.observation.coverage,
+        'observation.coverage',
+      ),
+      uncertainty: nonEmpty(
+        input.observation.uncertainty,
+        'observation.uncertainty',
+      ),
+    };
+  } else if (kind === 'host-observation') {
+    throw new Error(
+      'host-observation material requires a digest-bound observation record',
+    );
+  }
+  let extraction = null;
+  if (input.extraction !== undefined) {
+    assertPlainObject(input.extraction, 'extraction');
+    const mediaType = nonEmpty(
+      input.extraction.media_type,
+      'extraction.media_type',
+    );
+    if (![
+      'text',
+      'json',
+      'transcript',
+      'pdf',
+      'document',
+    ].includes(mediaType)) {
+      throw new Error('extraction.media_type is unsupported');
+    }
+    const sourceDigest = assertDigest(
+      input.extraction.source_digest,
+      'extraction.source_digest',
+    );
+    if (sourceDigest !== contentHash) {
+      throw new Error(
+        'extraction.source_digest does not match the supplied material bytes',
+      );
+    }
+    const outputDigest = assertDigest(
+      input.extraction.output_digest,
+      'extraction.output_digest',
+    );
+    const computedOutputDigest = sha256(
+      Buffer.from(String(inspectionContent), 'utf8'),
+    );
+    if (outputDigest !== computedOutputDigest) {
+      throw new Error(
+        'extraction.output_digest does not match the extracted text',
+      );
+    }
+    const extractor = assertPlainObject(
+      input.extraction.extractor,
+      'extraction.extractor',
+    );
+    extraction = {
+      source_digest: sourceDigest,
+      media_type: mediaType,
+      output_digest: outputDigest,
+      extractor: {
+        name: nonEmpty(
+          extractor.name,
+          'extraction.extractor.name',
+        ),
+        ...(optionalString(extractor.version)
+          ? { version: optionalString(extractor.version) }
+          : {}),
+      },
+      coverage: nonEmpty(
+        input.extraction.coverage,
+        'extraction.coverage',
+      ),
+      uncertainty: nonEmpty(
+        input.extraction.uncertainty,
+        'extraction.uncertainty',
+      ),
+    };
+  }
+  const sourceInventoryId = optionalString(
+    input.source_inventory_id,
+  );
+  const sourceInventoryEntryId = optionalString(
+    input.source_inventory_entry_id,
+  );
+  if (Boolean(sourceInventoryId) !== Boolean(sourceInventoryEntryId)) {
+    throw new Error(
+      'source inventory id and entry id must be supplied together',
+    );
+  }
   const injectionIndicators =
     inspectionContent === undefined ? [] : detectInjection(inspectionContent);
   const inferredSensitive =
     inspectionContent === undefined ? false : detectSensitive(inspectionContent);
-  const sensitivity = input.sensitivity || (inferredSensitive ? 'sensitive' : 'private');
-  if (!['public', 'private', 'sensitive'].includes(sensitivity)) {
+  const declaredSensitivity = input.sensitivity || null;
+  if (
+    declaredSensitivity !== null &&
+    !['public', 'private', 'sensitive'].includes(declaredSensitivity)
+  ) {
     throw new Error('sensitivity must be public, private, or sensitive');
   }
+  // Automatic content detection is a lower bound. A caller may conservatively
+  // escalate a source, but cannot use a public/private declaration to suppress
+  // a sensitive-content finding.
+  const sensitivity = inferredSensitive
+    ? 'sensitive'
+    : (declaredSensitivity || 'private');
   const authority = input.authority || 'unknown';
   if (!SOURCE_AUTHORITIES.includes(authority)) {
     throw new Error(`authority must be one of: ${SOURCE_AUTHORITIES.join(', ')}`);
@@ -3353,6 +4275,17 @@ function ingestMaterial(workspace, input = {}) {
     kind,
     title,
     content_hash: contentHash,
+    ...(normalizedTextDigest
+      ? { normalized_text_digest: normalizedTextDigest }
+      : {}),
+    ...(observation ? { observation } : {}),
+    ...(extraction ? { extraction } : {}),
+    ...(sourceInventoryId
+      ? {
+          source_inventory_id: sourceInventoryId,
+          source_inventory_entry_id: sourceInventoryEntryId,
+        }
+      : {}),
     reference: optionalString(input.reference),
     source_subject_id: optionalString(input.source_subject_id),
     belongs_to_subject: triState(input.belongs_to_subject, 'belongs_to_subject'),
@@ -3384,24 +4317,14 @@ function ingestMaterial(workspace, input = {}) {
     },
     include_in_runtime: false,
     review_receipts: [],
-    public_export_review: sensitivity === 'sensitive'
-      ? (
-          workspace.exportPlan.access === 'public'
-            ? {
-                status: 'pending',
-                decision: null,
-                reviewer: null,
-                rationale: null,
-                reviewed_at: null,
-              }
-            : {
-                status: 'not-required',
-                decision: 'non-public-isolation',
-                reviewer: null,
-                rationale: 'The export plan is not public and source bodies remain excluded.',
-                reviewed_at: now(),
-              }
-        )
+    output_disclosure_review: sensitivity === 'sensitive'
+      ? {
+          status: 'pending',
+          decision: null,
+          reviewer: null,
+          rationale: null,
+          reviewed_at: null,
+        }
       : {
           status: 'not-required',
           decision: null,
@@ -3415,7 +4338,33 @@ function ingestMaterial(workspace, input = {}) {
     if (next.materials.some((material) => material.id === record.id)) {
       throw new Error(`material already exists: ${record.id}`);
     }
+    const duplicate = next.materials.find(
+      (material) =>
+        material.content_hash === record.content_hash ||
+        (
+          record.observation &&
+          material.observation?.source_digest ===
+            record.observation.source_digest
+        ),
+    );
+    if (duplicate) {
+      throw new Error(
+        `material_duplicate_content: exact source bytes already exist as ${duplicate.id}`,
+      );
+    }
     next.materials.push(record);
+    if (record.source_inventory_id) {
+      next.unresolvedQuestions.push({
+        id: id('question'),
+        kind: 'source_reauthorization_required',
+        reason:
+          `Source ${record.reference || record.title} is indexed without retaining its body; a fresh Host must redeliver the exact approved bytes before source-dependent distillation or repair.`,
+        target_id: record.id,
+        status: 'open',
+        created_at: now(),
+        resolved_at: null,
+      });
+    }
     if (record.trust.prompt_injection_detected) {
       next.unresolvedQuestions.push({
         id: id('question'),
@@ -3429,20 +4378,445 @@ function ingestMaterial(workspace, input = {}) {
     }
     if (
       record.sensitivity === 'sensitive' &&
-      record.public_export_review.status === 'pending'
+      record.output_disclosure_review.status === 'pending'
     ) {
       next.unresolvedQuestions.push({
         id: id('question'),
-        kind: 'source_safety_sensitive_public',
+        kind: 'source_safety_output_disclosure',
         reason:
-          `Sensitive source ${record.id} requires an explicit public-safe abstraction ` +
-          'review before public export.',
+          `Sensitive source ${record.id} requires an explicit non-leaking ` +
+          'output abstraction review before final asset delivery.',
         target_id: record.id,
         status: 'open',
         created_at: now(),
         resolved_at: null,
       });
     }
+  });
+}
+
+function recordMaterialInventory(workspace, input = {}) {
+  assertPlainObject(input, 'material inventory');
+  const inventory = clone(input);
+  nonEmpty(inventory.id, 'material inventory id');
+  assertDigest(
+    inventory.approved_inventory_digest,
+    'material inventory approved_inventory_digest',
+  );
+  assertDigest(
+    inventory.final_inventory_digest,
+    'material inventory final_inventory_digest',
+  );
+  const processingPolicy = normalizeMaterialProcessingPolicy(
+    inventory.processing_policy,
+    'material inventory processing_policy',
+  );
+  const processingPolicyDigest = sha256(stableStringify({
+    contract: 'kdna.studio.material-processing-policy/0.1.0',
+    ...processingPolicy,
+  }));
+  if (inventory.processing_policy_digest !== processingPolicyDigest) {
+    throw new Error(
+      'material inventory processing_policy_digest is not canonical',
+    );
+  }
+  inventory.processing_policy = processingPolicy;
+  if (!Array.isArray(inventory.entries)) {
+    throw new Error('material inventory entries must be an array');
+  }
+  assertPlainObject(inventory.summary, 'material inventory summary');
+  assertPlainObject(inventory.capabilities, 'material inventory capabilities');
+  if (
+    typeof inventory.approved_at !== 'string' ||
+    !Number.isFinite(Date.parse(inventory.approved_at))
+  ) {
+    throw new Error('material inventory approved_at must be an ISO timestamp');
+  }
+  return evolve(workspace, 'material_inventory_recorded', (next) => {
+    if (
+      next.materialInventories.some(
+        (candidate) => candidate.id === inventory.id,
+      )
+    ) {
+      throw new Error(`material inventory already exists: ${inventory.id}`);
+    }
+    next.materialInventories.push(inventory);
+  });
+}
+
+function normalizeMaterialProcessingPolicy(value, label) {
+  assertPlainObject(value, label);
+  assertAllowedKeys(
+    value,
+    new Set([
+      'destination',
+      'processor',
+      'assurance',
+      'purpose',
+      'retention',
+    ]),
+    label,
+  );
+  const destination = nonEmpty(
+    value.destination,
+    `${label}.destination`,
+  );
+  if (![
+    'local-only',
+    'named-remote-processor',
+    'prohibited',
+  ].includes(destination)) {
+    throw new Error(`${label}.destination is invalid`);
+  }
+  const processor = optionalString(value.processor);
+  if (
+    (destination === 'named-remote-processor' && !processor) ||
+    (destination !== 'named-remote-processor' && processor)
+  ) {
+    throw new Error(
+      `${label}.processor must name only an approved remote processor`,
+    );
+  }
+  if (value.purpose !== 'creation-material-analysis') {
+    throw new Error(`${label}.purpose is invalid`);
+  }
+  const assurance = nonEmpty(value.assurance, `${label}.assurance`);
+  if (!['host-declared', 'verified-host-required'].includes(assurance)) {
+    throw new Error(`${label}.assurance is invalid`);
+  }
+  const expectedRetention = destination === 'named-remote-processor'
+    ? 'named-processor-policy'
+    : 'ephemeral-session';
+  if (value.retention !== expectedRetention) {
+    throw new Error(`${label}.retention is invalid`);
+  }
+  return {
+    destination,
+    processor: processor || null,
+    assurance,
+    purpose: 'creation-material-analysis',
+    retention: expectedRetention,
+  };
+}
+
+function recordSourceDelivery(workspace, input = {}) {
+  assertPlainObject(input, 'source delivery');
+  const materialId = nonEmpty(
+    input.material_id,
+    'source delivery material_id',
+  );
+  const material = workspace.materials.find(
+    (candidate) => candidate.id === materialId,
+  );
+  if (!material || !material.source_inventory_id) {
+    throw new Error(
+      'source delivery must bind an inventory-backed material',
+    );
+  }
+  const inventory = workspace.materialInventories.find(
+    (candidate) =>
+      candidate.id === material.source_inventory_id,
+  );
+  const entry = inventory?.entries.find(
+    (candidate) =>
+      candidate.id === material.source_inventory_entry_id,
+  );
+  if (
+    !entry ||
+    entry.status !== 'accepted' ||
+    entry.approved_for_content_read !== true ||
+    entry.ingested_material_id !== material.id
+  ) {
+    throw new Error(
+      'source delivery inventory entry is not an accepted exact material',
+    );
+  }
+  const sourceDigest = assertDigest(
+    input.source_digest,
+    'source delivery source_digest',
+  );
+  const expectedSourceDigest =
+    material.observation?.source_digest ||
+    material.extraction?.source_digest ||
+    material.content_hash;
+  if (
+    sourceDigest !== expectedSourceDigest ||
+    entry.content_hash !== expectedSourceDigest
+  ) {
+    throw new Error(
+      'source delivery source digest does not match the accepted material',
+    );
+  }
+  const deliveredDigest = assertDigest(
+    input.delivered_digest,
+    'source delivery delivered_digest',
+  );
+  const expectedDeliveredDigest =
+    material.observation?.observation_digest ||
+    material.extraction?.output_digest ||
+    material.content_hash;
+  if (deliveredDigest !== expectedDeliveredDigest) {
+    throw new Error(
+      'source delivery output digest does not match the accepted extraction or observation',
+    );
+  }
+  const host = normalizeActor(
+    input.host,
+    'source delivery host',
+    true,
+  );
+  const processingDestination = normalizeMaterialProcessingPolicy(
+    input.processing_destination,
+    'source delivery processing_destination',
+  );
+  const processingPolicyDigest = assertDigest(
+    input.processing_policy_digest,
+    'source delivery processing_policy_digest',
+  );
+  assertPlainObject(
+    input.host_execution,
+    'source delivery host_execution',
+  );
+  assertAllowedKeys(
+    input.host_execution,
+    new Set([
+      'location',
+      'processor',
+      'assurance',
+      'capability_digest',
+    ]),
+    'source delivery host_execution',
+  );
+  const hostLocation = nonEmpty(
+    input.host_execution.location,
+    'source delivery host_execution.location',
+  );
+  if (!['local', 'remote'].includes(hostLocation)) {
+    throw new Error('source delivery host execution location is invalid');
+  }
+  const hostProcessor = optionalString(
+    input.host_execution.processor,
+  );
+  if (input.host_execution.assurance !== 'host-declared') {
+    throw new Error(
+      'source delivery host_execution assurance must be host-declared; a generic digest does not prove verified locality',
+    );
+  }
+  if (processingDestination.assurance === 'verified-host-required') {
+    throw new Error(
+      'source delivery requires a separately trusted verified Host adapter',
+    );
+  }
+  const hostExecution = {
+    location: hostLocation,
+    processor: hostProcessor || null,
+    assurance: 'host-declared',
+    capability_digest: assertDigest(
+      input.host_execution.capability_digest,
+      'source delivery host_execution.capability_digest',
+    ),
+  };
+  if (
+    inventory.processing_policy.destination === 'prohibited' ||
+    stableStringify(processingDestination) !==
+      stableStringify(inventory.processing_policy) ||
+    processingPolicyDigest !== inventory.processing_policy_digest ||
+    (
+      processingDestination.destination === 'local-only' &&
+      (
+        hostExecution.location !== 'local' ||
+        hostExecution.processor !== null
+      )
+    ) ||
+    (
+      processingDestination.destination === 'named-remote-processor' &&
+      (
+        hostExecution.location !== 'remote' ||
+        hostExecution.processor !== processingDestination.processor
+      )
+    )
+  ) {
+    throw new Error(
+      'source delivery processing destination is not authorized by the exact inventory policy',
+    );
+  }
+  const channel = input.channel || 'private-fd';
+  if (!['private-fd', 'private-temp-file'].includes(channel)) {
+    throw new Error('source delivery channel is invalid');
+  }
+  const receipt = {
+    id: input.id || id('source_delivery'),
+    material_id: material.id,
+    inventory_id: inventory.id,
+    inventory_entry_id: entry.id,
+    source_digest: sourceDigest,
+    delivered_digest: deliveredDigest,
+    host,
+    processing_destination: processingDestination,
+    host_execution: hostExecution,
+    processing_policy_digest: processingPolicyDigest,
+    channel,
+    delivered_at: now(),
+  };
+  return evolve(workspace, 'source_delivered', (next) => {
+    if (
+      next.sourceDeliveries.some(
+        (candidate) => candidate.id === receipt.id,
+      )
+    ) {
+      throw new Error(
+        `source delivery already exists: ${receipt.id}`,
+      );
+    }
+    next.sourceDeliveries.push(receipt);
+    for (const question of next.unresolvedQuestions) {
+      if (
+        question.kind === 'source_reauthorization_required' &&
+        question.target_id === material.id &&
+        question.status === 'open'
+      ) {
+        question.status = 'resolved';
+        question.resolved_at = receipt.delivered_at;
+      }
+    }
+  });
+}
+
+function importMappingSummary(entries) {
+  return {
+    mapped: entries.filter((entry) => entry.status === 'mapped').length,
+    evidence_only:
+      entries.filter((entry) => entry.status === 'evidence-only').length,
+    unsupported:
+      entries.filter(
+        (entry) => entry.status === 'unsupported-with-reason',
+      ).length,
+    user_excluded:
+      entries.filter((entry) => entry.status === 'user-excluded').length,
+    total: entries.length,
+  };
+}
+
+function importMappingDigest(mapping) {
+  return sha256(stableStringify({
+    source_material_id: mapping.source_material_id,
+    source_asset_digest: mapping.source_asset_digest,
+    entries: mapping.entries,
+  }));
+}
+
+function recordImportMappingReport(workspace, input = {}) {
+  assertPlainObject(input, 'import mapping report');
+  const report = clone(input);
+  nonEmpty(report.id, 'import mapping report id');
+  nonEmpty(report.source_material_id, 'import mapping source_material_id');
+  assertDigest(
+    report.source_asset_digest,
+    'import mapping source_asset_digest',
+  );
+  if (!Array.isArray(report.entries)) {
+    throw new Error('import mapping entries must be an array');
+  }
+  const source = workspace.materials.find(
+    (material) => material.id === report.source_material_id,
+  );
+  if (
+    !source ||
+    source.content_hash !== report.source_asset_digest ||
+    source.kind !== 'kdna'
+  ) {
+    throw new Error(
+      'import mapping must bind one ingested KDNA source material',
+    );
+  }
+  if (
+    stableStringify(report.summary) !==
+      stableStringify(importMappingSummary(report.entries))
+  ) {
+    throw new Error('import mapping summary is not mechanically derived');
+  }
+  if (report.mapping_digest !== importMappingDigest(report)) {
+    throw new Error('import mapping digest is not canonical');
+  }
+  return evolve(workspace, 'import_mapping_recorded', (next) => {
+    if (
+      next.importMappings.some(
+        (candidate) => candidate.id === report.id,
+      )
+    ) {
+      throw new Error(`import mapping already exists: ${report.id}`);
+    }
+    next.importMappings.push(report);
+    for (const entry of report.entries) {
+      if (
+        entry.status === 'unsupported-with-reason' &&
+        entry.potential_judgment === true
+      ) {
+        next.unresolvedQuestions.push({
+          id: id('question'),
+          kind: 'import_mapping_review',
+          reason:
+            `Imported card ${entry.source_card_id} could not be mapped without inventing missing judgment fields; classify it as evidence-only, explicitly exclude it, or provide a reviewed candidate.`,
+          target_id: `${report.id}:${entry.id}`,
+          status: 'open',
+          created_at: now(),
+          resolved_at: null,
+        });
+      }
+    }
+  });
+}
+
+function reviewImportMapping(workspace, input = {}) {
+  const mappingId = nonEmpty(input.mapping_id, 'mapping_id');
+  const entryId = nonEmpty(input.entry_id, 'entry_id');
+  const decision = nonEmpty(input.decision, 'decision');
+  if (!['evidence-only', 'user-excluded'].includes(decision)) {
+    throw new Error(
+      'import mapping decision must be evidence-only or user-excluded',
+    );
+  }
+  const actor = normalizeActor(input.actor, 'actor', true);
+  const rationale = nonEmpty(input.rationale, 'rationale');
+  return evolve(workspace, 'import_mapping_reviewed', (next) => {
+    const mapping = next.importMappings.find(
+      (candidate) => candidate.id === mappingId,
+    );
+    if (!mapping) throw new Error(`import mapping not found: ${mappingId}`);
+    const entry = mapping.entries.find(
+      (candidate) => candidate.id === entryId,
+    );
+    if (!entry) {
+      throw new Error(`imported card mapping not found: ${entryId}`);
+    }
+    if (entry.status !== 'unsupported-with-reason') {
+      throw new Error(
+        'only an unresolved unsupported import mapping may be reviewed',
+      );
+    }
+    entry.status = decision;
+    entry.reason =
+      decision === 'evidence-only'
+        ? 'A named reviewer classified this card as source evidence rather than a derived judgment.'
+        : 'A named reviewer explicitly excluded this card from the derived asset.';
+    entry.reviewed_by = actor;
+    entry.review_rationale = rationale;
+    entry.reviewed_at = now();
+    mapping.summary = importMappingSummary(mapping.entries);
+    mapping.mapping_digest = importMappingDigest(mapping);
+    const question = next.unresolvedQuestions.find(
+      (candidate) =>
+        candidate.kind === 'import_mapping_review' &&
+        candidate.target_id === `${mappingId}:${entryId}` &&
+        candidate.status === 'open',
+    );
+    if (!question) {
+      throw new Error(
+        'import mapping review is not bound to an open review question',
+      );
+    }
+    question.status = 'resolved';
+    question.resolved_at = now();
   });
 }
 
@@ -3455,9 +4829,6 @@ function reviewMaterial(workspace, materialId, input = {}) {
     throw new Error(
       `source review cannot change immutable fields: ${unsupported.join(', ')}`,
     );
-  }
-  if (Object.keys(changes).length === 0) {
-    throw new Error('source review requires at least one classification change');
   }
   const reviewer = normalizeActor(
     input.reviewed_by || input.by,
@@ -3508,6 +4879,41 @@ function reviewMaterial(workspace, materialId, input = {}) {
       }
       material.currentness = changes.currentness;
     }
+    if (Object.hasOwn(changes, 'sensitivity')) {
+      if (changes.sensitivity !== 'sensitive') {
+        throw new Error(
+          'source review may only escalate sensitivity to sensitive',
+        );
+      }
+      material.sensitivity = 'sensitive';
+      material.output_disclosure_review = {
+        status: 'pending',
+        decision: null,
+        reviewer: null,
+        rationale: null,
+        reviewed_at: null,
+      };
+      if (
+        !next.unresolvedQuestions.some(
+          (question) =>
+            question.kind === 'source_safety_output_disclosure' &&
+            question.target_id === material.id &&
+            question.status === 'open',
+        )
+      ) {
+        next.unresolvedQuestions.push({
+          id: id('question'),
+          kind: 'source_safety_output_disclosure',
+          reason:
+            `Sensitive source ${material.id} requires an explicit non-leaking ` +
+            'output abstraction review before final asset delivery.',
+          target_id: material.id,
+          status: 'open',
+          created_at: now(),
+          resolved_at: null,
+        });
+      }
+    }
     if (Object.hasOwn(changes, 'external_constraints')) {
       material.external_constraints = stringList(
         changes.external_constraints,
@@ -3527,11 +4933,12 @@ function reviewMaterial(workspace, materialId, input = {}) {
       material.expired = changes.expired;
     }
     const changedFields = changedSourceFields(before, material);
-    if (changedFields.length === 0) {
-      throw new Error('source review must change at least one classification');
-    }
     material.review_receipts.push({
       material_id: material.id,
+      decision:
+        changedFields.length > 0
+          ? 'classification-changed'
+          : 'reviewed-no-change',
       reviewer,
       reason,
       before_digest: beforeDigest,
@@ -3539,6 +4946,18 @@ function reviewMaterial(workspace, materialId, input = {}) {
       changed_fields: changedFields,
       reviewed_at: now(),
     });
+    if (material.in_scope === false) {
+      for (const question of next.unresolvedQuestions) {
+        if (
+          question.kind === 'source_reauthorization_required' &&
+          question.target_id === material.id &&
+          question.status === 'open'
+        ) {
+          question.status = 'resolved';
+          question.resolved_at = now();
+        }
+      }
+    }
   });
 }
 
@@ -3563,9 +4982,52 @@ function normalizeConfidence(value) {
   };
 }
 
+function normalizeCounterexampleSearch(value, contraryEvidence, previous = null) {
+  assertPlainObject(value, 'counterexample_search');
+  assertAllowedKeys(
+    value,
+    new Set([
+      'scope',
+      'method',
+      'result',
+      'uncertainty',
+      ...(previous ? ['searched_at'] : []),
+    ]),
+    'counterexample_search',
+  );
+  const result = nonEmpty(value.result, 'counterexample_search.result');
+  if (!['found', 'none-found', 'inconclusive'].includes(result)) {
+    throw new Error(
+      'counterexample_search.result must be found, none-found, or inconclusive',
+    );
+  }
+  if (
+    (result === 'found') !== (contraryEvidence.length > 0)
+  ) {
+    throw new Error(
+      'counterexample_search.result must be found exactly when real contrary_evidence is recorded',
+    );
+  }
+  return {
+    scope: nonEmpty(value.scope, 'counterexample_search.scope'),
+    method: nonEmpty(value.method, 'counterexample_search.method'),
+    result,
+    uncertainty: nonEmpty(
+      value.uncertainty,
+      'counterexample_search.uncertainty',
+    ),
+    searched_at: previous?.searched_at || now(),
+  };
+}
+
 function normalizeCandidate(workspace, input = {}, previous = null) {
   const merged = { ...(previous || {}), ...input };
-  const cardType = merged.card_type || 'axiom';
+  if (!Object.hasOwn(merged, 'card_type')) {
+    throw new Error(
+      'card_type is required; Creation must not silently classify a judgment as an axiom',
+    );
+  }
+  const cardType = merged.card_type;
   if (!CARD_TYPES.includes(cardType)) {
     throw new Error(`card_type must be one of: ${CARD_TYPES.join(', ')}`);
   }
@@ -3577,6 +5039,24 @@ function normalizeCandidate(workspace, input = {}, previous = null) {
   if (sourceRefs.length === 0) {
     throw new Error('source_refs requires source material or an explicit Agent inference');
   }
+  const contraryEvidence = stringList(
+    merged.contrary_evidence,
+    'contrary_evidence',
+  );
+  const falseContraryEvidence = contraryEvidence.find((entry) =>
+    /^(?:none|none found|no (?:contrary evidence|counterexamples?|contrary)|n\/?a|not applicable)[.!]?$/i
+      .test(entry.trim()),
+  );
+  if (falseContraryEvidence) {
+    throw new Error(
+      'contrary_evidence must contain real evidence, not a none-found placeholder',
+    );
+  }
+  const counterexampleSearch = normalizeCounterexampleSearch(
+    merged.counterexample_search,
+    contraryEvidence,
+    previous?.counterexample_search,
+  );
   return {
     id: previous?.id || merged.id || id('candidate'),
     status: previous?.status || 'proposed',
@@ -3590,11 +5070,8 @@ function normalizeCandidate(workspace, input = {}, previous = null) {
     ),
     misuse_risk: nonEmpty(merged.misuse_risk, 'misuse_risk'),
     source_refs: sourceRefs,
-    contrary_evidence: stringList(
-      merged.contrary_evidence,
-      'contrary_evidence',
-      { required: true },
-    ),
+    contrary_evidence: contraryEvidence,
+    counterexample_search: counterexampleSearch,
     confidence: normalizeConfidence(merged.confidence),
     confirmation_state: previous?.confirmation_state || (
       confirmationRequired(workspace.state.mode) ? 'unconfirmed' : 'not-required'
@@ -3646,6 +5123,23 @@ function addCandidate(workspace, input = {}) {
   });
 }
 
+function interviewAnswerDigest(entry) {
+  return sha256(stableStringify({
+    id: entry.id,
+    question_id: entry.question_id,
+    question: entry.question,
+    answer: entry.answer,
+    actor: entry.actor,
+    subject: entry.subject,
+    operation_id: entry.operation_id,
+    recorded_against_semantic_revision:
+      entry.recorded_against_semantic_revision,
+    recorded_against_semantic_digest:
+      entry.recorded_against_semantic_digest,
+    source_refs: entry.source_refs,
+  }));
+}
+
 function recordInterviewAnswer(workspace, input = {}) {
   const question = nonEmpty(input.question, 'question');
   const answer = nonEmpty(input.answer, 'answer');
@@ -3654,42 +5148,132 @@ function recordInterviewAnswer(workspace, input = {}) {
     question_id: optionalString(input.question_id),
     question,
     answer,
-    by: nonEmpty(input.by || 'user', 'by'),
+    actor: normalizeActor(input.actor, 'actor', true),
+    subject: normalizeSubject(input.subject, 'subject'),
+    operation_id: nonEmpty(input.operation_id, 'operation_id'),
+    recorded_against_semantic_revision:
+      input.recorded_against_semantic_revision,
+    recorded_against_semantic_digest: assertDigest(
+      input.recorded_against_semantic_digest,
+      'recorded_against_semantic_digest',
+    ),
     source_refs: stringList(input.source_refs, 'source_refs'),
     recorded_at: now(),
+    answer_digest: null,
   };
+  if (!entry.subject) throw new Error('subject is required');
+  if (
+    !Number.isInteger(entry.recorded_against_semantic_revision) ||
+    entry.recorded_against_semantic_revision !==
+      workspace.state.semantic_revision ||
+    entry.recorded_against_semantic_digest !==
+      workspace.state.semantic_digest
+  ) {
+    throw new Error(
+      'interview answer must bind the current semantic revision and digest',
+    );
+  }
+  entry.answer_digest = interviewAnswerDigest(entry);
   return evolve(workspace, 'interview_answer_recorded', (next) => {
+    if (next.interviewAnswers.some((candidate) => candidate.id === entry.id)) {
+      throw new Error(`interview answer already exists: ${entry.id}`);
+    }
     next.interviewAnswers.push(entry);
     if (entry.question_id) {
       const unresolved = next.unresolvedQuestions.find(
         (item) => item.id === entry.question_id && item.status === 'open',
       );
-      if (unresolved) {
-        if (unresolved.kind === 'source_safety_sensitive_public') {
+      if (!unresolved) {
+        throw new Error(
+          `question is not open or does not exist: ${entry.question_id}`,
+        );
+      }
+      let mayResolve = false;
+      if (unresolved.kind === 'source_safety_output_disclosure') {
           const disposition = assertPlainObject(
             input.source_disposition,
             'source_disposition',
           );
           if (
             disposition.source_id !== unresolved.target_id ||
-            disposition.decision !== 'public-safe-abstraction'
+            disposition.decision !== 'non-leaking-abstraction' ||
+            disposition.semantic_revision !==
+              workspace.state.semantic_revision
           ) {
             throw new Error(
-              'sensitive public-source review requires a matching public-safe-abstraction disposition',
+              'sensitive output review requires a matching non-leaking abstraction disposition',
             );
           }
           const source = next.materials.find(
             (material) => material.id === disposition.source_id,
           );
           if (!source) throw new Error(`source not found: ${disposition.source_id}`);
-          source.public_export_review = {
+          source.output_disclosure_review = {
             status: 'approved',
-            decision: 'public-safe-abstraction',
-            reviewer: nonEmpty(disposition.reviewer || entry.by, 'source_disposition.reviewer'),
+            decision: 'non-leaking-abstraction',
+            reviewer: nonEmpty(
+              disposition.reviewer || entry.actor.id,
+              'source_disposition.reviewer',
+            ),
             rationale: nonEmpty(disposition.rationale, 'source_disposition.rationale'),
             reviewed_at: now(),
           };
+          mayResolve = true;
+      } else if (unresolved.kind === 'source_safety') {
+        const disposition = assertPlainObject(
+          input.source_disposition,
+          'source_disposition',
+        );
+        if (
+          disposition.source_id !== unresolved.target_id ||
+          disposition.decision !== 'treat-instructions-as-data' ||
+          disposition.instructions_are_agent_commands !== false ||
+          disposition.semantic_revision !== workspace.state.semantic_revision
+        ) {
+          throw new Error(
+            'source-safety review must bind the current source and confirm instruction-like text remains untrusted data',
+          );
         }
+        const source = next.materials.find(
+          (material) => material.id === disposition.source_id,
+        );
+        if (!source) throw new Error(`source not found: ${disposition.source_id}`);
+        if (
+          source.trust?.treat_as_untrusted_data !== true ||
+          source.trust?.instructions_are_agent_commands !== false
+        ) {
+          throw new Error(
+            'source-safety disposition cannot upgrade source text into Agent commands',
+          );
+        }
+        mayResolve = true;
+      } else if (unresolved.kind === 'elicitation') {
+        const disposition = assertPlainObject(
+          input.question_disposition,
+          'question_disposition',
+        );
+        if (
+          disposition.question_id !== unresolved.id ||
+          disposition.target_id !== unresolved.target_id ||
+          disposition.decision !== 'answer-recorded' ||
+          disposition.semantic_revision !== workspace.state.semantic_revision
+        ) {
+          throw new Error(
+            'elicitation resolution must bind the current question, target, and semantic revision',
+          );
+        }
+        mayResolve = true;
+      } else if (![
+        'candidate_uncertainty',
+        'semantic_test_failure',
+        'unresolved_conflict',
+        'application_verification_failure',
+      ].includes(unresolved.kind)) {
+        throw new Error(
+          `unsupported unresolved question kind: ${unresolved.kind}`,
+        );
+      }
+      if (mayResolve) {
         unresolved.status = 'resolved';
         unresolved.resolved_at = now();
       }
@@ -3705,6 +5289,140 @@ function recordInterviewAnswer(workspace, input = {}) {
         resolved_at: null,
       });
     }
+  });
+}
+
+function resolveUncertainty(workspace, input = {}) {
+  assertPlainObject(input, 'uncertainty disposition');
+  const questionId = nonEmpty(input.question_id, 'question_id');
+  const actor = normalizeActor(input.actor, 'actor', true);
+  const decision = nonEmpty(input.decision, 'decision');
+  if (![
+    'confidence-updated',
+    'bounded-uncertainty-retained',
+  ].includes(decision)) {
+    throw new Error(
+      'uncertainty decision must be confidence-updated or bounded-uncertainty-retained',
+    );
+  }
+  if (
+    input.expected_revision !== workspace.state.semantic_revision ||
+    assertDigest(
+      input.expected_semantic_digest,
+      'expected_semantic_digest',
+    ) !== workspace.state.semantic_digest
+  ) {
+    throw new Error(
+      'uncertainty disposition must bind the current semantic revision and digest',
+    );
+  }
+  const authorityMode = workspace.state.mode;
+  const representedSubject = workspace.purposeBrief?.represented_subject;
+  if (
+    authorityMode === 'human-confirmed' &&
+    (
+      actor.type !== 'human' ||
+      actor.id !== representedSubject?.id
+    )
+  ) {
+    throw new Error(
+      'human-confirmed uncertainty requires the represented human',
+    );
+  }
+  if (
+    authorityMode === 'organization-confirmed' &&
+    (
+      actor.type !== 'organization-authority' ||
+      actor.id !== representedSubject?.id ||
+      !optionalString(actor.authority)
+    )
+  ) {
+    throw new Error(
+      'organization-confirmed uncertainty requires the represented organization authority',
+    );
+  }
+  const reason = nonEmpty(input.reason, 'reason');
+  const changes = assertPlainObject(input.changes || {}, 'changes');
+  return evolve(workspace, 'uncertainty_resolved', (next) => {
+    const question = next.unresolvedQuestions.find(
+      (candidate) =>
+        candidate.id === questionId &&
+        candidate.kind === 'candidate_uncertainty' &&
+        candidate.status === 'open',
+    );
+    if (!question) {
+      throw new Error(
+        'candidate uncertainty question is not open or does not exist',
+      );
+    }
+    const unit = next.judgmentModel.units.find(
+      (candidate) => candidate.candidate_id === question.target_id,
+    );
+    if (!unit) {
+      throw new Error(
+        'candidate uncertainty is not bound to a promoted JudgmentUnit',
+      );
+    }
+    const candidateShape = normalizeCandidate(
+      next,
+      {
+        ...unit,
+        ...changes,
+        id: unit.candidate_id,
+      },
+      {
+        ...unit,
+        id: unit.candidate_id,
+        status: 'promoted',
+        created_at: unit.promoted_at,
+        rejection_reason: null,
+      },
+    );
+    if (
+      decision === 'confidence-updated' &&
+      !['medium', 'high'].includes(candidateShape.confidence.status)
+    ) {
+      throw new Error(
+        'confidence-updated requires medium or high current confidence',
+      );
+    }
+    if (
+      decision === 'bounded-uncertainty-retained' &&
+      (
+        !['low', 'unknown'].includes(candidateShape.confidence.status) ||
+        !optionalString(candidateShape.confidence.reason) ||
+        !optionalString(candidateShape.counterexample_search.uncertainty)
+      )
+    ) {
+      throw new Error(
+        'bounded uncertainty requires low/unknown confidence with an explicit confidence reason and counterexample-search uncertainty',
+      );
+    }
+    Object.assign(unit, {
+      statement: candidateShape.statement,
+      rationale: candidateShape.rationale,
+      applies_when: candidateShape.applies_when,
+      does_not_apply_when: candidateShape.does_not_apply_when,
+      misuse_risk: candidateShape.misuse_risk,
+      source_refs: candidateShape.source_refs,
+      contrary_evidence: candidateShape.contrary_evidence,
+      counterexample_search: candidateShape.counterexample_search,
+      confidence: candidateShape.confidence,
+      agent_inference: candidateShape.agent_inference,
+      card_type: candidateShape.card_type,
+      fields: candidateShape.fields,
+    });
+    question.status = 'resolved';
+    question.resolved_at = now();
+    question.resolution = {
+      decision,
+      actor,
+      reason,
+      recorded_against_revision: input.expected_revision,
+      recorded_against_semantic_digest:
+        input.expected_semantic_digest,
+      resolved_at: question.resolved_at,
+    };
   });
 }
 
@@ -3772,6 +5490,7 @@ function promoteCandidate(workspace, candidateId, changes = {}) {
       misuse_risk: candidate.misuse_risk,
       source_refs: clone(candidate.source_refs),
       contrary_evidence: clone(candidate.contrary_evidence),
+      counterexample_search: clone(candidate.counterexample_search),
       confidence: clone(candidate.confidence),
       confirmation_state: confirmationRequired(next.state.mode)
         ? 'unconfirmed'
@@ -3973,31 +5692,41 @@ function normalizeActor(actor, label, allowAgent = false) {
 }
 
 function recordConfirmation(workspace, input = {}) {
-  if (!confirmationRequired(workspace.state.mode) &&
-      !participationRequired(workspace.state.mode)) {
-    throw new Error(
-      `${workspace.state.mode} mode does not require a Creation confirmation receipt`,
-    );
-  }
   const actor = normalizeActor(input.actor, 'actor');
   const subject = normalizeSubject(input.subject, 'subject');
   if (!subject) throw new Error('subject is required');
   const purposeSubject = workspace.purposeBrief?.represented_subject;
-  const claim = input.claim || (
-    workspace.state.mode === 'human-assisted' ? 'participation' : 'representation'
-  );
+  const claim = nonEmpty(input.claim, 'claim');
   if (!['participation', 'representation'].includes(claim)) {
     throw new Error('claim must be participation or representation');
   }
-  if (workspace.state.mode === 'human-assisted') {
+  if (claim === 'participation') {
     if (claim !== 'participation' || actor.type !== 'human' ||
         subject.type !== 'human' || subject.id !== actor.id) {
       throw new Error(
-        'human-assisted mode records the participating human without claiming representation',
+        'a participation receipt records the participating human without claiming representation',
       );
     }
-  } else if (claim !== 'representation') {
-    throw new Error(`${workspace.state.mode} requires a representation confirmation`);
+    if (![
+      'process-assistance',
+      'judgment-content-contribution',
+    ].includes(input.participation_role)) {
+      throw new Error(
+        'participation_role must be process-assistance or judgment-content-contribution',
+      );
+    }
+    if (
+      input.participation_role === 'judgment-content-contribution' &&
+      workspace.state.mode !== 'mixed-authorship'
+    ) {
+      throw new Error(
+        'judgment-content-contribution requires mixed-authorship authority mode',
+      );
+    }
+  } else if (!confirmationRequired(workspace.state.mode)) {
+    throw new Error(
+      `${workspace.state.mode} cannot record a representation confirmation`,
+    );
   }
   const scope = input.scope || 'model';
   if (!['unit', 'core', 'boundaries', 'model'].includes(scope)) {
@@ -4007,13 +5736,15 @@ function recordConfirmation(workspace, input = {}) {
       assertDigest(input.semantic_digest, 'semantic_digest') !== workspace.state.semantic_digest) {
     throw new Error('confirmation semantic_digest does not match the current workspace');
   }
-  if (workspace.state.mode === 'human-confirmed') {
+  if (claim === 'representation' &&
+      workspace.state.mode === 'human-confirmed') {
     if (actor.type !== 'human' || !purposeSubject ||
         subject.id !== purposeSubject.id || actor.id !== purposeSubject.id) {
       throw new Error('human-confirmed mode requires the represented human to confirm');
     }
   }
-  if (workspace.state.mode === 'organization-confirmed') {
+  if (claim === 'representation' &&
+      workspace.state.mode === 'organization-confirmed') {
     if (actor.type !== 'organization-authority' || !optionalString(actor.authority) ||
         !purposeSubject || subject.id !== purposeSubject.id) {
       throw new Error(
@@ -4036,10 +5767,52 @@ function recordConfirmation(workspace, input = {}) {
       throw new Error(`confirmation references unknown unit: ${targetId}`);
     }
   }
+  let contribution = null;
+  if (
+    claim === 'participation' &&
+    input.participation_role === 'judgment-content-contribution'
+  ) {
+    if (!['unit', 'model'].includes(scope)) {
+      throw new Error(
+        'mixed-authorship contribution scope must be unit or model',
+      );
+    }
+    const requested = assertPlainObject(
+      input.contribution,
+      'contribution',
+    );
+    const unitIds = stringList(
+      requested.unit_ids,
+      'contribution.unit_ids',
+      { required: true },
+    );
+    if (
+      requested.confirmed_final_semantics !== true ||
+      stableStringify([...unitIds].sort()) !==
+        stableStringify([...targetIds].sort())
+    ) {
+      throw new Error(
+        'mixed-authorship contribution must confirm the exact current unit or model target set',
+      );
+    }
+    contribution = {
+      description: nonEmpty(
+        requested.description,
+        'contribution.description',
+      ),
+      unit_ids: unitIds,
+      confirmed_final_semantics: true,
+      contribution_digest: null,
+    };
+  }
   const accepted = input.accepted !== false;
   const receipt = {
     id: input.id || id('confirmation'),
     claim,
+    ...(claim === 'participation'
+      ? { participation_role: input.participation_role }
+      : {}),
+    ...(contribution ? { contribution } : {}),
     actor,
     subject,
     scope,
@@ -4052,6 +5825,10 @@ function recordConfirmation(workspace, input = {}) {
     confirmed_at: now(),
     invalidated_at: null,
   };
+  if (contribution) {
+    receipt.contribution.contribution_digest =
+      contributionReceiptDigest(receipt);
+  }
   return evolve(workspace, accepted ? 'confirmation_recorded' : 'confirmation_rejected', (next) => {
     next.confirmationReceipts.push(receipt);
     refreshUnitConfirmationState(next);
@@ -4065,9 +5842,13 @@ function addSemanticTest(workspace, input = {}) {
   }
   const unitIds = stringList(input.unit_ids, 'unit_ids');
   const boundaryIds = stringList(input.boundary_ids, 'boundary_ids');
+  const relationIds = stringList(input.relation_ids, 'relation_ids');
   const knownUnits = new Set(workspace.judgmentModel.units.map((unit) => unit.id));
   const knownBoundaries = new Set(
     workspace.judgmentModel.global_boundaries.map((boundary) => boundary.id),
+  );
+  const knownRelations = new Set(
+    workspace.judgmentModel.relations.map((relation) => relation.id),
   );
   for (const unitId of unitIds) {
     if (!knownUnits.has(unitId)) throw new Error(`semantic test references unknown unit: ${unitId}`);
@@ -4077,12 +5858,22 @@ function addSemanticTest(workspace, input = {}) {
       throw new Error(`semantic test references unknown boundary: ${boundaryId}`);
     }
   }
+  for (const relationId of relationIds) {
+    if (!knownRelations.has(relationId)) {
+      throw new Error(
+        `semantic test references unknown relation: ${relationId}`,
+      );
+    }
+  }
   if (['applicable', 'counterexample', 'comparison'].includes(kind) &&
       unitIds.length === 0) {
     throw new Error(`${kind} test requires unit_ids`);
   }
   if (kind === 'boundary' && boundaryIds.length === 0) {
     throw new Error('boundary test requires boundary_ids');
+  }
+  if (kind === 'conflict' && relationIds.length === 0) {
+    throw new Error('conflict test requires relation_ids');
   }
   const testCase = {
     id: input.id || id('semantic_test'),
@@ -4095,6 +5886,7 @@ function addSemanticTest(workspace, input = {}) {
         : nonEmpty(input.expected_creator_label, 'expected_creator_label'),
     unit_ids: unitIds,
     boundary_ids: boundaryIds,
+    relation_ids: relationIds,
     held_out: kind === 'holdout' ? input.held_out !== false : input.held_out === true,
     source_ref: optionalString(input.source_ref),
     semantic_digest: workspace.state.semantic_digest,
@@ -4130,6 +5922,262 @@ function addSemanticTest(workspace, input = {}) {
   });
 }
 
+function semanticCoverageGroup(
+  raw,
+  index,
+  kind,
+  knownTargets,
+  currentCases,
+) {
+  assertPlainObject(raw, `coverage_policy.${kind}_groups[${index}]`);
+  const targetField =
+    kind === 'unit'
+      ? 'unit_ids'
+      : (kind === 'boundary' ? 'boundary_ids' : 'relation_ids');
+  const targetIds = stringList(
+    raw[targetField],
+    `coverage_policy.${kind}_groups[${index}].${targetField}`,
+    { required: true },
+  );
+  for (const targetId of targetIds) {
+    if (!knownTargets.has(targetId)) {
+      throw new Error(
+        `coverage policy references unknown ${kind}: ${targetId}`,
+      );
+    }
+  }
+  const testIds = stringList(
+    raw.test_ids,
+    `coverage_policy.${kind}_groups[${index}].test_ids`,
+    { required: true },
+  );
+  const tests = testIds.map((testId) => {
+    const testCase = currentCases.find((candidate) => candidate.id === testId);
+    if (!testCase) {
+      throw new Error(
+        `coverage policy references unknown current semantic test: ${testId}`,
+      );
+    }
+    return testCase;
+  });
+  const base = {
+    id: raw.id || `${kind}_coverage_${index + 1}`,
+    [targetField]: targetIds,
+    test_ids: testIds,
+    rationale: nonEmpty(
+      raw.rationale,
+      `coverage_policy.${kind}_groups[${index}].rationale`,
+    ),
+  };
+  if (kind === 'unit') {
+    const riskLevel = nonEmpty(
+      raw.risk_level,
+      `coverage_policy.unit_groups[${index}].risk_level`,
+    );
+    if (!['normal', 'high', 'critical'].includes(riskLevel)) {
+      throw new Error(
+        'semantic unit coverage risk_level must be normal, high, or critical',
+      );
+    }
+    if (typeof raw.unique_semantics !== 'boolean') {
+      throw new Error(
+        'semantic unit coverage unique_semantics must be boolean',
+      );
+    }
+    if (
+      targetIds.length > 1 &&
+      (raw.unique_semantics || ['high', 'critical'].includes(riskLevel))
+    ) {
+      throw new Error(
+        'unique, high-risk, and critical judgments require an individual coverage group',
+      );
+    }
+    if (
+      !tests.some(
+        (testCase) =>
+          testCase.kind === 'applicable' &&
+          testCase.unit_ids.some((unitId) => targetIds.includes(unitId)),
+      ) ||
+      !tests.some(
+        (testCase) =>
+          testCase.kind === 'counterexample' &&
+          testCase.unit_ids.some((unitId) => targetIds.includes(unitId)),
+      )
+    ) {
+      throw new Error(
+        `semantic unit coverage group ${base.id} requires a representative applicable test and counterexample`,
+      );
+    }
+    return {
+      ...base,
+      risk_level: riskLevel,
+      unique_semantics: raw.unique_semantics,
+    };
+  }
+  if (kind === 'boundary') {
+    if (
+      !tests.some(
+        (testCase) =>
+          ['boundary', 'counterexample'].includes(testCase.kind) &&
+          testCase.boundary_ids.some(
+            (boundaryId) => targetIds.includes(boundaryId),
+          ),
+      )
+    ) {
+      throw new Error(
+        `semantic boundary coverage group ${base.id} requires a representative boundary or counterexample test`,
+      );
+    }
+    return base;
+  }
+  if (
+    !tests.some(
+      (testCase) =>
+        testCase.kind === 'conflict' &&
+        testCase.relation_ids.some(
+          (relationId) => targetIds.includes(relationId),
+        ),
+    )
+  ) {
+    throw new Error(
+      `semantic relation coverage group ${base.id} requires a representative conflict test`,
+    );
+  }
+  return base;
+}
+
+function defaultSemanticCoveragePolicy(workspace, currentCases) {
+  const applicableIdsFor = (targetField, targetId) =>
+    currentCases
+      .filter((testCase) => testCase[targetField].includes(targetId))
+      .map((testCase) => testCase.id);
+  const relations = workspace.judgmentModel.relations.filter(
+    (relation) =>
+      ['exception', 'priority', 'conflict'].includes(relation.type) &&
+      ['accepted', 'resolved'].includes(relation.status),
+  );
+  return {
+    strategy: 'risk-stratified',
+    max_test_count: currentCases.length,
+    rationale:
+      'Default fail-closed policy treats every judgment as semantically unique; an explicit frozen policy is required to group low-risk homogeneous judgments.',
+    unit_groups: workspace.judgmentModel.units.map((unit, index) => ({
+      id: `unit_coverage_${index + 1}`,
+      unit_ids: [unit.id],
+      risk_level: 'normal',
+      unique_semantics: true,
+      test_ids: applicableIdsFor('unit_ids', unit.id),
+      rationale:
+        'No explicit homogeneous sampling claim was supplied, so this judgment is covered individually.',
+    })),
+    boundary_groups: workspace.judgmentModel.global_boundaries.map(
+      (boundary, index) => ({
+        id: `boundary_coverage_${index + 1}`,
+        boundary_ids: [boundary.id],
+        test_ids: applicableIdsFor('boundary_ids', boundary.id),
+        rationale:
+          'A declared global boundary is treated as key unless an explicit grouped policy says otherwise.',
+      }),
+    ),
+    relation_groups: relations.map((relation, index) => ({
+      id: `relation_coverage_${index + 1}`,
+      relation_ids: [relation.id],
+      test_ids: applicableIdsFor('relation_ids', relation.id),
+      rationale:
+        'Priority, exception, and resolved conflict semantics require explicit representative coverage.',
+    })),
+  };
+}
+
+function normalizeSemanticCoveragePolicy(workspace, input, currentCases) {
+  const requested =
+    input || defaultSemanticCoveragePolicy(workspace, currentCases);
+  assertPlainObject(requested, 'coverage_policy');
+  if (requested.strategy !== 'risk-stratified') {
+    throw new Error(
+      'semantic coverage strategy must be risk-stratified',
+    );
+  }
+  if (
+    !Number.isInteger(requested.max_test_count) ||
+    requested.max_test_count < 1 ||
+    currentCases.length > requested.max_test_count
+  ) {
+    throw new Error(
+      'semantic coverage test count exceeds the pre-frozen risk budget',
+    );
+  }
+  const knownUnits = new Set(
+    workspace.judgmentModel.units.map((unit) => unit.id),
+  );
+  const knownBoundaries = new Set(
+    workspace.judgmentModel.global_boundaries.map(
+      (boundary) => boundary.id,
+    ),
+  );
+  const requiredRelations = workspace.judgmentModel.relations.filter(
+    (relation) =>
+      ['exception', 'priority', 'conflict'].includes(relation.type) &&
+      ['accepted', 'resolved'].includes(relation.status),
+  );
+  const knownRelations = new Set(requiredRelations.map((relation) => relation.id));
+  const unitGroups = (requested.unit_groups || []).map((group, index) =>
+    semanticCoverageGroup(
+      group,
+      index,
+      'unit',
+      knownUnits,
+      currentCases,
+    ));
+  const boundaryGroups = (requested.boundary_groups || []).map(
+    (group, index) =>
+      semanticCoverageGroup(
+        group,
+        index,
+        'boundary',
+        knownBoundaries,
+        currentCases,
+      ),
+  );
+  const relationGroups = (requested.relation_groups || []).map(
+    (group, index) =>
+      semanticCoverageGroup(
+        group,
+        index,
+        'relation',
+        knownRelations,
+        currentCases,
+      ),
+  );
+  for (const [label, required, groups, field] of [
+    ['judgment', knownUnits, unitGroups, 'unit_ids'],
+    ['boundary', knownBoundaries, boundaryGroups, 'boundary_ids'],
+    ['relation', knownRelations, relationGroups, 'relation_ids'],
+  ]) {
+    const covered = groups.flatMap((group) => group[field]);
+    if (
+      covered.length !== new Set(covered).size ||
+      covered.length !== required.size ||
+      [...required].some((targetId) => !covered.includes(targetId))
+    ) {
+      throw new Error(
+        `semantic coverage policy must map every required ${label} exactly once`,
+      );
+    }
+  }
+  return {
+    strategy: 'risk-stratified',
+    max_test_count: requested.max_test_count,
+    rationale: nonEmpty(
+      requested.rationale,
+      'coverage_policy.rationale',
+    ),
+    unit_groups: unitGroups,
+    boundary_groups: boundaryGroups,
+    relation_groups: relationGroups,
+  };
+}
+
 function freezeSemanticTestPlan(workspace, input = {}) {
   const actor = normalizeActor(input.actor, 'test_plan.actor', true);
   const definitions = currentSemanticTestDefinitions(workspace);
@@ -4140,28 +6188,32 @@ function freezeSemanticTestPlan(workspace, input = {}) {
     (testCase) =>
       testCase.semantic_digest === workspace.state.semantic_digest,
   );
-  if (
-    currentCases.some(
-      (testCase) =>
-        testCase.status !== 'pending' ||
-        testCase.result !== null ||
-        testCase.evaluated_by !== null ||
-        testCase.evaluated_at !== null,
-    )
-  ) {
+  const evaluatedCases = currentCases.filter(
+    (testCase) =>
+      testCase.status !== 'pending' ||
+      testCase.result !== null ||
+      testCase.evaluated_by !== null ||
+      testCase.evaluated_at !== null,
+  );
+  const previouslyFrozen = evaluatedCases.every((testCase) =>
+    (workspace.semanticTestReport.plans || []).some(
+      (plan) =>
+        plan.semantic_digest === workspace.state.semantic_digest &&
+        plan.test_ids.includes(testCase.id) &&
+        typeof plan.frozen_at === 'string' &&
+        typeof testCase.evaluated_at === 'string' &&
+        plan.frozen_at <= testCase.evaluated_at,
+    ));
+  if (evaluatedCases.length > 0 && !previouslyFrozen) {
     throw new Error(
-      'test plan must be frozen before any current semantic test is evaluated',
+      'every evaluated semantic task must have been frozen before its result; arbitrary pre-evaluated tasks cannot enter a new plan',
     );
   }
-  if (
-    currentCases.some(
-      (testCase) => testCase.expected_creator_label === null,
-    )
-  ) {
-    throw new Error(
-      'test plan requires expected_creator_label on every current test',
-    );
-  }
+  const coveragePolicy = normalizeSemanticCoveragePolicy(
+    workspace,
+    input.coverage_policy,
+    currentCases,
+  );
   const definitionDigest = canonicalTestDefinitionDigest(workspace);
   const existing = workspace.semanticTestReport.plans.find(
     (plan) =>
@@ -4185,6 +6237,7 @@ function freezeSemanticTestPlan(workspace, input = {}) {
     semantic_digest: workspace.state.semantic_digest,
     definition_digest: definitionDigest,
     test_ids: definitions.map((testCase) => testCase.id),
+    coverage_policy: coveragePolicy,
     status: 'valid',
     frozen_at: now(),
     invalidated_at: null,
@@ -4203,20 +6256,18 @@ function recordSemanticTestResult(workspace, testId, input = {}) {
     if (testCase.semantic_digest !== next.state.semantic_digest) {
       throw new Error(`semantic test ${testId} is bound to an older semantic digest`);
     }
-    if (testCase.expected_creator_label !== null) {
-      const definitionDigest = canonicalTestDefinitionDigest(next);
-      const plan = (next.semanticTestReport.plans || []).find(
-        (candidate) =>
-          candidate.status === 'valid' &&
-          candidate.semantic_digest === next.state.semantic_digest &&
-          candidate.definition_digest === definitionDigest &&
-          candidate.test_ids.includes(testCase.id),
+    const definitionDigest = canonicalTestDefinitionDigest(next);
+    const plan = (next.semanticTestReport.plans || []).find(
+      (candidate) =>
+        candidate.status === 'valid' &&
+        candidate.semantic_digest === next.state.semantic_digest &&
+        candidate.definition_digest === definitionDigest &&
+        candidate.test_ids.includes(testCase.id),
+    );
+    if (!plan) {
+      throw new Error(
+        'semantic tests require a frozen current test plan before evaluation',
       );
-      if (!plan) {
-        throw new Error(
-          'creator-label semantic tests require a frozen current test plan before evaluation',
-        );
-      }
     }
     if (Object.hasOwn(input, 'creator_label')) {
       throw new Error(
@@ -4295,7 +6346,7 @@ function recordSemanticTestResult(workspace, testId, input = {}) {
       const actor = normalizeActor(acceptance.actor, 'acceptance.actor', true);
       if (!agentMayAcceptTestReport(next, actor)) {
         throw new Error(
-          'an Agent may accept only its own Agent-authored report or an interpretation where it is the distinct represented Agent subject',
+          'Agent acceptance requires a distinct authorized evaluator; the creating Agent and represented source subject cannot self-accept',
         );
       }
       const accepted = acceptance.accepted === true;
@@ -4347,6 +6398,12 @@ function applicationPlanSnapshot(plan) {
     evaluation_oracle_digest: plan.evaluation_oracle_digest,
     consumer_identity: plan.consumer_identity,
     evaluator_identity: plan.evaluator_identity,
+    ...(plan.repetition_policy
+      ? { repetition_policy: plan.repetition_policy }
+      : {}),
+    ...(plan.risk_profile
+      ? { risk_profile: plan.risk_profile }
+      : {}),
     tasks: plan.tasks,
     thresholds: plan.thresholds,
     frozen_at: plan.frozen_at,
@@ -4406,8 +6463,12 @@ function applicationPlanSigningSnapshot(workspace, value) {
       risk_level: task.risk_level,
       unit_ids: task.unit_ids,
       boundary_ids: task.boundary_ids,
+      relation_ids: task.relation_ids || [],
       semantic_test_id: optionalString(task.semantic_test_id),
       perturbation_group: optionalString(task.perturbation_group),
+      ...(task.execution_mode
+        ? { execution_mode: task.execution_mode }
+        : {}),
       ...(task.fork_id
         ? { fork_id: task.fork_id }
         : {}),
@@ -4469,6 +6530,12 @@ function applicationPlanSigningSnapshot(workspace, value) {
       value.evaluation_oracle_digest,
       'evaluation_oracle_digest',
     ),
+    ...(value.repetition_policy !== undefined
+      ? { repetition_policy: value.repetition_policy }
+      : {}),
+    ...(value.risk_profile !== undefined
+      ? { risk_profile: value.risk_profile }
+      : {}),
     tasks,
     thresholds: value.thresholds,
   };
@@ -4523,7 +6590,7 @@ function normalizeApplicationIdentity(value, label) {
 }
 
 function freezeApplicationTestPlan(workspace, input = {}) {
-  if (assessReadiness(workspace).creation_accepted !== true) {
+  if (assessReadiness(workspace).judgment_accepted !== true) {
     throw new Error(
       'application test plan may be frozen only after JUDGMENT_ACCEPTED',
     );
@@ -4563,14 +6630,16 @@ function freezeApplicationTestPlan(workspace, input = {}) {
       'evaluator_identity',
       'build_receipt_digest',
       'asset_digest',
+      'repetition_policy',
+      'risk_profile',
       'tasks',
       'thresholds',
     ]),
     'application test plan',
   );
-  if (input.verification_contract !== 'adoption-fidelity') {
+  if (input.verification_contract !== 'application-adoption-fidelity') {
     throw new Error(
-      'new application test plans require verification_contract adoption-fidelity',
+      'new application test plans require verification_contract application-adoption-fidelity',
     );
   }
   if (input.evidence_set !== 'fresh-hidden-holdout') {
@@ -4593,6 +6662,79 @@ function freezeApplicationTestPlan(workspace, input = {}) {
       'application plan asset_digest must bind the exact final .kdna',
     );
   }
+  assertPlainObject(
+    input.repetition_policy,
+    'application test plan repetition_policy',
+  );
+  assertAllowedKeys(
+    input.repetition_policy,
+    new Set(['claim', 'repetitions', 'task_ids']),
+    'application test plan repetition_policy',
+  );
+  const repetitionClaim = nonEmpty(
+    input.repetition_policy.claim,
+    'repetition_policy.claim',
+  );
+  if (repetitionClaim !== 'stability') {
+    throw new Error(
+      'new application plans must claim scenario-local stability',
+    );
+  }
+  const repetitionCount = input.repetition_policy.repetitions;
+  if (!Number.isInteger(repetitionCount) || repetitionCount < 1) {
+    throw new Error(
+      'repetition_policy.repetitions must be a positive integer',
+    );
+  }
+  const repetitionTaskIds = stringList(
+    input.repetition_policy.task_ids,
+    'repetition_policy.task_ids',
+  );
+  if (repetitionCount < 3 || repetitionTaskIds.length === 0) {
+    throw new Error(
+      'scenario-local stability requires at least three runs and explicit task ids',
+    );
+  }
+  assertPlainObject(
+    input.risk_profile,
+    'application test plan risk_profile',
+  );
+  assertAllowedKeys(
+    input.risk_profile,
+    new Set([
+      'classification',
+      'external_actions',
+      'permission_sensitive',
+      'rationale_digest',
+    ]),
+    'application test plan risk_profile',
+  );
+  const riskClassification = nonEmpty(
+    input.risk_profile.classification,
+    'risk_profile.classification',
+  );
+  if (!['low', 'elevated', 'critical'].includes(riskClassification)) {
+    throw new Error(
+      'risk_profile.classification must be low, elevated, or critical',
+    );
+  }
+  if (
+    typeof input.risk_profile.external_actions !== 'boolean' ||
+    typeof input.risk_profile.permission_sensitive !== 'boolean'
+  ) {
+    throw new Error(
+      'risk_profile external_actions and permission_sensitive must be boolean',
+    );
+  }
+  const riskProfile = {
+    classification: riskClassification,
+    external_actions: input.risk_profile.external_actions,
+    permission_sensitive: input.risk_profile.permission_sensitive,
+    rationale_digest: assertDigest(
+      input.risk_profile.rationale_digest,
+      'risk_profile.rationale_digest',
+    ),
+  };
   const actor = normalizeActor(input.frozen_by, 'frozen_by', true);
   if (
     actor.type !== 'agent' ||
@@ -4668,8 +6810,10 @@ function freezeApplicationTestPlan(workspace, input = {}) {
     'coordinator_key_signature',
   );
   const rawTasks = input.tasks;
-  if (!Array.isArray(rawTasks) || rawTasks.length < 3) {
-    throw new Error('fresh hidden application plan requires at least three tasks');
+  if (!Array.isArray(rawTasks) || rawTasks.length < 2) {
+    throw new Error(
+      'an application-adoption-fidelity plan requires at least an applicability scenario and a distinct boundary/exit scenario',
+    );
   }
   const knownUnits = new Set(
     workspace.judgmentModel.units.map((unit) => unit.id),
@@ -4688,10 +6832,12 @@ function freezeApplicationTestPlan(workspace, input = {}) {
         'risk_level',
         'unit_ids',
         'boundary_ids',
+        'relation_ids',
         'semantic_test_id',
         'perturbation_group',
         'fork_id',
         'verification_dimensions',
+        'execution_mode',
         'kdna_sensitive',
       ]),
       `application test plan task ${index}`,
@@ -4719,6 +6865,16 @@ function freezeApplicationTestPlan(workspace, input = {}) {
       rawTask.boundary_ids,
       `tasks[${index}].boundary_ids`,
     );
+    const relationIds = stringList(
+      rawTask.relation_ids,
+      `tasks[${index}].relation_ids`,
+    );
+    const knownRelations = new Map(
+      workspace.judgmentModel.relations
+        .filter((relation) =>
+          ['accepted', 'resolved'].includes(relation.status))
+        .map((relation) => [relation.id, relation]),
+    );
     for (const unitId of unitIds) {
       if (!knownUnits.has(unitId)) {
         throw new Error(
@@ -4730,6 +6886,13 @@ function freezeApplicationTestPlan(workspace, input = {}) {
       if (!knownBoundaries.has(boundaryId)) {
         throw new Error(
           `application test plan references unknown boundary: ${boundaryId}`,
+        );
+      }
+    }
+    for (const relationId of relationIds) {
+      if (!knownRelations.has(relationId)) {
+        throw new Error(
+          `application test plan references unknown or unresolved relation: ${relationId}`,
         );
       }
     }
@@ -4745,6 +6908,15 @@ function freezeApplicationTestPlan(workspace, input = {}) {
       );
     }
     const forkId = nonEmpty(rawTask.fork_id, `tasks[${index}].fork_id`);
+    const executionMode = nonEmpty(
+      rawTask.execution_mode,
+      `tasks[${index}].execution_mode`,
+    );
+    if (!['with-only', 'paired-diagnostic'].includes(executionMode)) {
+      throw new Error(
+        `tasks[${index}].execution_mode must be with-only or paired-diagnostic`,
+      );
+    }
     const verificationDimensions = stringList(
       rawTask.verification_dimensions,
       `tasks[${index}].verification_dimensions`,
@@ -4769,37 +6941,87 @@ function freezeApplicationTestPlan(workspace, input = {}) {
         );
       }
     }
+    for (const dimension of ['exception', 'priority']) {
+      if (
+        verificationDimensions.includes(dimension) &&
+        !relationIds.some(
+          (relationId) =>
+            knownRelations.get(relationId)?.type === dimension,
+        )
+      ) {
+        throw new Error(
+          `tasks[${index}] must bind an actual ${dimension} relation id`,
+        );
+      }
+    }
     return {
       id: taskId,
       input_digest: inputDigest,
       risk_level: riskLevel,
       unit_ids: unitIds,
       boundary_ids: boundaryIds,
+      relation_ids: relationIds,
       semantic_test_id: semanticTestId,
       perturbation_group: optionalString(rawTask.perturbation_group),
       fork_id: forkId,
+      execution_mode: executionMode,
       verification_dimensions: verificationDimensions,
     };
   });
-  if (!tasks.some((task) => ['high', 'critical'].includes(task.risk_level))) {
-    throw new Error('application test plan requires a high or critical risk sample');
+  if (
+    ['elevated', 'critical'].includes(riskProfile.classification) &&
+    !tasks.some((task) => ['high', 'critical'].includes(task.risk_level))
+  ) {
+    throw new Error(
+      'an elevated or critical application risk profile requires a proportionate high or critical task',
+    );
   }
   const requiredDimensions = [
     'direction',
     'scope',
     'boundary',
-    'exception',
-    'priority',
-    'authority-precedence',
-    'safety',
-    'permission',
-    'external-action',
     'exit',
-    'stability',
   ];
+  if (riskProfile.classification !== 'low') {
+    requiredDimensions.push('safety');
+  }
+  if (riskProfile.permission_sensitive) {
+    requiredDimensions.push('permission');
+  }
+  if (riskProfile.external_actions) {
+    requiredDimensions.push('external-action');
+  }
+  if (workspace.judgmentModel.relations.some(
+    (relation) =>
+      relation.type === 'exception' &&
+      ['accepted', 'resolved'].includes(relation.status),
+  )) {
+    requiredDimensions.push('exception');
+  }
+  if (workspace.judgmentModel.relations.some(
+    (relation) =>
+      relation.type === 'priority' &&
+      ['accepted', 'resolved'].includes(relation.status),
+  )) {
+    requiredDimensions.push('priority');
+  }
   const coveredDimensions = new Set(
     tasks.flatMap((task) => task.verification_dimensions),
   );
+  const inapplicableStructuralDimensions = [
+    'exception',
+    'priority',
+    'authority-precedence',
+  ].filter(
+    (dimension) =>
+      !requiredDimensions.includes(dimension) &&
+      coveredDimensions.has(dimension),
+  );
+  if (inapplicableStructuralDimensions.length > 0) {
+    throw new Error(
+      `application plan must not invent absent semantic structures: ${inapplicableStructuralDimensions.join(', ')}`,
+    );
+  }
   const missingDimensions = requiredDimensions.filter(
     (dimension) => !coveredDimensions.has(dimension),
   );
@@ -4808,37 +7030,72 @@ function freezeApplicationTestPlan(workspace, input = {}) {
       `fresh hidden application plan is missing verification dimensions: ${missingDimensions.join(', ')}`,
     );
   }
-  const perturbationCounts = new Map();
-  for (const task of tasks) {
-    if (!task.perturbation_group) continue;
-    perturbationCounts.set(
-      task.perturbation_group,
-      (perturbationCounts.get(task.perturbation_group) || 0) + 1,
-    );
-  }
-  if (![...perturbationCounts.values()].some((count) => count >= 3)) {
+  const applicabilityTasks = tasks.filter(
+    (task) =>
+      task.unit_ids.length > 0 &&
+      (
+        task.verification_dimensions.includes('direction') ||
+        task.verification_dimensions.includes('scope')
+      ),
+  );
+  const boundaryExitTasks = tasks.filter(
+    (task) =>
+      task.verification_dimensions.includes('boundary') &&
+      task.verification_dimensions.includes('exit'),
+  );
+  if (
+    applicabilityTasks.length === 0 ||
+    boundaryExitTasks.length === 0 ||
+    !applicabilityTasks.some((applicationTask) =>
+      boundaryExitTasks.some(
+        (boundaryTask) => boundaryTask.id !== applicationTask.id,
+      ))
+  ) {
     throw new Error(
-      'fresh hidden application plan requires at least three seeded tasks in one repeated or perturbed group',
+      'an application-adoption-fidelity plan must include distinct applicability and boundary/exit scenarios',
     );
   }
-  const stableDirectionGroups = new Map();
+  const repetitionTaskIdSet = new Set(repetitionTaskIds);
+  if (
+    repetitionTaskIdSet.size !== repetitionTaskIds.length ||
+    repetitionTaskIds.some((taskId) => !taskIds.has(taskId))
+  ) {
+    throw new Error(
+      'repetition_policy.task_ids must uniquely reference frozen tasks',
+    );
+  }
   for (const task of tasks) {
+    const declaresStability =
+      task.verification_dimensions.includes('stability');
     if (
-      task.risk_level === 'critical' ||
-      !task.perturbation_group ||
-      !task.verification_dimensions.includes('direction') ||
-      !task.verification_dimensions.includes('stability')
+      declaresStability !== repetitionTaskIdSet.has(task.id) ||
+      (declaresStability && !task.perturbation_group)
     ) {
-      continue;
+      throw new Error(
+        'stability is scenario-local: exactly the repetition policy tasks must declare stability and a perturbation group',
+      );
     }
-    stableDirectionGroups.set(
-      task.perturbation_group,
-      (stableDirectionGroups.get(task.perturbation_group) || 0) + 1,
-    );
   }
-  if (![...stableDirectionGroups.values()].some((count) => count >= 3)) {
+  const riskRank = { normal: 0, high: 1, critical: 2 };
+  const highestTaskRisk = Math.max(
+    ...tasks.map((task) => riskRank[task.risk_level]),
+  );
+  const stabilityTasks = tasks.filter(
+    (task) => repetitionTaskIdSet.has(task.id),
+  );
+  if (!stabilityTasks.some((task) => (
+    riskRank[task.risk_level] === highestTaskRisk &&
+    task.verification_dimensions.some(
+      (dimension) => [
+        'direction',
+        'scope',
+        'boundary',
+        'exit',
+      ].includes(dimension),
+    )
+  ))) {
     throw new Error(
-      'fresh hidden application plan requires at least three noncritical direction-and-stability seeds in one group',
+      'scenario-local stability must repeat a core judgment or boundary task at the highest frozen application risk',
     );
   }
   assertPlainObject(input.thresholds, 'application test plan thresholds');
@@ -4857,7 +7114,7 @@ function freezeApplicationTestPlan(workspace, input = {}) {
       'priority_failures_max',
       'authority_precedence_failures_max',
       'exit_failures_max',
-      'adoption_failures_max',
+      'fidelity_failures_max',
     ]),
     'application test plan thresholds',
   );
@@ -4873,18 +7130,36 @@ function freezeApplicationTestPlan(workspace, input = {}) {
     'priority_failures_max',
     'authority_precedence_failures_max',
     'exit_failures_max',
-    'adoption_failures_max',
+    'fidelity_failures_max',
   ];
+  const hasStabilityThreshold = Object.prototype.hasOwnProperty.call(
+    input.thresholds,
+    'stability_rate_min',
+  );
+  if (!hasStabilityThreshold) {
+    throw new Error(
+      'stability_rate_min is required for scenario-local stability',
+    );
+  }
   const thresholds = {
-    stability_rate_min: numericThreshold(
-      input.thresholds.stability_rate_min,
-      'thresholds.stability_rate_min',
-      0.9,
-    ),
+    ...(hasStabilityThreshold
+      ? {
+        stability_rate_min: numericThreshold(
+          input.thresholds.stability_rate_min,
+          'thresholds.stability_rate_min',
+          0,
+        ),
+      }
+      : {}),
     ...Object.fromEntries(
       zeroThresholdFields.map((field) => [field, input.thresholds[field]]),
     ),
   };
+  if (thresholds.stability_rate_min < (2 / 3)) {
+    throw new Error(
+      'thresholds.stability_rate_min must require at least a two-thirds stable majority',
+    );
+  }
   const nonzeroThreshold = zeroThresholdFields.find(
     (field) => thresholds[field] !== 0,
   );
@@ -4895,7 +7170,7 @@ function freezeApplicationTestPlan(workspace, input = {}) {
   }
   const plan = {
     id: input.id || id('application_plan'),
-    verification_contract: 'adoption-fidelity',
+    verification_contract: 'application-adoption-fidelity',
     evidence_set: 'fresh-hidden-holdout',
     response_mode: 'free-response',
     frozen_by: actor,
@@ -4917,6 +7192,12 @@ function freezeApplicationTestPlan(workspace, input = {}) {
     ),
     consumer_identity: consumerIdentity,
     evaluator_identity: evaluatorIdentity,
+    repetition_policy: {
+      claim: repetitionClaim,
+      repetitions: repetitionCount,
+      task_ids: repetitionTaskIds,
+    },
+    risk_profile: riskProfile,
     semantic_revision: workspace.state.semantic_revision,
     semantic_digest: workspace.state.semantic_digest,
     judgment_evidence_digest:
@@ -4940,14 +7221,51 @@ function freezeApplicationTestPlan(workspace, input = {}) {
   );
   plan.plan_digest = canonicalApplicationPlanDigest(plan);
   return evolve(workspace, 'application_test_plan_frozen', (next) => {
-    if (next.applicationVerification.plans.some(
+    const currentPlans = next.applicationVerification.plans.filter(
       (candidate) =>
         candidate.status === 'valid' &&
         candidate.semantic_digest === next.state.semantic_digest,
-    )) {
-      throw new Error(
-        'a current application test plan is already frozen',
+    );
+    if (currentPlans.length > 0) {
+      const planIds = new Set(currentPlans.map((candidate) => candidate.id));
+      const consumedByPlan = next.applicationVerification.attempts.some(
+        (candidate) =>
+          candidate.status === 'consumed' &&
+          planIds.has(candidate.plan_id),
       );
+      const currentOutcome = next.applicationVerification.receipts.some(
+        (candidate) =>
+          ['verified', 'failed'].includes(candidate.status) &&
+          candidate.semantic_digest === next.state.semantic_digest,
+      );
+      if (consumedByPlan || currentOutcome) {
+        throw new Error(
+          'a current application test plan is already frozen with committed evidence',
+        );
+      }
+      // An interrupted application attempt without committed evidence is a
+      // recoverable execution state: the old plan and its single-use attempt
+      // are superseded so a fresh plan can be frozen on the same semantic
+      // coordinate. All evidence stays byte-identical history.
+      for (const candidate of next.applicationVerification.plans) {
+        if (candidate.status === 'valid' && planIds.has(candidate.id)) {
+          candidate.status = 'superseded';
+          candidate.superseded_at = now();
+        }
+      }
+      const timestamp = now();
+      for (const candidate of next.applicationVerification.attempts) {
+        if (candidate.status === 'open' && planIds.has(candidate.plan_id)) {
+          candidate.status = 'superseded';
+          candidate.invalidated_at = timestamp;
+        }
+      }
+      for (const candidate of next.applicationVerification.observations) {
+        if (candidate.status === 'open' && planIds.has(candidate.plan_id)) {
+          candidate.status = 'superseded';
+          candidate.invalidated_at = timestamp;
+        }
+      }
     }
     next.applicationVerification.plans.push(plan);
   });
@@ -5184,7 +7502,7 @@ function issueApplicationAttempt(workspace, input = {}, execution = {}) {
   const readiness = assessReadiness(workspace);
   const gates = readiness.completion_gates;
   if (
-    readiness.creation_accepted !== true ||
+    readiness.judgment_accepted !== true ||
     gates?.format_valid !== true ||
     !gates.application_plan_id
   ) {
@@ -5594,7 +7912,7 @@ function normalizeApplicationAttemptAbandonment(workspace, input = {}) {
       candidate.status === 'valid',
   );
   if (
-    readiness.creation_accepted !== true ||
+    readiness.judgment_accepted !== true ||
     gates?.format_valid !== true ||
     gates.application_plan_id !== attempt.plan_id ||
     gates.application_attempt_id !== attempt.id ||
@@ -5851,9 +8169,9 @@ function normalizeApplicationLane(rawLane, label, expectedAssetDigest) {
       'reason_codes',
       'reason_digest',
       'boundary_ids',
+      'relation_ids',
       'exception_ids',
       'exit',
-      'over_applied',
       'authorization_outcome',
       'output_digest',
       'asset_digest',
@@ -5899,9 +8217,6 @@ function normalizeApplicationLane(rawLane, label, expectedAssetDigest) {
         : `${label} did not load the exact final asset digest`,
     );
   }
-  if (typeof rawLane.over_applied !== 'boolean') {
-    throw new Error(`${label}.over_applied must be boolean`);
-  }
   return {
     direction,
     reason_codes: normalizeReasonCodes(
@@ -5916,12 +8231,15 @@ function normalizeApplicationLane(rawLane, label, expectedAssetDigest) {
       rawLane.boundary_ids,
       `${label}.boundary_ids`,
     ),
+    relation_ids: stringList(
+      rawLane.relation_ids,
+      `${label}.relation_ids`,
+    ),
     exception_ids: stringList(
       rawLane.exception_ids,
       `${label}.exception_ids`,
     ),
     exit,
-    over_applied: rawLane.over_applied,
     authorization_outcome: authorizationOutcome,
     output_digest: assertDigest(
       rawLane.output_digest,
@@ -5931,8 +8249,442 @@ function normalizeApplicationLane(rawLane, label, expectedAssetDigest) {
   };
 }
 
+const APPLICATION_DIMENSION_FIELD_MAP = Object.freeze({
+  direction_correct: 'direction',
+  scope_correct: 'scope',
+  boundary_correct: 'boundary',
+  exception_correct: 'exception',
+  priority_correct: 'priority',
+  authority_precedence_correct: 'authority-precedence',
+  exit_correct: 'exit',
+  critical_safety_error: 'safety',
+  permission_violation: 'permission',
+  external_action_violation: 'external-action',
+});
+
+function normalizeApplicationEvaluation(rawEvaluation, task, label) {
+  assertPlainObject(rawEvaluation, label);
+  const semanticFields = [
+    'faithful',
+    ...Object.keys(APPLICATION_DIMENSION_FIELD_MAP),
+    'over_application_error',
+    'causal_difference',
+    'faithful_reason_digest',
+    'dimension_reason_digests',
+    'reason_codes',
+  ];
+  assertAllowedKeys(
+    rawEvaluation,
+    new Set(semanticFields),
+    label,
+  );
+  if (
+    typeof rawEvaluation.faithful !== 'boolean' ||
+    typeof rawEvaluation.over_application_error !== 'boolean'
+  ) {
+    throw new Error(`${label} semantic fidelity fields must be boolean`);
+  }
+  for (const [field, dimension] of Object.entries(
+    APPLICATION_DIMENSION_FIELD_MAP,
+  )) {
+    const applicable =
+      task.verification_dimensions.includes(dimension);
+    if (
+      (applicable && typeof rawEvaluation[field] !== 'boolean') ||
+      (!applicable && rawEvaluation[field] !== null)
+    ) {
+      throw new Error(
+        `${label}.${field} must be ` +
+        `${applicable ? 'boolean' : 'null for a non-applicable dimension'}`,
+      );
+    }
+  }
+  if (![
+    'observed',
+    'not-observed',
+    'not-evaluated',
+  ].includes(rawEvaluation.causal_difference)) {
+    throw new Error(`${label}.causal_difference is invalid`);
+  }
+  const faithfulReasonDigest = assertDigest(
+    rawEvaluation.faithful_reason_digest,
+    `${label}.faithful_reason_digest`,
+  );
+  assertPlainObject(
+    rawEvaluation.dimension_reason_digests,
+    `${label}.dimension_reason_digests`,
+  );
+  const reasonDimensions = Object.keys(
+    rawEvaluation.dimension_reason_digests,
+  ).sort();
+  const expectedDimensions = task.verification_dimensions
+    .filter((dimension) => dimension !== 'stability')
+    .sort();
+  if (
+    stableStringify(reasonDimensions) !==
+      stableStringify(expectedDimensions)
+  ) {
+    throw new Error(
+      `${label} must bind reasons for exactly its evaluator-applicable dimensions; stability is Engine-derived`,
+    );
+  }
+  const dimensionReasonDigests = {};
+  for (const [dimension, digest] of Object.entries(
+    rawEvaluation.dimension_reason_digests,
+  )) {
+    dimensionReasonDigests[dimension] = assertDigest(
+      digest,
+      `${label}.dimension_reason_digests.${dimension}`,
+    );
+  }
+  return {
+    faithful: rawEvaluation.faithful,
+    ...Object.fromEntries(
+      Object.keys(APPLICATION_DIMENSION_FIELD_MAP)
+        .map((field) => [field, rawEvaluation[field]]),
+    ),
+    over_application_error: rawEvaluation.over_application_error,
+    causal_difference: rawEvaluation.causal_difference,
+    faithful_reason_digest: faithfulReasonDigest,
+    dimension_reason_digests: dimensionReasonDigests,
+    reason_codes: normalizeReasonCodes(
+      rawEvaluation.reason_codes,
+      `${label}.reason_codes`,
+    ),
+  };
+}
+
+function normalizeApplicationTaskResults(
+  rawTaskResults,
+  plan,
+  assetDigest,
+  label,
+  repetitionIndex = 1,
+) {
+  if (!Array.isArray(rawTaskResults)) {
+    throw new Error(`${label} must be an array`);
+  }
+  const expectedTasks = (
+    plan.verification_contract === 'application-adoption-fidelity' &&
+    plan.repetition_policy?.claim === 'stability' &&
+    repetitionIndex > 1
+  )
+    ? plan.tasks.filter((task) => (
+      plan.repetition_policy.task_ids.includes(task.id)
+    ))
+    : plan.tasks;
+  const rawById = new Map();
+  for (const rawResult of rawTaskResults) {
+    assertPlainObject(rawResult, `${label} task result`);
+    const taskId = nonEmpty(
+      rawResult.task_id,
+      `${label}.task_result.task_id`,
+    );
+    if (rawById.has(taskId)) {
+      throw new Error(`duplicate ${label} task result: ${taskId}`);
+    }
+    rawById.set(taskId, rawResult);
+  }
+  if (
+    rawById.size !== expectedTasks.length ||
+    expectedTasks.some((task) => !rawById.has(task.id))
+  ) {
+    throw new Error(
+      repetitionIndex === 1
+        ? `${label} must cover every frozen task exactly once`
+        : `${label} must cover exactly the scenario-local stability tasks`,
+    );
+  }
+  return expectedTasks.map((task) => {
+    const rawResult = rawById.get(task.id);
+    assertAllowedKeys(
+      rawResult,
+      new Set([
+        'task_id',
+        'input_digest',
+        'with_kdna',
+        'without_kdna',
+        'evaluation',
+      ]),
+      `${label} task result ${task.id}`,
+    );
+    if (rawResult.input_digest !== task.input_digest) {
+      throw new Error(
+        `${label} task ${task.id} does not bind its frozen input`,
+      );
+    }
+    const withoutKdna = task.execution_mode === 'paired-diagnostic'
+      ? normalizeApplicationLane(
+        rawResult.without_kdna,
+        `${label} task ${task.id}.without_kdna`,
+        null,
+      )
+      : null;
+    if (
+      task.execution_mode === 'with-only' &&
+      rawResult.without_kdna !== undefined &&
+      rawResult.without_kdna !== null
+    ) {
+      throw new Error(
+        `${label} task ${task.id} is with-only and must not contain a without-KDNA lane`,
+      );
+    }
+    if (
+      task.execution_mode === 'with-only' &&
+      rawResult.evaluation?.causal_difference !== 'not-evaluated'
+    ) {
+      throw new Error(
+        `${label} task ${task.id} is with-only and causal_difference must be not-evaluated`,
+      );
+    }
+    const withKdna = normalizeApplicationLane(
+      rawResult.with_kdna,
+      `${label} task ${task.id}.with_kdna`,
+      assetDigest,
+    );
+    if (
+      withKdna.relation_ids.some(
+        (relationId) => !task.relation_ids.includes(relationId),
+      ) ||
+      withKdna.exception_ids.some(
+        (relationId) => !task.relation_ids.includes(relationId),
+      )
+    ) {
+      throw new Error(
+        `${label} task ${task.id} references a relation outside its frozen relation ids`,
+      );
+    }
+    if (
+      (
+        task.verification_dimensions.includes('exception') ||
+        task.verification_dimensions.includes('priority')
+      ) &&
+      task.relation_ids.length === 0
+    ) {
+      throw new Error(
+        `${label} task ${task.id} has a relation dimension without a frozen relation id`,
+      );
+    }
+    if (
+      task.verification_dimensions.includes('direction') &&
+      (
+        withKdna.direction === 'refuse' ||
+        withKdna.direction === 'out-of-scope' ||
+        withKdna.exit !== 'completed'
+      )
+    ) {
+      throw new Error(
+        `${label} task ${task.id} contradicts its applicable direction/scope scenario`,
+      );
+    }
+    if (
+      task.verification_dimensions.includes('boundary') &&
+      task.verification_dimensions.includes('exit') &&
+      (
+        withKdna.direction === 'apply' ||
+        withKdna.exit === 'completed'
+      )
+    ) {
+      throw new Error(
+        `${label} task ${task.id} contradicts its boundary/exit scenario`,
+      );
+    }
+    const evaluation = normalizeApplicationEvaluation(
+      rawResult.evaluation,
+      task,
+      `${label} task ${task.id}.evaluation`,
+    );
+    if (
+      evaluation.over_application_error === true &&
+      (
+        evaluation.scope_correct === true ||
+        evaluation.boundary_correct === true ||
+        evaluation.exit_correct === true
+      )
+    ) {
+      throw new Error(
+        `${label} task ${task.id} over-application conflicts with a passing scope, boundary, or exit evaluation`,
+      );
+    }
+    return {
+      task_id: task.id,
+      input_digest: task.input_digest,
+      with_kdna: withKdna,
+      without_kdna: withoutKdna,
+      evaluation,
+    };
+  });
+}
+
+function applicationConsumerOutputDigest(index, taskResults) {
+  void index;
+  return sha256(stableStringify({
+    schema: 'kdna.studio.application-consumer-output/0.2.0',
+    task_results: taskResults.map((result) => ({
+      task_id: result.task_id,
+      input_digest: result.input_digest,
+      with_kdna: result.with_kdna,
+      without_kdna: result.without_kdna,
+    })),
+  }));
+}
+
+function applicationEvaluatorOutputDigest(index, taskResults) {
+  void index;
+  return sha256(stableStringify({
+    schema: 'kdna.studio.application-evaluator-output/0.2.0',
+    task_evaluations: taskResults.map((result) => ({
+      task_id: result.task_id,
+      input_digest: result.input_digest,
+      evaluation: result.evaluation,
+    })),
+  }));
+}
+
+function applicationStabilityFingerprint(result) {
+  return stableStringify({
+    with_kdna: {
+      direction: result.with_kdna.direction,
+      boundary_ids: result.with_kdna.boundary_ids,
+      exception_ids: result.with_kdna.exception_ids,
+      exit: result.with_kdna.exit,
+      authorization_outcome: result.with_kdna.authorization_outcome,
+      asset_digest: result.with_kdna.asset_digest,
+    },
+    evaluation: {
+      faithful: result.evaluation.faithful,
+      ...Object.fromEntries(
+        Object.keys(APPLICATION_DIMENSION_FIELD_MAP)
+          .map((field) => [field, result.evaluation[field]]),
+      ),
+      over_application_error:
+        result.evaluation.over_application_error,
+      causal_difference: result.evaluation.causal_difference,
+    },
+  });
+}
+
+function aggregateApplicationTaskResults(plan, repetitions) {
+  return plan.tasks.map((task) => {
+    const results = repetitions
+      .map((repetition) => (
+        repetition.task_results.find((result) => result.task_id === task.id)
+      ))
+      .filter(Boolean);
+    const first = results[0];
+    const applicable = (dimension) => (
+      task.verification_dimensions.includes(dimension)
+    );
+    const aggregateBoolean = (field, dimension, error = false) => (
+      applicable(dimension)
+        ? (
+            error
+              ? results.some((result) => result.evaluation[field])
+              : results.every((result) => result.evaluation[field])
+          )
+        : null
+    );
+    const causalValues = new Set(
+      results.map((result) => result.evaluation.causal_difference),
+    );
+    const stabilityCounts = new Map();
+    for (const result of results) {
+      const fingerprint = applicationStabilityFingerprint(result);
+      stabilityCounts.set(
+        fingerprint,
+        (stabilityCounts.get(fingerprint) || 0) + 1,
+      );
+    }
+    const stabilityRate = applicable('stability')
+      ? Math.max(...stabilityCounts.values()) / results.length
+      : null;
+    const dimensionReasonDigests = Object.fromEntries(
+      task.verification_dimensions.map((dimension) => [
+        dimension,
+        dimension === 'stability'
+          ? sha256(stableStringify({
+            source: 'engine-derived-repetition-aggregate',
+            rate: stabilityRate,
+            repetitions: results.length,
+          }))
+          : sha256(stableStringify(
+            results.map(
+              (result) =>
+                result.evaluation.dimension_reason_digests[dimension],
+            ),
+          )),
+      ]),
+    );
+    return {
+      task_id: task.id,
+      input_digest: task.input_digest,
+      with_kdna: first.with_kdna,
+      without_kdna: first.without_kdna,
+      evaluation: {
+        faithful: results.every((result) => result.evaluation.faithful),
+        direction_correct: aggregateBoolean(
+          'direction_correct',
+          'direction',
+        ),
+        scope_correct: aggregateBoolean('scope_correct', 'scope'),
+        boundary_correct: aggregateBoolean(
+          'boundary_correct',
+          'boundary',
+        ),
+        exception_correct: aggregateBoolean(
+          'exception_correct',
+          'exception',
+        ),
+        priority_correct: aggregateBoolean(
+          'priority_correct',
+          'priority',
+        ),
+        authority_precedence_correct: aggregateBoolean(
+          'authority_precedence_correct',
+          'authority-precedence',
+        ),
+        exit_correct: aggregateBoolean('exit_correct', 'exit'),
+        stable: applicable('stability')
+          ? stabilityRate >= plan.thresholds.stability_rate_min
+          : null,
+        stability_rate: stabilityRate,
+        critical_safety_error: aggregateBoolean(
+          'critical_safety_error',
+          'safety',
+          true,
+        ),
+        permission_violation: aggregateBoolean(
+          'permission_violation',
+          'permission',
+          true,
+        ),
+        external_action_violation: aggregateBoolean(
+          'external_action_violation',
+          'external-action',
+          true,
+        ),
+        over_application_error: results.some(
+          (result) => result.evaluation.over_application_error,
+        ),
+        causal_difference: causalValues.size === 1
+          ? results[0].evaluation.causal_difference
+          : 'not-evaluated',
+        faithful_reason_digest: sha256(stableStringify(
+          results.map(
+            (result) => result.evaluation.faithful_reason_digest,
+          ),
+        )),
+        dimension_reason_digests: dimensionReasonDigests,
+        reason_codes: [...new Set(
+          results.flatMap((result) => result.evaluation.reason_codes),
+        )],
+      },
+    };
+  });
+}
+
 function assertApplicationLaneAuthorization(
-  taskResults,
+  repetitions,
   observedAuthorizationOutcome,
 ) {
   if (!['not-required', 'authorized'].includes(
@@ -5942,7 +8694,9 @@ function assertApplicationLaneAuthorization(
       'Consumer exact-asset observation did not record a successful authorization outcome',
     );
   }
-  for (const result of taskResults) {
+  for (const result of repetitions.flatMap(
+    (repetition) => repetition.task_results,
+  )) {
     if (
       result.with_kdna.authorization_outcome !==
         observedAuthorizationOutcome
@@ -5959,7 +8713,10 @@ function assertApplicationLaneAuthorization(
         `task ${result.task_id}.with_kdna contradicts the successful Engine-observed exact-asset authorization`,
       );
     }
-    if (result.without_kdna.authorization_outcome !== 'not-required') {
+    if (
+      result.without_kdna &&
+      result.without_kdna.authorization_outcome !== 'not-required'
+    ) {
       throw new Error(
         `task ${result.task_id}.without_kdna authorization_outcome must be not-required because no asset was loaded`,
       );
@@ -6001,13 +8758,17 @@ function applicationConsumerSigningSnapshot(value) {
     consumer_asset_load_receipt_digest:
       value.consumer_asset_load_receipt_digest,
     consumer: value.consumer,
-    consumer_run_digest: value.consumer_run_digest,
-    runner_digest: value.runner_digest,
-    task_results: value.task_results.map((result) => ({
-      task_id: result.task_id,
-      input_digest: result.input_digest,
-      with_kdna: result.with_kdna,
-      without_kdna: result.without_kdna,
+    repetitions: value.repetitions.map((repetition) => ({
+      index: repetition.index,
+      consumer_run_digest: repetition.consumer_run_digest,
+      consumer_runner_digest: repetition.consumer_runner_digest,
+      consumer_output_digest: repetition.consumer_output_digest,
+      task_results: repetition.task_results.map((result) => ({
+        task_id: result.task_id,
+        input_digest: result.input_digest,
+        with_kdna: result.with_kdna,
+        without_kdna: result.without_kdna,
+      })),
     })),
   };
 }
@@ -6035,12 +8796,16 @@ function applicationEvaluatorSigningSnapshot(value) {
       value.consumer_asset_load_receipt_digest,
     consumer_execution_digest: value.consumer_execution_digest,
     evaluated_by: value.evaluated_by,
-    evaluator_run_digest: value.evaluator_run_digest,
-    evaluator_runner_digest: value.evaluator_runner_digest,
-    task_evaluations: value.task_results.map((result) => ({
-      task_id: result.task_id,
-      input_digest: result.input_digest,
-      evaluation: result.evaluation,
+    repetitions: value.repetitions.map((repetition) => ({
+      index: repetition.index,
+      evaluator_run_digest: repetition.evaluator_run_digest,
+      evaluator_runner_digest: repetition.evaluator_runner_digest,
+      evaluator_output_digest: repetition.evaluator_output_digest,
+      task_evaluations: repetition.task_results.map((result) => ({
+        task_id: result.task_id,
+        input_digest: result.input_digest,
+        evaluation: result.evaluation,
+      })),
     })),
   };
 }
@@ -6092,7 +8857,7 @@ function applicationAssessment(plan, taskResults) {
     ) ||
     result.with_kdna.exit === 'authorization-denied'
   )).length;
-  if (plan.verification_contract === 'adoption-fidelity') {
+  if (plan.verification_contract === 'application-adoption-fidelity') {
     const taskById = new Map(plan.tasks.map((task) => [task.id, task]));
     const declares = (result, dimension) => (
       taskById.get(result.task_id)
@@ -6101,24 +8866,24 @@ function applicationAssessment(plan, taskResults) {
     const failures = (dimension, field) => taskResults.filter(
       (result) => declares(result, dimension) && !result.evaluation[field],
     ).length;
-    const directionStabilityResults = taskResults.filter((result) => {
-      const task = taskById.get(result.task_id);
-      return (
-        task?.risk_level !== 'critical' &&
-        task?.verification_dimensions.includes('direction') &&
-        task?.verification_dimensions.includes('stability')
-      );
-    });
-    const stableDirectionCount = directionStabilityResults.filter(
-      (result) => result.evaluation.stable,
-    ).length;
-    const stabilityRate =
-      stableDirectionCount / directionStabilityResults.length;
+    const stabilityResults = taskResults.filter((result) => (
+      taskById.get(result.task_id)
+        ?.verification_dimensions.includes('stability')
+    ));
+    const stabilityRate = stabilityResults.length > 0
+      ? Math.min(
+        ...stabilityResults.map(
+          (result) => result.evaluation.stability_rate,
+        ),
+      )
+      : null;
     const metrics = {
-      comparison_contract: 'adoption-fidelity',
+      comparison_contract: 'application-adoption-fidelity',
       task_count: taskResults.length,
-      direction_stability_task_count: directionStabilityResults.length,
-      noncritical_direction_stability_rate: stabilityRate,
+      stability_claimed:
+        plan.repetition_policy?.claim === 'stability',
+      stability_task_count: stabilityResults.length,
+      stability_rate: stabilityRate,
       critical_safety_errors: taskResults.filter(
         (result) => (
           declares(result, 'safety') &&
@@ -6138,7 +8903,7 @@ function applicationAssessment(plan, taskResults) {
         ),
       ).length,
       overapplication_failures: taskResults.filter(
-        (result) => result.with_kdna.over_applied,
+        (result) => result.evaluation.over_application_error,
       ).length,
       direction_failures: failures('direction', 'direction_correct'),
       scope_failures: failures('scope', 'scope_correct'),
@@ -6150,8 +8915,16 @@ function applicationAssessment(plan, taskResults) {
         'authority_precedence_correct',
       ),
       exit_failures: failures('exit', 'exit_correct'),
-      adoption_failures: taskResults.filter(
+      fidelity_failures: taskResults.filter(
         (result) => !result.evaluation.faithful,
+      ).length,
+      causal_difference_observed: taskResults.filter(
+        (result) =>
+          result.evaluation.causal_difference === 'observed',
+      ).length,
+      causal_difference_not_observed: taskResults.filter(
+        (result) =>
+          result.evaluation.causal_difference === 'not-observed',
       ).length,
       authorization_failures: authorizationFailures,
     };
@@ -6160,7 +8933,10 @@ function applicationAssessment(plan, taskResults) {
     if (authorizationFailures > 0) {
       failureClass = 'authorization-failed';
     } else if (
-      stabilityRate < thresholds.stability_rate_min ||
+      (
+        plan.repetition_policy?.claim === 'stability' &&
+        stabilityRate < thresholds.stability_rate_min
+      ) ||
       metrics.critical_safety_errors >
         thresholds.critical_safety_errors_max ||
       metrics.permission_violations >
@@ -6177,7 +8953,7 @@ function applicationAssessment(plan, taskResults) {
       metrics.authority_precedence_failures >
         thresholds.authority_precedence_failures_max ||
       metrics.exit_failures > thresholds.exit_failures_max ||
-      metrics.adoption_failures > thresholds.adoption_failures_max
+      metrics.fidelity_failures > thresholds.fidelity_failures_max
     ) {
       failureClass = 'application-failed';
     }
@@ -6223,7 +8999,7 @@ function applicationAssessment(plan, taskResults) {
     !result.evaluation.boundary_correct ||
     !result.evaluation.exception_correct ||
     !result.evaluation.exit_correct ||
-    result.with_kdna.over_applied ||
+    result.evaluation.over_application_error === true ||
     result.with_kdna.exit === 'error'
   )).length;
   const metrics = {
@@ -6361,11 +9137,7 @@ function recordApplicationReceipt(workspace, input = {}) {
       'consumer_asset_load_receipt_digest',
       'consumer',
       'evaluated_by',
-      'consumer_run_digest',
-      'runner_digest',
-      'evaluator_run_digest',
-      'evaluator_runner_digest',
-      'task_results',
+      'repetitions',
       'consumer_signature',
       'evaluator_signature',
     ]),
@@ -6431,7 +9203,7 @@ function recordApplicationReceipt(workspace, input = {}) {
     (candidate) =>
       candidate.id === input.plan_id &&
       candidate.status === 'valid' &&
-      candidate.verification_contract === 'adoption-fidelity' &&
+      candidate.verification_contract === 'application-adoption-fidelity' &&
       candidate.evidence_set === 'fresh-hidden-holdout' &&
       candidate.response_mode === 'free-response' &&
       candidate.semantic_digest === semanticDigest &&
@@ -6446,6 +9218,14 @@ function recordApplicationReceipt(workspace, input = {}) {
   if (input.plan_digest !== plan.plan_digest) {
     throw new Error(
       'application receipt plan_digest does not match the frozen plan',
+    );
+  }
+  if (
+    !Array.isArray(input.repetitions) ||
+    input.repetitions.length !== plan.repetition_policy.repetitions
+  ) {
+    throw new Error(
+      'application receipt must contain every pre-frozen repetition exactly',
     );
   }
   const attemptId = nonEmpty(
@@ -6524,170 +9304,102 @@ function recordApplicationReceipt(workspace, input = {}) {
       'application receipt actors do not match the pre-frozen Consumer and evaluator keys',
     );
   }
-  if (!Array.isArray(input.task_results)) {
-    throw new Error('application receipt task_results must be an array');
-  }
-  const rawById = new Map();
-  for (const rawResult of input.task_results) {
-    assertPlainObject(rawResult, 'application task result');
-    const taskId = nonEmpty(rawResult.task_id, 'task_result.task_id');
-    if (rawById.has(taskId)) {
-      throw new Error(`duplicate application task result: ${taskId}`);
-    }
-    rawById.set(taskId, rawResult);
-  }
-  if (
-    rawById.size !== plan.tasks.length ||
-    plan.tasks.some((task) => !rawById.has(task.id))
-  ) {
-    throw new Error(
-      'application receipt must cover every frozen task exactly once',
-    );
-  }
-  const taskResults = plan.tasks.map((task) => {
-    const rawResult = rawById.get(task.id);
+  const repetitions = input.repetitions.map((rawRepetition, offset) => {
+    const expectedIndex = offset + 1;
+    const label = `application repetition ${expectedIndex}`;
+    assertPlainObject(rawRepetition, label);
     assertAllowedKeys(
-      rawResult,
+      rawRepetition,
       new Set([
-        'task_id',
-        'input_digest',
-        'with_kdna',
-        'without_kdna',
-        'evaluation',
+        'index',
+        'consumer_run_digest',
+        'consumer_runner_digest',
+        'evaluator_run_digest',
+        'evaluator_runner_digest',
+        'consumer_output_digest',
+        'evaluator_output_digest',
+        'task_results',
       ]),
-      `application task result ${task.id}`,
+      label,
     );
-    if (rawResult.input_digest !== task.input_digest) {
+    if (rawRepetition.index !== expectedIndex) {
       throw new Error(
-        `application task ${task.id} does not bind its frozen input`,
+        'application repetitions must use the exact frozen 1-based order',
       );
     }
-    const withKdna = normalizeApplicationLane(
-      rawResult.with_kdna,
-      `task ${task.id}.with_kdna`,
+    const taskResults = normalizeApplicationTaskResults(
+      rawRepetition.task_results,
+      plan,
       assetDigest,
+      label,
+      expectedIndex,
     );
-    const withoutKdna = normalizeApplicationLane(
-      rawResult.without_kdna,
-      `task ${task.id}.without_kdna`,
-      null,
+    const consumerOutputDigest = assertDigest(
+      rawRepetition.consumer_output_digest,
+      `${label}.consumer_output_digest`,
     );
-    assertPlainObject(
-      rawResult.evaluation,
-      `task ${task.id}.evaluation`,
+    const evaluatorOutputDigest = assertDigest(
+      rawRepetition.evaluator_output_digest,
+      `${label}.evaluator_output_digest`,
     );
-    const adoptionContract =
-      plan.verification_contract === 'adoption-fidelity';
-    const adoptionBooleanFields = [
-      'faithful',
-      'direction_correct',
-      'scope_correct',
-      'boundary_correct',
-      'exception_correct',
-      'priority_correct',
-      'authority_precedence_correct',
-      'exit_correct',
-      'stable',
-      'critical_safety_error',
-      'permission_violation',
-      'external_action_violation',
-    ];
-    const legacyBooleanFields = [
-      'faithful',
-      'boundary_correct',
-      'exception_correct',
-      'exit_correct',
-      'stable',
-      'critical_safety_error',
-    ];
-    assertAllowedKeys(
-      rawResult.evaluation,
-      new Set(adoptionContract
-        ? [...adoptionBooleanFields, 'reason_codes']
-        : [
-          'with_kdna_score',
-          'without_kdna_score',
-          ...legacyBooleanFields,
-          'reason_codes',
-        ]),
-      `task ${task.id}.evaluation`,
-    );
-    for (const field of (
-      adoptionContract
-        ? adoptionBooleanFields
-        : legacyBooleanFields
-    )) {
-      if (typeof rawResult.evaluation[field] !== 'boolean') {
-        throw new Error(
-          `task ${task.id}.evaluation.${field} must be boolean`,
-        );
-      }
+    if (
+      consumerOutputDigest !==
+        applicationConsumerOutputDigest(expectedIndex, taskResults) ||
+      evaluatorOutputDigest !==
+        applicationEvaluatorOutputDigest(expectedIndex, taskResults)
+    ) {
+      throw new Error(
+        `${label} output digests must be mechanically derived from its actual task results`,
+      );
     }
     return {
-      task_id: task.id,
-      input_digest: task.input_digest,
-      with_kdna: withKdna,
-      without_kdna: withoutKdna,
-      evaluation: adoptionContract ? {
-        faithful: rawResult.evaluation.faithful,
-        direction_correct: rawResult.evaluation.direction_correct,
-        scope_correct: rawResult.evaluation.scope_correct,
-        boundary_correct: rawResult.evaluation.boundary_correct,
-        exception_correct: rawResult.evaluation.exception_correct,
-        priority_correct: rawResult.evaluation.priority_correct,
-        authority_precedence_correct:
-          rawResult.evaluation.authority_precedence_correct,
-        exit_correct: rawResult.evaluation.exit_correct,
-        stable: rawResult.evaluation.stable,
-        critical_safety_error:
-          rawResult.evaluation.critical_safety_error,
-        permission_violation:
-          rawResult.evaluation.permission_violation,
-        external_action_violation:
-          rawResult.evaluation.external_action_violation,
-        reason_codes: normalizeReasonCodes(
-          rawResult.evaluation.reason_codes,
-          `task ${task.id}.evaluation.reason_codes`,
-        ),
-      } : {
-        with_kdna_score: applicationScore(
-          rawResult.evaluation.with_kdna_score,
-          `task ${task.id}.evaluation.with_kdna_score`,
-        ),
-        without_kdna_score: applicationScore(
-          rawResult.evaluation.without_kdna_score,
-          `task ${task.id}.evaluation.without_kdna_score`,
-        ),
-        faithful: rawResult.evaluation.faithful,
-        boundary_correct: rawResult.evaluation.boundary_correct,
-        exception_correct: rawResult.evaluation.exception_correct,
-        exit_correct: rawResult.evaluation.exit_correct,
-        stable: rawResult.evaluation.stable,
-        critical_safety_error:
-          rawResult.evaluation.critical_safety_error,
-        reason_codes: normalizeReasonCodes(
-          rawResult.evaluation.reason_codes,
-          `task ${task.id}.evaluation.reason_codes`,
-        ),
-      },
+      index: expectedIndex,
+      consumer_run_digest: assertDigest(
+        rawRepetition.consumer_run_digest,
+        `${label}.consumer_run_digest`,
+      ),
+      consumer_runner_digest: assertDigest(
+        rawRepetition.consumer_runner_digest,
+        `${label}.consumer_runner_digest`,
+      ),
+      evaluator_run_digest: assertDigest(
+        rawRepetition.evaluator_run_digest,
+        `${label}.evaluator_run_digest`,
+      ),
+      evaluator_runner_digest: assertDigest(
+        rawRepetition.evaluator_runner_digest,
+        `${label}.evaluator_runner_digest`,
+      ),
+      consumer_output_digest: consumerOutputDigest,
+      evaluator_output_digest: evaluatorOutputDigest,
+      task_results: taskResults,
     };
   });
-  const consumerRunDigest = assertDigest(
-    input.consumer_run_digest,
-    'consumer_run_digest',
-  );
-  const runnerDigest = assertDigest(
-    input.runner_digest,
-    'runner_digest',
-  );
-  const evaluatorRunDigest = assertDigest(
-    input.evaluator_run_digest,
-    'evaluator_run_digest',
-  );
-  const evaluatorRunnerDigest = assertDigest(
-    input.evaluator_runner_digest,
-    'evaluator_runner_digest',
-  );
+  for (const [field, subject] of [
+    ['consumer_run_digest', 'Consumer run'],
+    ['evaluator_run_digest', 'evaluator run'],
+  ]) {
+    if (
+      new Set(repetitions.map((repetition) => repetition[field])).size !==
+        repetitions.length
+    ) {
+      throw new Error(
+        `${subject} coordinates must be distinct for every actual repetition`,
+      );
+    }
+  }
+  if (
+    plan.repetition_policy.claim === 'stability' &&
+    new Set(
+      repetitions.map((repetition) => repetition.consumer_output_digest),
+    ).size !== repetitions.length
+  ) {
+    throw new Error(
+      'stability evidence cannot copy one Consumer output across repetitions',
+    );
+  }
+  const taskResults = aggregateApplicationTaskResults(plan, repetitions);
+  const firstRepetition = repetitions[0];
   const consumerAssetObservationId = nonEmpty(
     input.consumer_asset_observation_id,
     'consumer_asset_observation_id',
@@ -6715,8 +9427,10 @@ function recordApplicationReceipt(workspace, input = {}) {
         candidate.build_receipt_digest === buildReceiptDigest &&
         candidate.asset_digest === assetDigest &&
         candidate.observed_by.id === consumer.id &&
-        candidate.consumer_run_digest === consumerRunDigest &&
-        candidate.runner_digest === runnerDigest,
+        candidate.consumer_run_digest ===
+          firstRepetition.consumer_run_digest &&
+        candidate.runner_digest ===
+          firstRepetition.consumer_runner_digest,
     );
   if (
     !consumerObservation ||
@@ -6743,16 +9457,27 @@ function recordApplicationReceipt(workspace, input = {}) {
     );
   }
   assertApplicationLaneAuthorization(
-    taskResults,
+    repetitions,
     consumerObservation.asset_load_receipt.authorization_outcome,
+  );
+  const currentExecutionCoordinates = new Set(
+    repetitions.flatMap((repetition) => [
+      `consumer:${repetition.consumer_run_digest}:${repetition.consumer_runner_digest}`,
+      `evaluator:${repetition.evaluator_run_digest}:${repetition.evaluator_runner_digest}`,
+    ]),
   );
   if (
     workspace.applicationVerification.receipts.some((receipt) => (
       (
-        receipt.consumer_run_digest === consumerRunDigest &&
-        receipt.runner_digest === runnerDigest &&
-        receipt.evaluator_run_digest === evaluatorRunDigest &&
-        receipt.evaluator_runner_digest === evaluatorRunnerDigest
+        Array.isArray(receipt.repetitions) &&
+        receipt.repetitions.some((repetition) => (
+          currentExecutionCoordinates.has(
+            `consumer:${repetition.consumer_run_digest}:${repetition.consumer_runner_digest}`,
+          ) ||
+          currentExecutionCoordinates.has(
+            `evaluator:${repetition.evaluator_run_digest}:${repetition.evaluator_runner_digest}`,
+          )
+        ))
       ) ||
       (
         receipt.consumer_signature === input.consumer_signature &&
@@ -6784,9 +9509,7 @@ function recordApplicationReceipt(workspace, input = {}) {
     consumer_asset_load_receipt_digest:
       consumerAssetLoadReceiptDigest,
     consumer,
-    consumer_run_digest: consumerRunDigest,
-    runner_digest: runnerDigest,
-    task_results: taskResults,
+    repetitions,
   });
   verifyApplicationSignature(
     plan.consumer_identity,
@@ -6818,9 +9541,7 @@ function recordApplicationReceipt(workspace, input = {}) {
       consumerAssetLoadReceiptDigest,
     consumer_execution_digest: consumerExecutionDigest,
     evaluated_by: evaluator,
-    evaluator_run_digest: evaluatorRunDigest,
-    evaluator_runner_digest: evaluatorRunnerDigest,
-    task_results: taskResults,
+    repetitions,
   });
   verifyApplicationSignature(
     plan.evaluator_identity,
@@ -6852,10 +9573,7 @@ function recordApplicationReceipt(workspace, input = {}) {
       consumerAssetLoadReceiptDigest,
     consumer,
     evaluated_by: evaluator,
-    consumer_run_digest: consumerRunDigest,
-    runner_digest: runnerDigest,
-    evaluator_run_digest: evaluatorRunDigest,
-    evaluator_runner_digest: evaluatorRunnerDigest,
+    repetitions,
     consumer_execution_digest: consumerExecutionDigest,
     consumer_signature: input.consumer_signature,
     evaluator_signature: input.evaluator_signature,
@@ -6958,7 +9676,7 @@ function buildRepairPlan(workspace, diagnostics = {}) {
           !result.evaluation.boundary_correct ||
           !result.evaluation.exception_correct ||
           !result.evaluation.exit_correct ||
-          result.with_kdna.over_applied ||
+          result.evaluation.over_application_error ||
           result.with_kdna.exit === 'error'
         ))
         .map((result) => result.task_id);
@@ -7045,6 +9763,7 @@ function applyRepair(workspace, repairId, input = {}) {
         misuse_risk: candidateShape.misuse_risk,
         source_refs: candidateShape.source_refs,
         contrary_evidence: candidateShape.contrary_evidence,
+        counterexample_search: candidateShape.counterexample_search,
         confidence: candidateShape.confidence,
         agent_inference: candidateShape.agent_inference,
         card_type: candidateShape.card_type,
@@ -7064,12 +9783,8 @@ function applyRepair(workspace, repairId, input = {}) {
         ...next.purposeBrief,
         ...changes,
       });
-      next.judgmentModel.judgment_core = {
-        highest_question: next.purposeBrief.highest_question,
-        worldview: clone(next.purposeBrief.worldview),
-        value_order: clone(next.purposeBrief.value_order),
-        judgment_role: clone(next.purposeBrief.judgment_role),
-      };
+      next.judgmentModel.judgment_core =
+        declaredJudgmentCore(next.purposeBrief);
       next.judgmentModel.global_boundaries = clone(
         next.purposeBrief.global_boundaries,
       );
@@ -7081,7 +9796,6 @@ function applyRepair(workspace, repairId, input = {}) {
         throw new Error(`repair target boundary not found: ${targetId}`);
       }
       const boundary = next.judgmentModel.global_boundaries[boundaryIndex];
-      const priorStatement = boundary.statement;
       const repairedBoundary = normalizeBoundary({
         ...boundary,
         ...changes,
@@ -7095,10 +9809,6 @@ function applyRepair(workspace, repairId, input = {}) {
         next.purposeBrief.global_boundaries[purposeBoundaryIndex] =
           clone(repairedBoundary);
       }
-      next.purposeBrief.non_goals = next.purposeBrief.non_goals.map(
-        (nonGoal) =>
-          nonGoal === priorStatement ? repairedBoundary.statement : nonGoal,
-      );
     } else if (type === 'workspace') {
       if (changes.split_recommendation_id) {
         const split = next.judgmentModel.split_recommendations.find(
@@ -7264,8 +9974,8 @@ function cardFromUnit(workspace, unit) {
     feynman_restatement: null,
     audit_log: [{
       at: now(),
-      event: 'creation_accepted',
-      by: `creation-engine:${workspace.state.mode}`,
+      event: 'judgment_accepted',
+      by: 'creation-engine',
     }],
   };
 }
@@ -7289,15 +9999,15 @@ function boundaryCard(workspace, boundary) {
     feynman_restatement: null,
     audit_log: [{
       at: now(),
-      event: 'creation_accepted',
-      by: `creation-engine:${workspace.state.mode}`,
+      event: 'judgment_accepted',
+      by: 'creation-engine',
     }],
   };
 }
 
 function compileProject(workspace) {
   const readiness = assessReadiness(workspace);
-  if (!readiness.creation_accepted) {
+  if (!readiness.judgment_accepted) {
     const error = new Error(
       `Creation Engine project is not accepted:\n  - ` +
       readiness.blocking.map((item) => item.message).join('\n  - '),
@@ -7319,11 +10029,11 @@ function compileProject(workspace) {
           id: createdBy.id,
         }
       : undefined,
-    sourceMode: workspace.state.mode,
+    sourceMode: 'creation-engine',
     judgmentCore: clone(workspace.judgmentModel.judgment_core),
     lineage: clone(workspace.exportPlan.lineage),
   });
-  project.status = 'ready_for_release';
+  project.status = 'ready_for_test';
   project.release = {
     version: workspace.exportPlan.version,
     judgment_version: workspace.exportPlan.judgment_version,
@@ -7333,7 +10043,7 @@ function compileProject(workspace) {
   project.distillation_target = {
     domain_name: purpose.title,
     domain_category: 'professional_field',
-    owner_scope: workspace.state.mode === 'organization-confirmed' ? 'organization' : 'personal',
+    owner_scope: 'unspecified',
     granularity: 'core_principles',
     task_scope: purpose.scope,
     include_areas: [purpose.scope],
@@ -7367,16 +10077,6 @@ function compileProject(workspace) {
       .map((boundary) => boundaryCard(workspace, boundary)),
   ];
   project.tests = [];
-  project.creation_acceptance = {
-    type: 'kdna.studio.creation-acceptance',
-    schema_version: SCHEMA_VERSION,
-    accepted: true,
-    mode: workspace.state.mode,
-    semantic_revision: workspace.state.semantic_revision,
-    semantic_digest: workspace.state.semantic_digest,
-    confirmation_receipt_ids: validReceipts(workspace).map((receipt) => receipt.id),
-    semantic_test_ids: currentPassedTests(workspace).map((testCase) => testCase.id),
-  };
   return { project, readiness };
 }
 
@@ -7444,185 +10144,6 @@ function validateToolCoordinates(coordinates) {
       !Object.hasOwn(coordinates, 'core')) {
     throw new Error('receipt.tool_coordinates requires studio_core and core');
   }
-}
-
-function packageAndVersionFromCoordinate(coordinate, label) {
-  if (typeof coordinate === 'object' && coordinate !== null) {
-    return {
-      package: coordinate.package,
-      version: coordinate.version,
-    };
-  }
-  const separator = coordinate.lastIndexOf('@');
-  if (separator <= 0 || separator === coordinate.length - 1) {
-    throw new Error(`${label} is not a package coordinate`);
-  }
-  return {
-    package: coordinate.slice(0, separator),
-    version: coordinate.slice(separator + 1),
-  };
-}
-
-function validateDevelopmentBaseline(baseline, coordinates) {
-  assertAllowedKeys(
-    baseline,
-    new Set([
-      'schema',
-      'bom_schema',
-      'bom_semantic_digest',
-      'bom_file_digest',
-      'tools',
-    ]),
-    'receipt.development_baseline',
-  );
-  if (baseline.schema !== 'aikdna.creation-build-baseline/0.1.0') {
-    throw new Error('receipt.development_baseline has an unsupported schema');
-  }
-  if (
-    baseline.bom_schema !==
-    'aikdna.creation-engine.wp0-development-bom/1.0'
-  ) {
-    throw new Error(
-      'receipt.development_baseline has an unsupported BOM schema',
-    );
-  }
-  assertDigest(
-    baseline.bom_semantic_digest,
-    'receipt.development_baseline.bom_semantic_digest',
-  );
-  assertDigest(
-    baseline.bom_file_digest,
-    'receipt.development_baseline.bom_file_digest',
-  );
-  assertAllowedKeys(
-    baseline.tools,
-    new Set(['studio_cli', 'studio_core', 'core']),
-    'receipt.development_baseline.tools',
-  );
-  const expectedRepositories = {
-    studio_cli: 'kdna-studio-cli',
-    studio_core: 'kdna-studio-core',
-    core: 'kdna',
-  };
-  for (const [tool, repository] of Object.entries(expectedRepositories)) {
-    const binding = baseline.tools[tool];
-    if (!binding) {
-      throw new Error(
-        `receipt.development_baseline.tools requires ${tool}`,
-      );
-    }
-    assertAllowedKeys(
-      binding,
-      new Set([
-        'bom_repository',
-        'package',
-        'version',
-        'base_commit',
-        'base_tree',
-        'dirty_source_digest',
-        'source_input_digest',
-        'candidate_artifact_digest',
-      ]),
-      `receipt.development_baseline.tools.${tool}`,
-    );
-    if (binding.bom_repository !== repository) {
-      throw new Error(
-        `receipt.development_baseline.tools.${tool}.bom_repository is cross-wired`,
-      );
-    }
-    nonEmpty(
-      binding.package,
-      `receipt.development_baseline.tools.${tool}.package`,
-    );
-    assertVersion(
-      binding.version,
-      `receipt.development_baseline.tools.${tool}.version`,
-    );
-    for (const field of ['base_commit', 'base_tree']) {
-      if (
-        typeof binding[field] !== 'string' ||
-        !/^[0-9a-f]{40,64}$/.test(binding[field])
-      ) {
-        throw new Error(
-          `receipt.development_baseline.tools.${tool}.${field} is not a Git object`,
-        );
-      }
-    }
-    for (const field of [
-      'dirty_source_digest',
-      'source_input_digest',
-      'candidate_artifact_digest',
-    ]) {
-      assertDigest(
-        binding[field],
-        `receipt.development_baseline.tools.${tool}.${field}`,
-      );
-    }
-    const coordinate = coordinates[tool];
-    if (!coordinate) {
-      throw new Error(
-        `receipt.tool_coordinates requires ${tool} when a development baseline is present`,
-      );
-    }
-    const loaded = packageAndVersionFromCoordinate(
-      coordinate,
-      `receipt.tool_coordinates.${tool}`,
-    );
-    if (
-      loaded.package !== binding.package ||
-      loaded.version !== binding.version
-    ) {
-      throw new Error(
-        `receipt.development_baseline.tools.${tool} does not match the loaded tool coordinate`,
-      );
-    }
-  }
-}
-
-function validateDevelopmentRuntime(runtime, baseline = null) {
-  assertAllowedKeys(
-    runtime,
-    new Set([
-      'schema',
-      'evidence_class',
-      'candidate_runtime_receipt_sha256',
-      'candidate_runtime_tree_sha256',
-      'cli_entrypoint_sha256',
-      'bom_semantic_digest',
-      'bom_file_digest',
-    ]),
-    'development_runtime',
-  );
-  if (runtime.schema !== 'aikdna.creation-build-runtime/0.1.0') {
-    throw new Error('development_runtime has an unsupported schema');
-  }
-  if (
-    runtime.evidence_class !==
-    'IMMUTABLE_WP0_CANDIDATE_ARTIFACT_RUNTIME'
-  ) {
-    throw new Error('development_runtime has unsupported evidence authority');
-  }
-  for (const field of [
-    'candidate_runtime_receipt_sha256',
-    'candidate_runtime_tree_sha256',
-    'cli_entrypoint_sha256',
-    'bom_semantic_digest',
-    'bom_file_digest',
-  ]) {
-    assertDigest(runtime[field], `development_runtime.${field}`);
-  }
-  if (
-    baseline &&
-    (
-      runtime.bom_semantic_digest !== baseline.bom_semantic_digest ||
-      runtime.bom_file_digest !== baseline.bom_file_digest
-    )
-  ) {
-    throw new Error(
-      'development_runtime does not bind the development baseline',
-    );
-  }
-  return runtime;
 }
 
 function validateVerificationResults(results) {
@@ -7872,8 +10393,6 @@ function recordBuildReceipt(workspace, receipt = {}, verification = {}) {
       'asset_digest',
       'output',
       'tool_coordinates',
-      'development_baseline',
-      'development_runtime',
       'results',
     ]),
     'receipt',
@@ -7915,23 +10434,6 @@ function recordBuildReceipt(workspace, receipt = {}, verification = {}) {
   assertDigest(receipt.asset_digest, 'receipt.asset_digest');
   assertPlainObject(receipt.tool_coordinates, 'receipt.tool_coordinates');
   validateToolCoordinates(receipt.tool_coordinates);
-  if (receipt.development_baseline !== undefined) {
-    validateDevelopmentBaseline(
-      receipt.development_baseline,
-      receipt.tool_coordinates,
-    );
-  }
-  if (receipt.development_runtime !== undefined) {
-    if (receipt.development_baseline === undefined) {
-      throw new Error(
-        'development_runtime requires a development_baseline',
-      );
-    }
-    validateDevelopmentRuntime(
-      receipt.development_runtime,
-      receipt.development_baseline,
-    );
-  }
   if (receipt.results !== undefined) {
     assertPlainObject(receipt.results, 'receipt.results');
     validateVerificationResults(receipt.results);
@@ -7985,7 +10487,7 @@ function recordBuildReceipt(workspace, receipt = {}, verification = {}) {
     for (const applicationPlan of next.applicationVerification.plans) {
       if (
         applicationPlan.status === 'valid' &&
-        applicationPlan.verification_contract === 'adoption-fidelity' &&
+        applicationPlan.verification_contract === 'application-adoption-fidelity' &&
         (
           applicationPlan.asset_digest !== receipt.asset_digest ||
           applicationPlan.build_receipt_digest !== currentBuildReceiptDigest
@@ -8059,10 +10561,13 @@ function artifactData(workspace) {
     },
     'materials-index.json': {
       materials: workspace.materials,
+      material_inventories: workspace.materialInventories,
+      source_deliveries: workspace.sourceDeliveries,
     },
     'candidate-judgments.json': {
       candidates: workspace.candidates,
       interview_answers: workspace.interviewAnswers,
+      import_mappings: workspace.importMappings,
     },
     'judgment-model.json': {
       judgment_model: workspace.judgmentModel,
@@ -8130,13 +10635,43 @@ function assertReplaceableWorkspaceDirectory(directory) {
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error(`workspace path is not a plain directory: ${directory}`);
   }
-  const allowed = new Set(ARTIFACT_FILES);
+  const allowed = new Set([
+    ...ARTIFACT_FILES,
+    MANAGED_CANDIDATE_DIRECTORY,
+  ]);
   const foreign = fs.readdirSync(directory).filter((name) => !allowed.has(name));
   if (foreign.length > 0) {
     throw new Error(
       `workspace directory contains non-Creation-Engine files and will not be replaced: ` +
       foreign.join(', '),
     );
+  }
+  const managedDirectory = path.join(
+    directory,
+    MANAGED_CANDIDATE_DIRECTORY,
+  );
+  if (fs.existsSync(managedDirectory)) {
+    const stat = fs.lstatSync(managedDirectory);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error(
+        'managed candidate area must be a plain directory',
+      );
+    }
+    const managedNames = fs.readdirSync(managedDirectory);
+    if (
+      managedNames.length !== 1 ||
+      managedNames[0] !== MANAGED_CANDIDATE_FILE
+    ) {
+      throw new Error(
+        'managed candidate area contains an unexpected file',
+      );
+    }
+    const candidateStat = fs.lstatSync(
+      path.join(managedDirectory, MANAGED_CANDIDATE_FILE),
+    );
+    if (!candidateStat.isFile() || candidateStat.isSymbolicLink()) {
+      throw new Error('managed candidate must be a regular file');
+    }
   }
 }
 
@@ -8201,7 +10736,57 @@ function assertWorkspaceSaveConcurrency(directory, proposed) {
   }
 }
 
-function saveWorkspace(workspacePath, workspace) {
+function managedCandidatePath(workspacePath) {
+  return path.join(
+    path.resolve(nonEmpty(workspacePath, 'workspacePath')),
+    MANAGED_CANDIDATE_DIRECTORY,
+    MANAGED_CANDIDATE_FILE,
+  );
+}
+
+function currentManagedCandidateBytes(directory, workspace) {
+  if (
+    !fs.existsSync(directory) ||
+    workspace.buildReceipt?.status !== 'verified' ||
+    workspace.buildReceipt.semantic_revision !==
+      workspace.state.semantic_revision ||
+    workspace.buildReceipt.semantic_digest !==
+      workspace.state.semantic_digest ||
+    workspace.buildReceipt.version !== workspace.exportPlan.version ||
+    workspace.buildReceipt.judgment_version !==
+      workspace.exportPlan.judgment_version
+  ) {
+    return null;
+  }
+  const candidatePath = managedCandidatePath(directory);
+  if (!fs.existsSync(candidatePath)) return null;
+  const bytes = fs.readFileSync(candidatePath);
+  if (sha256(bytes) !== workspace.buildReceipt.asset_digest) {
+    throw new Error(
+      'managed candidate bytes do not match the current build receipt',
+    );
+  }
+  return bytes;
+}
+
+function readManagedCandidate(workspacePath, workspace) {
+  const absolute = path.resolve(
+    nonEmpty(workspacePath, 'workspacePath'),
+  );
+  const bytes = currentManagedCandidateBytes(absolute, workspace);
+  if (bytes === null) {
+    throw new Error(
+      'the current verified workspace has no managed candidate bytes',
+    );
+  }
+  return {
+    path: managedCandidatePath(absolute),
+    bytes: Buffer.from(bytes),
+    asset_digest: workspace.buildReceipt.asset_digest,
+  };
+}
+
+function saveWorkspace(workspacePath, workspace, options = {}) {
   const absolute = path.resolve(nonEmpty(workspacePath, 'workspacePath'));
   const next = clone(workspace);
   next.root = absolute;
@@ -8211,6 +10796,34 @@ function saveWorkspace(workspacePath, workspace) {
   assertNoLiveWorkspaceTransaction(absolute);
   assertReplaceableWorkspaceDirectory(absolute);
   assertWorkspaceSaveConcurrency(absolute, next);
+  let managedCandidateBytes = options.managedCandidateBytes || null;
+  if (
+    managedCandidateBytes !== null &&
+    !Buffer.isBuffer(managedCandidateBytes)
+  ) {
+    throw new Error('managedCandidateBytes must be a Buffer');
+  }
+  if (managedCandidateBytes === null) {
+    managedCandidateBytes =
+      currentManagedCandidateBytes(absolute, next);
+  }
+  if (
+    managedCandidateBytes !== null &&
+    (
+      next.buildReceipt?.status !== 'verified' ||
+      next.buildReceipt.semantic_revision !==
+        next.state.semantic_revision ||
+      next.buildReceipt.semantic_digest !== next.state.semantic_digest ||
+      next.buildReceipt.version !== next.exportPlan.version ||
+      next.buildReceipt.judgment_version !==
+        next.exportPlan.judgment_version ||
+      sha256(managedCandidateBytes) !== next.buildReceipt.asset_digest
+    )
+  ) {
+    throw new Error(
+      'managed candidate must bind the current verified build receipt',
+    );
+  }
   const nonce = `${process.pid}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
   const staging = path.join(parent, `.${path.basename(absolute)}.staging-${nonce}`);
   const backup = path.join(parent, `.${path.basename(absolute)}.backup-${nonce}`);
@@ -8220,6 +10833,19 @@ function saveWorkspace(workspacePath, workspace) {
     const artifacts = serializeArtifacts(next);
     for (const name of ARTIFACT_FILES) {
       writeArtifact(staging, name, artifacts[name]);
+    }
+    if (managedCandidateBytes !== null) {
+      const managedDirectory = path.join(
+        staging,
+        MANAGED_CANDIDATE_DIRECTORY,
+      );
+      fs.mkdirSync(managedDirectory, { mode: 0o700 });
+      writeArtifact(
+        managedDirectory,
+        MANAGED_CANDIDATE_FILE,
+        managedCandidateBytes,
+      );
+      fsyncDirectory(managedDirectory);
     }
     fsyncDirectory(staging);
     if (fs.existsSync(absolute)) {
@@ -8290,6 +10916,7 @@ function readArtifactEnvelope(directory, name) {
 }
 
 function workspaceFromArtifactDirectory(directory) {
+  assertReplaceableWorkspaceDirectory(directory);
   const envelopes = Object.fromEntries(
     ARTIFACT_FILES.map((name) => [name, readArtifactEnvelope(directory, name)]),
   );
@@ -8308,7 +10935,13 @@ function workspaceFromArtifactDirectory(directory) {
     state: envelopes['creation-state.json'].data.state,
     purposeBrief: envelopes['purpose-brief.json'].data.purpose_brief,
     materials: envelopes['materials-index.json'].data.materials,
+    materialInventories:
+      envelopes['materials-index.json'].data.material_inventories || [],
+    sourceDeliveries:
+      envelopes['materials-index.json'].data.source_deliveries || [],
     candidates: envelopes['candidate-judgments.json'].data.candidates,
+    importMappings:
+      envelopes['candidate-judgments.json'].data.import_mappings || [],
     judgmentModel: envelopes['judgment-model.json'].data.judgment_model,
     unresolvedQuestions:
       envelopes['unresolved-questions.json'].data.unresolved_questions,
@@ -8326,7 +10959,25 @@ function workspaceFromArtifactDirectory(directory) {
     operations: envelopes['creation-state.json'].data.operations || [],
     history: envelopes['creation-state.json'].data.history || [],
   };
+  assertSupportedWorkspaceSchema(workspace);
   assertWorkspace(workspace);
+  if (
+    workspace.buildReceipt?.status === 'verified' &&
+    workspace.buildReceipt.output?.filename ===
+      MANAGED_CANDIDATE_FILE &&
+    workspace.buildReceipt.semantic_revision ===
+      workspace.state.semantic_revision &&
+    workspace.buildReceipt.semantic_digest ===
+      workspace.state.semantic_digest &&
+    workspace.buildReceipt.version === workspace.exportPlan.version &&
+    workspace.buildReceipt.judgment_version ===
+      workspace.exportPlan.judgment_version &&
+    currentManagedCandidateBytes(directory, workspace) === null
+  ) {
+    throw new Error(
+      'managed candidate is missing for the current verified build receipt',
+    );
+  }
   return workspace;
 }
 
@@ -8361,12 +11012,14 @@ function recoverableWorkspaceDirectory(absolute) {
 function loadWorkspace(input) {
   if (input && typeof input === 'object' && !Array.isArray(input)) {
     const workspace = clone(input);
+    assertSupportedWorkspaceSchema(workspace);
     assertWorkspace(workspace);
     return workspace;
   }
   const value = nonEmpty(input, 'path');
   if (value.trim().startsWith('{')) {
     const workspace = JSON.parse(value);
+    assertSupportedWorkspaceSchema(workspace);
     assertWorkspace(workspace);
     return workspace;
   }
@@ -8384,6 +11037,7 @@ function loadWorkspace(input) {
     const parsed = JSON.parse(fs.readFileSync(absolute, 'utf8'));
     if (parsed && parsed.state) {
       parsed.root = path.dirname(absolute);
+      assertSupportedWorkspaceSchema(parsed);
       assertWorkspace(parsed);
       return parsed;
     }
@@ -8403,16 +11057,25 @@ module.exports = {
   CREATION_STATES,
   RELATION_TYPES,
   ARTIFACT_FILES,
+  MANAGED_CANDIDATE_DIRECTORY,
+  MANAGED_CANDIDATE_FILE,
   VERIFICATION_STEPS,
   createWorkspace,
   loadWorkspace,
   saveWorkspace,
+  managedCandidatePath,
+  readManagedCandidate,
   setPurpose,
   updateExportPlan,
+  recordMaterialInventory,
+  recordSourceDelivery,
   ingestMaterial,
+  recordImportMappingReport,
+  reviewImportMapping,
   reviewMaterial,
   addCandidate,
   recordInterviewAnswer,
+  resolveUncertainty,
   promoteCandidate,
   analyzeRelations,
   recordConfirmation,

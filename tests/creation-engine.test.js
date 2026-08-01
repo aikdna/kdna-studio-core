@@ -10,13 +10,16 @@ const path = require('node:path');
 const creationEngine = require('../src/creation-engine');
 const { exportRuntimeAsset } = require('../src/export-runtime');
 const kdnaCore = require('@aikdna/kdna-core');
-const fiveModesFixture = require('../fixtures/creation-engine/five-modes.json');
+const creationModesFixture =
+  require('../fixtures/creation-engine/creation-modes.json');
 const {
   candidateFor,
   purposeFor,
   createPromotedWorkspace,
+  addModeConfirmation,
   acceptWorkspace,
   addPassingCase,
+  freezeSemanticCases,
   passingBuildReceipt,
   exactBuildFixture,
 } = require('./creation-engine-helpers');
@@ -26,6 +29,41 @@ function testDigest(value) {
     .createHash('sha256')
     .update(value)
     .digest('hex')}`;
+}
+
+function interviewBinding(workspace, operationId, subject) {
+  return {
+    operation_id: operationId,
+    recorded_against_semantic_revision:
+      workspace.state.semantic_revision,
+    recorded_against_semantic_digest: workspace.state.semantic_digest,
+    subject,
+  };
+}
+
+function applicationConsumerOutputDigestForTest(index, taskResults) {
+  void index;
+  return testDigest(stableStringifyForTest({
+    schema: 'kdna.studio.application-consumer-output/0.2.0',
+    task_results: taskResults.map((result) => ({
+      task_id: result.task_id,
+      input_digest: result.input_digest,
+      with_kdna: result.with_kdna,
+      without_kdna: result.without_kdna,
+    })),
+  }));
+}
+
+function applicationEvaluatorOutputDigestForTest(index, taskResults) {
+  void index;
+  return testDigest(stableStringifyForTest({
+    schema: 'kdna.studio.application-evaluator-output/0.2.0',
+    task_evaluations: taskResults.map((result) => ({
+      task_id: result.task_id,
+      input_digest: result.input_digest,
+      evaluation: result.evaluation,
+    })),
+  }));
 }
 
 function stableStringifyForTest(value) {
@@ -73,6 +111,10 @@ function applicationPlanDigestForTest(plan) {
     evaluation_oracle_digest: plan.evaluation_oracle_digest,
     consumer_identity: plan.consumer_identity,
     evaluator_identity: plan.evaluator_identity,
+    ...(plan.repetition_policy
+      ? { repetition_policy: plan.repetition_policy }
+      : {}),
+    ...(plan.risk_profile ? { risk_profile: plan.risk_profile } : {}),
     tasks: plan.tasks,
     thresholds: plan.thresholds,
     frozen_at: plan.frozen_at,
@@ -129,6 +171,7 @@ function historicalApplicationPlanForTest(workspace, input) {
       risk_level: task.risk_level,
       unit_ids: [...task.unit_ids],
       boundary_ids: [...task.boundary_ids],
+      relation_ids: [...(task.relation_ids || [])],
       semantic_test_id: task.semantic_test_id || null,
       perturbation_group: task.perturbation_group || null,
       ...(typeof task.kdna_sensitive === 'boolean'
@@ -231,6 +274,8 @@ test('Creation Engine is public, immutable, and models all eight first-class obj
 
   const original = creationEngine.createWorkspace(null, {
     mode: 'agent-authored',
+    workflowMode: 'collaborative',
+    access: 'public',
     createdBy: { type: 'agent', id: 'fixture-agent' },
   });
   assert.throws(
@@ -245,7 +290,7 @@ test('Creation Engine is public, immutable, and models all eight first-class obj
       judgment_role: { acts_as: 'bounded judgment' },
       global_boundaries: ['Do not act outside scope.'],
     }),
-    /must exactly match an explicit global boundary/,
+    /non_goal_boundary_mapping_required/,
   );
   const changed = creationEngine.setPurpose(original, {
     objective: 'Make one bounded decision.',
@@ -270,19 +315,39 @@ test('Creation Engine is public, immutable, and models all eight first-class obj
   assert.ok(Array.isArray(accepted.confirmationReceipts), 'ConfirmationReceipt');
   assert.ok(accepted.semanticTestReport.cases.length >= 3, 'SemanticTestCase');
   assert.ok(Array.isArray(accepted.repairPlan.items), 'RepairItem');
-  assert.equal(creationEngine.assessReadiness(accepted).creation_accepted, true);
+  assert.equal(creationEngine.assessReadiness(accepted).judgment_accepted, true);
 });
 
-test('candidate promotion requires and preserves private contrary evidence', () => {
+test('candidate promotion separates real contrary evidence from bounded search', () => {
   let workspace = createPromotedWorkspace();
-  const incomplete = candidateFor({
-    id: 'candidate_without_falsification',
+  const noneFound = candidateFor({
+    id: 'candidate_honest_none_found',
     agentInference: true,
   });
-  delete incomplete.contrary_evidence;
+  noneFound.contrary_evidence = [];
+  noneFound.counterexample_search = {
+    scope: 'The declared low-risk formatting scope.',
+    method: 'Search the stated boundary and one out-of-scope case.',
+    result: 'none-found',
+    uncertainty: 'Unseen domains outside the declared scope remain untested.',
+  };
+  workspace = creationEngine.addCandidate(workspace, noneFound);
+  assert.deepEqual(
+    workspace.candidates.find(
+      (candidate) => candidate.id === noneFound.id,
+    ).contrary_evidence,
+    [],
+  );
+
+  const fakeNone = candidateFor({
+    id: 'candidate_fake_none',
+    agentInference: true,
+  });
+  fakeNone.contrary_evidence = ['No contrary evidence'];
+  fakeNone.counterexample_search.result = 'found';
   assert.throws(
-    () => creationEngine.addCandidate(workspace, incomplete),
-    /contrary_evidence requires at least one non-empty value/,
+    () => creationEngine.addCandidate(workspace, fakeNone),
+    /not a none-found placeholder/,
   );
 
   workspace = creationEngine.addCandidate(workspace, candidateFor({
@@ -315,18 +380,11 @@ test('candidate promotion requires and preserves private contrary evidence', () 
 test('private operation receipts make exact replay inert and conflicting reuse fail closed', () => {
   const initial = creationEngine.createWorkspace(null, {
     mode: 'agent-authored',
+    workflowMode: 'autonomous',
+    access: 'licensed',
     createdBy: { type: 'agent', id: 'fixture-agent' },
   });
   const before = creationEngine.operationCoordinate(initial);
-  const developmentRuntime = {
-    schema: 'aikdna.creation-build-runtime/0.1.0',
-    evidence_class: 'IMMUTABLE_WP0_CANDIDATE_ARTIFACT_RUNTIME',
-    candidate_runtime_receipt_sha256: `sha256:${'1'.repeat(64)}`,
-    candidate_runtime_tree_sha256: `sha256:${'2'.repeat(64)}`,
-    cli_entrypoint_sha256: `sha256:${'3'.repeat(64)}`,
-    bom_semantic_digest: `sha256:${'4'.repeat(64)}`,
-    bom_file_digest: `sha256:${'5'.repeat(64)}`,
-  };
   const request = {
     operation_id: 'operation:test-answer',
     command: 'answer',
@@ -335,7 +393,6 @@ test('private operation receipts make exact replay inert and conflicting reuse f
       workspace: { workspace_id: initial.state.workspace_id },
       payload: { answer: 'Use the bounded interpretation.' },
     }),
-    development_runtime: developmentRuntime,
   };
   const completed = creationEngine.completeOperation(initial, {
     ...request,
@@ -344,10 +401,6 @@ test('private operation receipts make exact replay inert and conflicting reuse f
   assert.equal(completed.state.semantic_revision, initial.state.semantic_revision);
   assert.equal(completed.state.semantic_digest, initial.state.semantic_digest);
   assert.equal(completed.operations.length, 1);
-  assert.deepEqual(
-    completed.operations[0].development_runtime,
-    developmentRuntime,
-  );
   assert.equal(completed.history.length, initial.history.length + 1);
   assert.deepEqual(
     creationEngine.resolveOperation(completed, request),
@@ -369,14 +422,6 @@ test('private operation receipts make exact replay inert and conflicting reuse f
     }),
     (error) => error.code === 'CREATION_OPERATION_CONFLICT',
   );
-  assert.throws(
-    () => creationEngine.resolveOperation(completed, {
-      ...request,
-      development_runtime: null,
-    }),
-    (error) => error.code === 'CREATION_OPERATION_CONFLICT',
-  );
-
   const duplicated = JSON.parse(JSON.stringify(completed));
   duplicated.operations.push(JSON.parse(JSON.stringify(completed.operations[0])));
   assert.equal(creationEngine.validateWorkspace(duplicated).valid, false);
@@ -398,13 +443,61 @@ test('private operation receipts make exact replay inert and conflicting reuse f
   );
 });
 
+test('each Engine evolution applies its domain mutator exactly once', () => {
+  const initial = creationEngine.createWorkspace(null, {
+    mode: 'agent-authored',
+    workflowMode: 'autonomous',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'fixture-agent' },
+  });
+  const purposed = creationEngine.setPurpose(initial, {
+    objective: 'Apply one bounded editorial rule.',
+    scope: 'short local titles',
+    loading_condition: 'Load only while drafting a short title.',
+  });
+  assert.equal(initial.purposeBrief, null);
+  assert.equal(
+    purposed.state.semantic_revision,
+    initial.state.semantic_revision + 1,
+  );
+  assert.equal(purposed.history.length, initial.history.length + 1);
+  assert.equal(
+    purposed.history.filter(
+      (entry) => entry.event === 'purpose_set',
+    ).length,
+    1,
+  );
+
+  const withCandidate = creationEngine.addCandidate(
+    purposed,
+    candidateFor({ agentInference: true }),
+  );
+  assert.equal(purposed.candidates.length, 0);
+  assert.equal(withCandidate.candidates.length, 1);
+  assert.equal(
+    withCandidate.state.semantic_revision,
+    purposed.state.semantic_revision,
+    'a proposal-only candidate is not yet part of the accepted semantic model',
+  );
+  assert.equal(
+    withCandidate.history.length,
+    purposed.history.length + 1,
+  );
+  assert.equal(
+    withCandidate.history.filter(
+      (entry) => entry.event === 'candidate_added',
+    ).length,
+    1,
+  );
+});
+
 test('export operation phases bind exact bytes and reject stale semantic replay', () => {
   const initial = acceptWorkspace(createPromotedWorkspace());
   const request = {
     operation_id: 'operation:phased-export',
-    command: 'export-agent',
+    command: 'finalize-agent',
     request_digest: creationEngine.canonicalOperationRequestDigest({
-      command: 'export-agent',
+      command: 'finalize-agent',
       workspace: { workspace_id: initial.state.workspace_id },
       io_effects: { output: 'agent.kdna', protected: true },
     }),
@@ -493,7 +586,7 @@ test('export operation phases bind exact bytes and reject stale semantic replay'
     ...completed.purposeBrief,
     objective: 'A corrected bounded objective.',
   });
-  assert.equal(creationEngine.assessReadiness(corrected).creation_accepted, false);
+  assert.equal(creationEngine.assessReadiness(corrected).judgment_accepted, false);
   assert.throws(
     () => creationEngine.resolveOperation(corrected, request),
     (error) => error.code === 'CREATION_OPERATION_CONFLICT',
@@ -525,7 +618,7 @@ test('purpose and boundary repairs preserve the non-goal boundary invariant', ()
         changes: { non_goals: ['An unmatched exclusion.'] },
       },
     ),
-    /must exactly match an explicit global boundary/,
+    /non_goal_boundary_mapping_required/,
   );
 
   workspace = creationEngine.buildRepairPlan(workspace, {
@@ -549,8 +642,12 @@ test('purpose and boundary repairs preserve the non-goal boundary invariant', ()
     },
   );
   assert.deepEqual(repaired.purposeBrief.non_goals, [
-    'Never reveal credentials, secrets, or private source content.',
+    'Never reveal credentials or private source content.',
   ]);
+  assert.deepEqual(
+    repaired.purposeBrief.non_goal_mappings[0].boundary_ids,
+    ['boundary_no_secrets'],
+  );
   assert.deepEqual(
     repaired.purposeBrief.global_boundaries,
     repaired.judgmentModel.global_boundaries,
@@ -558,9 +655,83 @@ test('purpose and boundary repairs preserve the non-goal boundary invariant', ()
   assert.equal(creationEngine.validateWorkspace(repaired).valid, true);
 });
 
+test('purpose constraints use explicit semantic mappings instead of repeated strings', () => {
+  const original = creationEngine.createWorkspace(null, {
+    mode: 'agent-authored',
+    workflowMode: 'autonomous',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'agent:purpose-fixture' },
+  });
+  const common = {
+    objective: 'Keep a small editorial decision bounded.',
+    scope: 'Editorial drafting',
+    loading_condition: 'Before drafting a recommendation',
+    highest_question: 'Is this recommendation within editorial scope?',
+    worldview: ['Advice must stay within declared competence.'],
+    value_order: ['safety'],
+    judgment_role: { acts_as: 'a bounded editorial reviewer' },
+  };
+  const mapped = creationEngine.setPurpose(original, {
+    ...common,
+    non_goals: [{
+      statement: 'Do not offer medical advice.',
+      boundary_ids: ['boundary-medical'],
+      rationale:
+        'Medical advice and clinical recommendations are the same excluded domain in this asset.',
+    }],
+    global_boundaries: [{
+      id: 'boundary-medical',
+      statement: 'Never make clinical recommendations.',
+    }],
+  });
+  assert.equal(
+    mapped.purposeBrief.non_goals[0],
+    'Do not offer medical advice.',
+  );
+  assert.equal(
+    mapped.purposeBrief.global_boundaries[0].statement,
+    'Never make clinical recommendations.',
+  );
+  assert.deepEqual(
+    mapped.purposeBrief.non_goal_mappings[0].boundary_ids,
+    ['boundary-medical'],
+  );
+
+  assert.throws(
+    () => creationEngine.setPurpose(original, {
+      ...common,
+      non_goals: [{
+        statement: 'Do not publish private source data.',
+        boundary_ids: ['boundary-publication'],
+        rationale: 'This mapping is intentionally contradictory.',
+      }],
+      global_boundaries: [{
+        id: 'boundary-publication',
+        statement: 'Always publish private source data.',
+      }],
+    }),
+    /non_goal_boundary_contradiction/,
+  );
+
+  const drafted = creationEngine.setPurpose(original, {
+    ...common,
+    non_goals: ['Do not act outside editorial scope.'],
+  });
+  assert.equal(drafted.purposeBrief.global_boundaries.length, 1);
+  assert.equal(
+    drafted.purposeBrief.non_goal_mappings[0].boundary_ids[0],
+    drafted.purposeBrief.global_boundaries[0].id,
+  );
+  const narrow = creationEngine.setPurpose(original, common);
+  assert.deepEqual(narrow.purposeBrief.non_goals, []);
+  assert.deepEqual(narrow.purposeBrief.global_boundaries, []);
+});
+
 test('candidate promotion preserves a creator-owned before/after correction receipt', () => {
   let workspace = creationEngine.createWorkspace(null, {
     mode: 'human-confirmed',
+    workflowMode: 'collaborative',
+    access: 'public',
     createdBy: { type: 'agent', id: 'fixture-agent' },
   });
   workspace = creationEngine.setPurpose(workspace, {
@@ -614,6 +785,22 @@ test('creator-label expectations require a frozen pre-evaluation test plan', () 
     expected: 'Apply the declared reversible-first judgment.',
     expected_creator_label: '符合',
     unit_ids: [unitId],
+  });
+  workspace = creationEngine.addSemanticTest(workspace, {
+    id: 'test_predeclared_counterexample',
+    kind: 'counterexample',
+    input: 'A task outside incident triage asks for the judgment.',
+    expected: 'Do not apply the declared judgment.',
+    expected_creator_label: '超出范围',
+    unit_ids: [unitId],
+  });
+  workspace = creationEngine.addSemanticTest(workspace, {
+    id: 'test_predeclared_boundary',
+    kind: 'boundary',
+    input: 'A diagnostic note contains a credential.',
+    expected: 'Do not reveal the credential.',
+    expected_creator_label: '超出范围',
+    boundary_ids: ['boundary_no_secrets'],
   });
   assert.throws(
     () => creationEngine.recordSemanticTestResult(
@@ -723,12 +910,12 @@ test('creator-label expectations require a frozen pre-evaluation test plan', () 
     () => creationEngine.loadWorkspace(JSON.stringify(corrupted)),
     /status, result and evaluation state are inconsistent/,
   );
-  assert.throws(
-    () => creationEngine.freezeSemanticTestPlan(evaluated, {
+  assert.equal(
+    creationEngine.freezeSemanticTestPlan(evaluated, {
       actor: { type: 'human', id: 'expert-001' },
-      statement: 'A post-result plan is forbidden.',
+      statement: 'An exact post-result replay remains inert.',
     }),
-    /before any current semantic test is evaluated/,
+    evaluated,
   );
 
   const changedDefinitions = creationEngine.addSemanticTest(frozen, {
@@ -750,19 +937,47 @@ test('creator-label expectations require a frozen pre-evaluation test plan', () 
 test('creator labels classify the requested case rather than praise a correct refusal', () => {
   let workspace = createPromotedWorkspace('human-confirmed');
   const unitId = workspace.judgmentModel.units[0].id;
-  workspace = creationEngine.addSemanticTest(workspace, {
+  const applicable = {
+    id: 'test_in_scope_case_classification',
+    kind: 'applicable',
+    input: 'The request stays inside the declared judgment scope.',
+    expected: 'Apply the bounded judgment.',
+    unit_ids: [unitId],
+  };
+  const counterexample = {
     id: 'test_out_of_scope_case_classification',
     kind: 'counterexample',
     input: 'The request crosses the declared judgment scope.',
     expected: 'Refuse the request and explain the existing boundary.',
     expected_creator_label: '超出范围',
     unit_ids: [unitId],
-  });
-  workspace = creationEngine.freezeSemanticTestPlan(workspace, {
-    id: 'test-plan-out-of-scope-classification',
-    actor: { type: 'human', id: 'expert-001' },
-    statement: 'The case classification was frozen before either observation.',
-  });
+  };
+  const boundary = {
+    id: 'test_case_classification_boundary',
+    kind: 'boundary',
+    input: 'The request asks for a credential.',
+    expected: 'Do not reveal credentials.',
+    boundary_ids: ['boundary_no_secrets'],
+  };
+  workspace = freezeSemanticCases(
+    workspace,
+    [applicable, counterexample, boundary],
+    {
+      planId: 'test-plan-out-of-scope-classification',
+      evaluator: { type: 'human', id: 'expert-001' },
+      statement:
+        'The case classification was frozen before either observation.',
+    },
+  );
+  workspace = creationEngine.recordSemanticTestResult(
+    workspace,
+    applicable.id,
+    {
+      result: 'pass',
+      evaluated_by: { type: 'human', id: 'expert-001' },
+      notes: 'The in-scope case applied the bounded judgment.',
+    },
+  );
 
   const praisedRefusal = creationEngine.recordSemanticTestResult(
     workspace,
@@ -774,7 +989,10 @@ test('creator labels classify the requested case rather than praise a correct re
     },
   );
   assert.equal(
-    praisedRefusal.semanticTestReport.cases[0].status,
+    praisedRefusal.semanticTestReport.cases.find(
+      (testCase) =>
+        testCase.id === 'test_out_of_scope_case_classification',
+    ).status,
     'failed',
   );
 
@@ -788,7 +1006,10 @@ test('creator labels classify the requested case rather than praise a correct re
     },
   );
   assert.equal(
-    classifiedRequest.semanticTestReport.cases[0].status,
+    classifiedRequest.semanticTestReport.cases.find(
+      (testCase) =>
+        testCase.id === 'test_out_of_scope_case_classification',
+    ).status,
     'passed',
   );
 });
@@ -807,6 +1028,8 @@ test('representational source grounding rejects wrong, stale, expired, or out-of
   for (const [label, overrides] of variants) {
     let workspace = creationEngine.createWorkspace(null, {
       mode: 'human-confirmed',
+      workflowMode: 'collaborative',
+      access: 'public',
       createdBy: { type: 'agent', id: 'fixture-agent' },
     });
     workspace = creationEngine.setPurpose(
@@ -838,7 +1061,7 @@ test('representational source grounding rejects wrong, stale, expired, or out-of
     );
     workspace = acceptWorkspace(workspace);
     const readiness = creationEngine.assessReadiness(workspace);
-    assert.equal(readiness.creation_accepted, false, label);
+    assert.equal(readiness.judgment_accepted, false, label);
     assert.ok(
       readiness.blocking.some(
         (item) => item.code === 'SOURCE_MATERIAL_REQUIRED',
@@ -851,6 +1074,8 @@ test('representational source grounding rejects wrong, stale, expired, or out-of
 test('post-ingest source review records an exact receipt and is the only way to reclassify evidence', () => {
   let workspace = creationEngine.createWorkspace(null, {
     mode: 'interpretive',
+    workflowMode: 'collaborative',
+    access: 'licensed',
     createdBy: { type: 'agent', id: 'creation-agent' },
   });
   workspace = creationEngine.setPurpose(workspace, purposeFor('interpretive'));
@@ -860,6 +1085,10 @@ test('post-ingest source review records an exact receipt and is the only way to 
     title: 'Unclassified source',
     content: 'A source must be interpreted before its authority is known.',
   });
+  assert.equal(
+    creationEngine.nextAction(workspace).action,
+    'review_material',
+  );
   workspace = creationEngine.addCandidate(workspace, candidateFor({
     sourceRefs: ['source_unclassified'],
     agentInference: false,
@@ -911,6 +1140,60 @@ test('post-ingest source review records an exact receipt and is the only way to 
       (item) => item.code === 'SOURCE_MATERIAL_REQUIRED',
     ),
   );
+  assert.notEqual(
+    creationEngine.nextAction(workspace).action,
+    'review_material',
+  );
+
+  const reviewedRevision = workspace.state.semantic_revision;
+  workspace = creationEngine.reviewMaterial(workspace, 'source_unclassified', {
+    reviewed_by: { type: 'agent', id: 'independent-source-reviewer' },
+    review_reason:
+      'The digest-bound review found the existing classification accurate and made no semantic change.',
+    changes: {},
+  });
+  assert.equal(workspace.state.semantic_revision, reviewedRevision);
+  assert.equal(
+    workspace.materials[0].review_receipts.at(-1).decision,
+    'reviewed-no-change',
+  );
+  assert.deepEqual(
+    workspace.materials[0].review_receipts.at(-1).changed_fields,
+    [],
+  );
+  assert.equal(
+    workspace.materials[0].review_receipts.at(-1).before_digest,
+    workspace.materials[0].review_receipts.at(-1).after_digest,
+  );
+
+  workspace = creationEngine.reviewMaterial(workspace, 'source_unclassified', {
+    reviewed_by: { type: 'agent', id: 'creation-agent' },
+    review_reason:
+      'Source review safely escalates newly identified sensitive material.',
+    changes: {
+      sensitivity: 'sensitive',
+      in_scope: false,
+    },
+  });
+  assert.equal(workspace.materials[0].sensitivity, 'sensitive');
+  assert.equal(workspace.materials[0].in_scope, false);
+  assert.equal(
+    workspace.materials[0].output_disclosure_review.status,
+    'pending',
+  );
+  assert.ok(
+    workspace.materials[0].review_receipts.at(-1).changed_fields.includes(
+      'sensitivity',
+    ),
+  );
+  assert.throws(
+    () => creationEngine.reviewMaterial(workspace, 'source_unclassified', {
+      reviewed_by: { type: 'agent', id: 'creation-agent' },
+      review_reason: 'Sensitive evidence cannot be downgraded by review.',
+      changes: { sensitivity: 'private' },
+    }),
+    /may only escalate sensitivity/,
+  );
 
   assert.throws(
     () => creationEngine.reviewMaterial(workspace, 'source_unclassified', {
@@ -920,35 +1203,124 @@ test('post-ingest source review records an exact receipt and is the only way to 
     }),
     /immutable fields: content_hash/,
   );
-  assert.throws(
-    () => creationEngine.reviewMaterial(workspace, 'source_unclassified', {
+  workspace = creationEngine.reviewMaterial(
+    workspace,
+    'source_unclassified',
+    {
       reviewed_by: { type: 'agent', id: 'creation-agent' },
-      review_reason: 'A no-op must not mint a receipt.',
+      review_reason:
+        'A repeated classification is recorded honestly as reviewed with no change.',
       changes: { authority: 'supporting' },
-    }),
-    /must change at least one classification/,
+    },
+  );
+  assert.equal(
+    workspace.materials[0].review_receipts.at(-1).decision,
+    'reviewed-no-change',
   );
 });
 
-test('source-grounded modes start with interview and then require exact source binding', () => {
+test('autonomous uncertainty is resolved by bounded evidence review instead of waiting for a user', () => {
   let workspace = creationEngine.createWorkspace(null, {
-    mode: 'interpretive',
-    createdBy: { type: 'agent', id: 'creation-agent' },
+    mode: 'agent-authored',
+    workflowMode: 'autonomous',
+    access: 'public',
+    createdBy: {
+      type: 'agent',
+      id: 'autonomous-creating-agent',
+    },
   });
-  workspace = creationEngine.setPurpose(workspace, purposeFor('interpretive'));
+  workspace = creationEngine.setPurpose(
+    workspace,
+    purposeFor('agent-authored'),
+  );
+  workspace = creationEngine.addCandidate(workspace, {
+    ...candidateFor({
+      id: 'candidate_bounded_uncertainty',
+      agentInference: true,
+    }),
+    confidence: {
+      status: 'unknown',
+      score: null,
+      reason:
+        'The available evidence does not establish behavior outside the narrow declared case.',
+    },
+  });
+  workspace = creationEngine.promoteCandidate(
+    workspace,
+    'candidate_bounded_uncertainty',
+  );
+  const question = workspace.unresolvedQuestions.find(
+    (candidate) =>
+      candidate.kind === 'candidate_uncertainty' &&
+      candidate.status === 'open',
+  );
+  assert.ok(question);
+  const action = creationEngine.nextAction(workspace);
+  assert.equal(action.action, 'resolve_uncertainty');
+  assert.equal(action.requires_user, false);
+  assert.equal(action.required_actor, 'independent-evaluator-agent');
+
+  const stale = JSON.parse(JSON.stringify(workspace));
+  stale.state.semantic_revision -= 1;
+  assert.throws(
+    () => creationEngine.resolveUncertainty(workspace, {
+      question_id: question.id,
+      actor: {
+        type: 'agent',
+        id: 'independent-uncertainty-evaluator',
+      },
+      decision: 'bounded-uncertainty-retained',
+      reason: 'Retain the narrow scope and surface the remaining uncertainty.',
+      expected_revision: stale.state.semantic_revision,
+      expected_semantic_digest: workspace.state.semantic_digest,
+      changes: {},
+    }),
+    /bind the current semantic revision and digest/,
+  );
+
+  workspace = creationEngine.resolveUncertainty(workspace, {
+    question_id: question.id,
+    actor: {
+      type: 'agent',
+      id: 'independent-uncertainty-evaluator',
+    },
+    decision: 'bounded-uncertainty-retained',
+    reason:
+      'The claim remains narrow, its confidence reason is explicit, and unseen contexts stay outside scope.',
+    expected_revision: workspace.state.semantic_revision,
+    expected_semantic_digest: workspace.state.semantic_digest,
+    changes: {},
+  });
+  const resolved = workspace.unresolvedQuestions.find(
+    (candidate) => candidate.id === question.id,
+  );
+  assert.equal(resolved.status, 'resolved');
   assert.equal(
+    resolved.resolution.decision,
+    'bounded-uncertainty-retained',
+  );
+  assert.notEqual(
     creationEngine.nextAction(workspace).action,
     'record_interview_answer',
   );
-  workspace = creationEngine.recordInterviewAnswer(workspace, {
-    id: 'answer-first',
-    question: 'Which decision should this interpretation help with?',
-    answer: 'Prefer actions whose evidence and correction path are visible.',
-    by: 'persona:synthetic-source',
+  assert.equal(
+    creationEngine.validateWorkspace(workspace).valid,
+    true,
+  );
+});
+
+test('interpretive creation requires source material instead of substituting an interview', () => {
+  let workspace = creationEngine.createWorkspace(null, {
+    mode: 'interpretive',
+    workflowMode: 'collaborative',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'creation-agent' },
   });
+  workspace = creationEngine.setPurpose(workspace, purposeFor('interpretive'));
   const next = creationEngine.nextAction(workspace);
   assert.equal(next.action, 'ingest_material');
-  assert.match(next.reason, /classified interview source/);
+  assert.equal(next.requires_user, false);
+  assert.match(next.reason, /requires authorized source material/);
   assert.ok(
     creationEngine.assessReadiness(workspace).blocking.some(
       (item) => item.code === 'SOURCE_MATERIAL_REQUIRED',
@@ -956,24 +1328,398 @@ test('source-grounded modes start with interview and then require exact source b
   );
 });
 
-test('all five creation modes keep declared confirmation private and never synthesize Human Lock', () => {
+test('source reauthorization is routed before source-dependent candidate drafting', () => {
+  let workspace = creationEngine.createWorkspace(null, {
+    mode: 'interpretive',
+    workflowMode: 'autonomous',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'creation-agent' },
+  });
+  workspace = creationEngine.setPurpose(
+    workspace,
+    purposeFor('interpretive'),
+  );
+  workspace = creationEngine.ingestMaterial(workspace, {
+    id: 'source_reauthorization_example',
+    kind: 'document',
+    title: 'Indexed source',
+    content: 'Exact source bytes were indexed but are not retained.',
+    authority: 'supporting',
+    currentness: 'current',
+    sensitivity: 'private',
+    in_scope: true,
+  });
+  workspace.unresolvedQuestions.push({
+    id: 'question_source_reauthorization',
+    kind: 'source_reauthorization_required',
+    target_id: 'source_reauthorization_example',
+    reason:
+      'The Host must redeliver the approved exact bytes before distillation.',
+    status: 'open',
+    created_at: new Date().toISOString(),
+  });
+
+  const action = creationEngine.nextAction(workspace);
+  assert.equal(action.action, 'deliver_material');
+  assert.equal(action.requires_user, false);
+  assert.deepEqual(action.unresolved_ids, [
+    'question_source_reauthorization',
+  ]);
+});
+
+test('human-confirmed zero-file interview is exact grounding, not zero evidence', () => {
+  let workspace = creationEngine.createWorkspace(null, {
+    mode: 'human-confirmed',
+    workflowMode: 'collaborative',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'interview-creation-agent' },
+  });
+  workspace = creationEngine.setPurpose(
+    workspace,
+    purposeFor('human-confirmed'),
+  );
+  workspace = creationEngine.recordInterviewAnswer(workspace, {
+    ...interviewBinding(
+      workspace,
+      'interview:human-zero-file',
+      { type: 'human', id: 'expert-001' },
+    ),
+    id: 'answer_human_zero_file',
+    question: 'What judgment should apply inside the declared scope?',
+    answer: 'Prefer the bounded reversible action and preserve evidence.',
+    actor: { type: 'human', id: 'expert-001' },
+  });
+  const answer = workspace.interviewAnswers.at(-1);
+  const sourceRef = `interview-answer:${answer.id}@${answer.answer_digest}`;
+  workspace = creationEngine.addCandidate(workspace, candidateFor({
+    sourceRefs: [sourceRef],
+    agentInference: false,
+  }));
+  workspace = creationEngine.promoteCandidate(
+    workspace,
+    'candidate_reversible_first',
+  );
+  assert.equal(workspace.materials.length, 0);
+  assert.ok(
+    creationEngine.assessReadiness(workspace).blocking.some(
+      (item) => item.code === 'CONFIRMATION_REQUIRED',
+    ),
+  );
+  const accepted = acceptWorkspace(workspace);
+  assert.equal(
+    creationEngine.assessReadiness(accepted).judgment_accepted,
+    true,
+  );
+  const { project } = creationEngine.compileProject(accepted);
+  const exported = exportRuntimeAsset(project, {
+    asset_id: 'kdna:fixture:human-zero-file-interview',
+    timestamp: '2026-07-31T00:00:00.000Z',
+  });
+  const packedRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'creation-zero-file-runtime-'),
+  );
+  try {
+    const source = path.join(packedRoot, 'source');
+    const output = path.join(packedRoot, 'asset.kdna');
+    fs.mkdirSync(source);
+    for (const [name, content] of Object.entries(exported.files)) {
+      fs.writeFileSync(path.join(source, name), content);
+    }
+    kdnaCore.pack(source, output);
+    const exactBytes = fs.readFileSync(output);
+    const capsule = kdnaCore.loadAuthorized(exactBytes, {
+      profile: 'full',
+      as: 'json',
+    });
+    assert.equal(capsule.type, 'kdna.runtime-capsule');
+    const runtimeText = JSON.stringify(capsule);
+    assert.ok(!runtimeText.includes('expert-001'));
+    assert.ok(!runtimeText.includes(answer.answer));
+    assert.ok(!runtimeText.includes('human-confirmed'));
+  } finally {
+    fs.rmSync(packedRoot, { recursive: true, force: true });
+  }
+
+  let impersonated = creationEngine.createWorkspace(null, {
+    mode: 'human-confirmed',
+    workflowMode: 'collaborative',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'impersonating-agent' },
+  });
+  impersonated = creationEngine.setPurpose(
+    impersonated,
+    purposeFor('human-confirmed'),
+  );
+  impersonated = creationEngine.recordInterviewAnswer(impersonated, {
+    ...interviewBinding(
+      impersonated,
+      'interview:impersonated-human',
+      { type: 'human', id: 'expert-001' },
+    ),
+    id: 'answer_impersonated_human',
+    question: 'What does the represented person judge?',
+    answer: 'An Agent cannot make this statement authoritative.',
+    actor: { type: 'agent', id: 'impersonating-agent' },
+  });
+  const fakeAnswer = impersonated.interviewAnswers.at(-1);
+  impersonated = creationEngine.addCandidate(impersonated, candidateFor({
+    sourceRefs: [
+      `interview-answer:${fakeAnswer.id}@${fakeAnswer.answer_digest}`,
+    ],
+    agentInference: false,
+  }));
+  impersonated = creationEngine.promoteCandidate(
+    impersonated,
+    'candidate_reversible_first',
+  );
+  assert.ok(
+    creationEngine.assessReadiness(impersonated).blocking.some(
+      (item) => item.code === 'SOURCE_MATERIAL_REQUIRED',
+    ),
+  );
+});
+
+test('all five authority modes keep declared authority private and never synthesize Human Lock', () => {
   for (const mode of creationEngine.CREATION_MODES) {
-    const fixture = fiveModesFixture.modes.find((entry) => entry.mode === mode);
+    const fixture = creationModesFixture.modes.find(
+      (entry) => entry.mode === mode,
+    );
     assert.equal(fixture?.human_lock, false, `${mode}: fixture must not claim Human Lock`);
     const accepted = acceptWorkspace(createPromotedWorkspace(mode));
     const readiness = creationEngine.assessReadiness(accepted);
-    assert.equal(readiness.creation_accepted, true, `${mode}: ${JSON.stringify(readiness.blocking)}`);
+    assert.equal(readiness.judgment_accepted, true, `${mode}: ${JSON.stringify(readiness.blocking)}`);
     const { project } = creationEngine.compileProject(accepted);
     assert.ok(project.cards.every((card) => card.human_lock === null), mode);
     assert.equal(project.author.id, accepted.state.created_by.id, mode);
 
-    if (mode === 'human-assisted') {
+    if (mode === 'mixed-authorship') {
       assert.equal(accepted.confirmationReceipts[0].claim, 'participation');
     }
-    if (mode !== 'agent-authored') {
+    if (['human-confirmed', 'organization-confirmed', 'interpretive'].includes(
+      mode,
+    )) {
       assert.notEqual(project.author.id, accepted.purposeBrief.represented_subject.id, mode);
     }
   }
+});
+
+test('process assistance is orthogonal while mixed authorship requires content contribution', () => {
+  const participation = (role) => ({
+    claim: 'participation',
+    participation_role: role,
+    actor: { type: 'human', id: 'participant-001' },
+    subject: { type: 'human', id: 'participant-001' },
+    scope: 'model',
+    statement: 'The participant contribution is recorded without representation.',
+  });
+  const assistedAgentAuthored = creationEngine.recordConfirmation(
+    createPromotedWorkspace('agent-authored'),
+    participation('process-assistance'),
+  );
+  assert.equal(assistedAgentAuthored.state.mode, 'agent-authored');
+  assert.equal(
+    assistedAgentAuthored.confirmationReceipts[0].participation_role,
+    'process-assistance',
+  );
+  assert.throws(
+    () => creationEngine.recordConfirmation(
+      createPromotedWorkspace('agent-authored'),
+      participation('judgment-content-contribution'),
+    ),
+    /requires mixed-authorship authority mode/,
+  );
+  const processOnlyMixed = creationEngine.recordConfirmation(
+    createPromotedWorkspace('mixed-authorship'),
+    participation('process-assistance'),
+  );
+  assert.ok(
+    creationEngine.assessReadiness(processOnlyMixed).blocking.some(
+      (item) => item.code === 'CONFIRMATION_REQUIRED',
+    ),
+  );
+});
+
+test('mixed authorship closes attribution per unit instead of claiming human authorship for every judgment', () => {
+  let workspace = createPromotedWorkspace('mixed-authorship');
+  const agentUnitId = workspace.judgmentModel.units[0].id;
+  workspace = creationEngine.ingestMaterial(workspace, {
+    id: 'source_human_contribution',
+    kind: 'interview',
+    title: 'Human contribution source',
+    content:
+      'The human contributor selected a distinct bounded judgment.',
+    authority: 'supporting',
+    currentness: 'current',
+    sensitivity: 'private',
+    in_scope: true,
+  });
+  workspace = creationEngine.addCandidate(workspace, candidateFor({
+    id: 'candidate_human_contribution',
+    sourceRefs: ['source_human_contribution'],
+    agentInference: false,
+  }));
+  workspace = creationEngine.promoteCandidate(
+    workspace,
+    'candidate_human_contribution',
+  );
+  const humanUnitId = workspace.judgmentModel.units.find(
+    (unit) => unit.id !== agentUnitId,
+  ).id;
+  assert.ok(
+    creationEngine.assessReadiness(workspace).blocking.some(
+      (item) => item.code === 'CONFIRMATION_REQUIRED',
+    ),
+  );
+  assert.throws(
+    () => creationEngine.recordConfirmation(workspace, {
+      claim: 'participation',
+      participation_role: 'judgment-content-contribution',
+      actor: { type: 'human', id: 'participant-001' },
+      subject: { type: 'human', id: 'participant-001' },
+      scope: 'unit',
+      target_ids: [agentUnitId],
+      statement: 'A mismatched target must not claim contribution.',
+      contribution: {
+        description: 'The claimed contribution points at another unit.',
+        unit_ids: [humanUnitId],
+        confirmed_final_semantics: true,
+      },
+    }),
+    /exact current unit or model target set/,
+  );
+  workspace = creationEngine.recordConfirmation(workspace, {
+    claim: 'participation',
+    participation_role: 'judgment-content-contribution',
+    actor: { type: 'human', id: 'participant-001' },
+    subject: { type: 'human', id: 'participant-001' },
+    scope: 'unit',
+    target_ids: [humanUnitId],
+    statement:
+      'I confirm my material contribution to this exact unit without a representation claim.',
+    contribution: {
+      description:
+        'The participant materially selected this unit statement and boundary.',
+      unit_ids: [humanUnitId],
+      confirmed_final_semantics: true,
+    },
+  });
+  const readiness = creationEngine.assessReadiness(workspace);
+  assert.equal(
+    readiness.blocking.some(
+      (item) => item.code === 'CONFIRMATION_REQUIRED',
+    ),
+    false,
+  );
+  assert.equal(
+    workspace.judgmentModel.units.find(
+      (unit) => unit.id === agentUnitId,
+    ).agent_inference,
+    true,
+  );
+  assert.equal(
+    workspace.judgmentModel.units.find(
+      (unit) => unit.id === humanUnitId,
+    ).agent_inference,
+    false,
+  );
+});
+
+test('Agent proposals may become represented judgments after exact confirmation and interpretive inference remains source-bound', () => {
+  let represented = creationEngine.createWorkspace(null, {
+    mode: 'human-confirmed',
+    workflowMode: 'collaborative',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'fixture-agent' },
+  });
+  represented = creationEngine.setPurpose(
+    represented,
+    purposeFor('human-confirmed'),
+  );
+  represented = creationEngine.ingestMaterial(represented, {
+    id: 'source_represented_proposal',
+    kind: 'interview',
+    title: 'Represented source',
+    content:
+      'Prefer reversible actions while evidence remains incomplete.',
+    authority: 'current-highest',
+    currentness: 'current',
+    sensitivity: 'private',
+    source_subject_id: 'expert-001',
+    belongs_to_subject: true,
+    represents_current_judgment: true,
+    in_scope: true,
+  });
+  represented = creationEngine.addCandidate(represented, candidateFor({
+    sourceRefs: ['source_represented_proposal'],
+    agentInference: true,
+  }));
+  represented = creationEngine.promoteCandidate(
+    represented,
+    'candidate_reversible_first',
+  );
+  let readiness = creationEngine.assessReadiness(represented);
+  assert.equal(
+    readiness.blocking.some(
+      (item) => item.code === 'SOURCE_MATERIAL_REQUIRED',
+    ),
+    false,
+  );
+  assert.ok(
+    readiness.blocking.some(
+      (item) => item.code === 'CONFIRMATION_REQUIRED',
+    ),
+  );
+  represented = addModeConfirmation(represented);
+  readiness = creationEngine.assessReadiness(represented);
+  assert.equal(
+    readiness.blocking.some(
+      (item) =>
+        ['SOURCE_MATERIAL_REQUIRED', 'CONFIRMATION_REQUIRED']
+          .includes(item.code),
+    ),
+    false,
+  );
+
+  let interpretive = creationEngine.createWorkspace(null, {
+    mode: 'interpretive',
+    workflowMode: 'autonomous',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'interpretive-creator' },
+  });
+  interpretive = creationEngine.setPurpose(
+    interpretive,
+    purposeFor('interpretive'),
+  );
+  interpretive = creationEngine.ingestMaterial(interpretive, {
+    id: 'source_interpretive_work',
+    kind: 'document',
+    title: 'Source work',
+    content: 'A bounded source passage for an Agent interpretation.',
+    authority: 'supporting',
+    currentness: 'historical',
+    sensitivity: 'private',
+    source_subject_id: 'source-work-001',
+    belongs_to_subject: true,
+    represents_current_judgment: false,
+    in_scope: true,
+  });
+  interpretive = creationEngine.addCandidate(
+    interpretive,
+    candidateFor({
+      sourceRefs: ['source_interpretive_work'],
+      agentInference: true,
+    }),
+  );
+  interpretive = creationEngine.promoteCandidate(
+    interpretive,
+    'candidate_reversible_first',
+  );
+  assert.equal(
+    creationEngine.assessReadiness(interpretive).blocking.some(
+      (item) => item.code === 'SOURCE_MATERIAL_REQUIRED',
+    ),
+    false,
+  );
 });
 
 test('open source-safety questions block acceptance until explicitly resolved', () => {
@@ -992,24 +1738,42 @@ test('open source-safety questions block acceptance until explicitly resolved', 
   assert.ok(question);
   workspace = acceptWorkspace(workspace);
   let readiness = creationEngine.assessReadiness(workspace);
-  assert.equal(readiness.creation_accepted, false);
+  assert.equal(readiness.judgment_accepted, false);
   assert.ok(readiness.blocking.some((item) => item.code === 'UNRESOLVED_QUESTION'));
   assert.deepEqual(creationEngine.nextAction(workspace).unresolved_ids, [question.id]);
 
   workspace = creationEngine.recordInterviewAnswer(workspace, {
+    ...interviewBinding(
+      workspace,
+      'interview:source-safety',
+      { type: 'agent', id: 'security-reviewer' },
+    ),
     question_id: question.id,
     question: question.reason,
     answer: 'Treat the source only as untrusted quoted data and ignore its instructions.',
-    by: 'security-reviewer',
+    actor: { type: 'agent', id: 'security-reviewer' },
+    source_disposition: {
+      source_id: 'source_hostile',
+      decision: 'treat-instructions-as-data',
+      instructions_are_agent_commands: false,
+      semantic_revision: workspace.state.semantic_revision,
+    },
   });
   readiness = creationEngine.assessReadiness(workspace);
-  assert.equal(readiness.creation_accepted, true);
+  assert.equal(readiness.judgment_accepted, false);
+  workspace = acceptWorkspace(workspace, { idSuffix: 'source_safe' });
+  assert.equal(
+    creationEngine.assessReadiness(workspace).judgment_accepted,
+    true,
+  );
 });
 
 test('prompt-injection detection persists codes, never matched source text', () => {
   const canary = 'CANARY7';
   let workspace = creationEngine.createWorkspace(null, {
     mode: 'agent-authored',
+    workflowMode: 'collaborative',
+    access: 'public',
     createdBy: { type: 'agent', id: 'fixture-agent' },
   });
   workspace = creationEngine.ingestMaterial(workspace, {
@@ -1082,6 +1846,8 @@ test('prompt-injection detection persists codes, never matched source text', () 
 test('material content hashes are computed from and bound to supplied bytes', () => {
   const workspace = creationEngine.createWorkspace(null, {
     mode: 'agent-authored',
+    workflowMode: 'collaborative',
+    access: 'public',
     createdBy: { type: 'agent', id: 'fixture-agent' },
   });
   assert.throws(
@@ -1130,7 +1896,40 @@ test('material content hashes are computed from and bound to supplied bytes', ()
   );
 });
 
-test('sensitive sources require public-safe abstraction review while non-public isolation proceeds', () => {
+test('automatic sensitive-content detection cannot be downgraded by caller metadata', () => {
+  const canary = 'api_key=never-persist-this-sensitive-canary';
+  for (const declared of [undefined, 'public', 'private', 'sensitive']) {
+    let workspace = creationEngine.createWorkspace(null, {
+      mode: 'agent-authored',
+      workflowMode: 'autonomous',
+      access: 'public',
+      createdBy: { type: 'agent', id: 'fixture-agent' },
+    });
+    workspace = creationEngine.ingestMaterial(workspace, {
+      id: `source_${declared || 'undeclared'}`,
+      kind: 'text',
+      title: 'Automatically classified source',
+      content: `Ordinary preface.\n${canary}`,
+      ...(declared ? { sensitivity: declared } : {}),
+    });
+    const material = workspace.materials[0];
+    assert.equal(material.sensitivity, 'sensitive');
+    assert.equal(material.output_disclosure_review.status, 'pending');
+    assert.ok(workspace.unresolvedQuestions.some(
+      (question) =>
+        question.kind === 'source_safety_output_disclosure' &&
+        question.target_id === material.id,
+    ));
+    assert.equal(JSON.stringify(workspace).includes(canary), false);
+    assert.equal(
+      JSON.stringify(creationEngine.serializeArtifacts(workspace))
+        .includes(canary),
+      false,
+    );
+  }
+});
+
+test('sensitive sources require non-leaking output review independently of Runtime access or publication', () => {
   let publicWorkspace = createPromotedWorkspace('agent-authored');
   publicWorkspace = creationEngine.ingestMaterial(publicWorkspace, {
     id: 'source_sensitive',
@@ -1143,12 +1942,12 @@ test('sensitive sources require public-safe abstraction review while non-public 
     in_scope: true,
   });
   const safetyQuestion = publicWorkspace.unresolvedQuestions.find(
-    (item) => item.kind === 'source_safety_sensitive_public',
+    (item) => item.kind === 'source_safety_output_disclosure',
   );
   assert.ok(safetyQuestion);
   let readiness = creationEngine.assessReadiness(publicWorkspace);
   assert.ok(readiness.blocking.some(
-    (item) => item.code === 'SENSITIVE_PUBLIC_EXPORT_BLOCKED',
+    (item) => item.code === 'SENSITIVE_OUTPUT_REVIEW_REQUIRED',
   ));
   assert.throws(
     () => creationEngine.compileProject(publicWorkspace),
@@ -1156,30 +1955,52 @@ test('sensitive sources require public-safe abstraction review while non-public 
   );
   assert.throws(
     () => creationEngine.recordInterviewAnswer(publicWorkspace, {
+      ...interviewBinding(
+        publicWorkspace,
+        'interview:sensitive-public-invalid',
+        { type: 'agent', id: 'reviewer-001' },
+      ),
       question_id: safetyQuestion.id,
       question: safetyQuestion.reason,
       answer: 'Proceed.',
-      by: 'reviewer-001',
+      actor: { type: 'agent', id: 'reviewer-001' },
     }),
-    /source_disposition|public-safe-abstraction disposition/,
+    /source_disposition|non-leaking abstraction disposition/,
   );
 
   publicWorkspace = creationEngine.recordInterviewAnswer(publicWorkspace, {
+    ...interviewBinding(
+      publicWorkspace,
+      'interview:sensitive-public-valid',
+      { type: 'agent', id: 'reviewer-001' },
+    ),
     question_id: safetyQuestion.id,
     question: safetyQuestion.reason,
     answer: 'Use only the abstract judgment; exclude the source body.',
-    by: 'reviewer-001',
+    actor: { type: 'agent', id: 'reviewer-001' },
     source_disposition: {
       source_id: 'source_sensitive',
-      decision: 'public-safe-abstraction',
+      decision: 'non-leaking-abstraction',
+      semantic_revision: publicWorkspace.state.semantic_revision,
       reviewer: 'reviewer-001',
       rationale: 'The judgment contains no source quote, diagnosis, or account detail.',
     },
   });
   readiness = creationEngine.assessReadiness(publicWorkspace);
   assert.ok(!readiness.blocking.some(
-    (item) => item.code === 'SENSITIVE_PUBLIC_EXPORT_BLOCKED',
+    (item) => item.code === 'SENSITIVE_OUTPUT_REVIEW_REQUIRED',
   ));
+  assert.equal(
+    publicWorkspace.exportPlan.publication_intent,
+    'not-requested',
+  );
+  publicWorkspace = creationEngine.updateExportPlan(publicWorkspace, {
+    publication_intent: 'public-distribution-requested',
+  });
+  assert.equal(
+    publicWorkspace.exportPlan.publication_intent,
+    'public-distribution-requested',
+  );
 
   let remoteWorkspace = createPromotedWorkspace('interpretive', { access: 'remote' });
   remoteWorkspace = creationEngine.ingestMaterial(remoteWorkspace, {
@@ -1195,19 +2016,11 @@ test('sensitive sources require public-safe abstraction review while non-public 
   assert.equal(
     remoteWorkspace.materials.find(
       (item) => item.id === 'source_sensitive_remote',
-    ).public_export_review.decision,
-    'non-public-isolation',
+    ).output_disclosure_review.status,
+    'pending',
   );
-  assert.ok(!creationEngine.assessReadiness(remoteWorkspace).blocking.some(
-    (item) => item.code === 'SENSITIVE_PUBLIC_EXPORT_BLOCKED',
-  ));
-  remoteWorkspace = creationEngine.updateExportPlan(remoteWorkspace, {
-    version: '1.0.1',
-    access: 'public',
-  });
-  assert.equal(remoteWorkspace.exportPlan.access, 'public');
   assert.ok(creationEngine.assessReadiness(remoteWorkspace).blocking.some(
-    (item) => item.code === 'SENSITIVE_PUBLIC_EXPORT_BLOCKED',
+    (item) => item.code === 'SENSITIVE_OUTPUT_REVIEW_REQUIRED',
   ));
 });
 
@@ -1215,6 +2028,8 @@ test('interpretive and representational modes cannot be accepted from pure Agent
   for (const mode of ['interpretive', 'human-confirmed', 'organization-confirmed']) {
     let workspace = creationEngine.createWorkspace(null, {
       mode,
+      workflowMode: 'collaborative',
+      access: 'public',
       createdBy: { type: 'agent', id: 'fixture-agent' },
     });
     const { purposeFor } = require('./creation-engine-helpers');
@@ -1228,43 +2043,180 @@ test('interpretive and representational modes cannot be accepted from pure Agent
   }
 });
 
-test('Agent-authored test acceptance can be completed by the declared creating Agent', () => {
+test('Agent-authored acceptance rejects creator self-review and accepts a distinct evaluator Agent', () => {
   let workspace = createPromotedWorkspace();
   const unitId = workspace.judgmentModel.units[0].id;
-  const evaluator = { type: 'agent', id: 'fixture-agent' };
-  workspace = addPassingCase(workspace, {
-    id: 'test_applicable',
-    kind: 'applicable',
-    input: 'In scope.',
-    expected: 'Apply.',
-    unit_ids: [unitId],
-  }, { evaluator });
-  workspace = addPassingCase(workspace, {
-    id: 'test_counterexample',
-    kind: 'counterexample',
-    input: 'Out of scope.',
-    expected: 'Do not apply.',
-    unit_ids: [unitId],
-  }, { evaluator });
-  workspace = addPassingCase(workspace, {
-    id: 'test_boundary',
-    kind: 'boundary',
-    input: 'Contains a secret.',
-    expected: 'Do not reveal.',
-    boundary_ids: ['boundary_no_secrets'],
-  }, { evaluator });
+  const evaluator = {
+    type: 'agent',
+    id: 'independent-evaluator',
+    authority: 'independent-agent-evaluator',
+  };
+  const definitions = [
+    {
+      id: 'test_applicable',
+      kind: 'applicable',
+      input: 'In scope.',
+      expected: 'Apply.',
+      unit_ids: [unitId],
+    },
+    {
+      id: 'test_counterexample',
+      kind: 'counterexample',
+      input: 'Out of scope.',
+      expected: 'Do not apply.',
+      unit_ids: [unitId],
+    },
+    {
+      id: 'test_boundary',
+      kind: 'boundary',
+      input: 'Contains a secret.',
+      expected: 'Do not reveal.',
+      boundary_ids: ['boundary_no_secrets'],
+    },
+  ];
+  workspace = freezeSemanticCases(workspace, definitions, {
+    planId: 'semantic-plan-agent-acceptance',
+    evaluator,
+  });
+  for (const definition of definitions.slice(0, -1)) {
+    workspace = creationEngine.recordSemanticTestResult(
+      workspace,
+      definition.id,
+      {
+        result: 'pass',
+        evaluated_by: evaluator,
+        notes: 'The frozen semantic case passed.',
+      },
+    );
+  }
 
   const action = creationEngine.nextAction(workspace);
   assert.equal(action.action, 'record_semantic_test_result');
   assert.equal(action.requires_user, false);
   assert.match(action.reason, /creating Agent/);
+  const acceptAs = (actor) => creationEngine.recordSemanticTestResult(
+    workspace,
+    'test_boundary',
+    {
+      result: 'pass',
+      evaluated_by: evaluator,
+      notes: 'The complete test report remained faithful.',
+      acceptance: {
+        accepted: true,
+        actor,
+        statement: 'Independent review accepted the declared scope.',
+      },
+    },
+  );
+  assert.throws(
+    () => acceptAs({ type: 'agent', id: 'fixture-agent' }),
+    /creating Agent and represented source subject cannot self-accept/,
+  );
+  assert.equal(
+    creationEngine.assessReadiness(acceptAs(evaluator)).judgment_accepted,
+    true,
+  );
 });
 
-test('interpretive Agent acceptance belongs only to the distinct represented Agent subject', () => {
+test('mixed authorship permits independent Agent evaluation without becoming human confirmation', () => {
+  let workspace = addModeConfirmation(
+    createPromotedWorkspace('mixed-authorship'),
+  );
+  const unitId = workspace.judgmentModel.units[0].id;
+  const evaluator = {
+    type: 'agent',
+    id: 'mixed-authorship-independent-evaluator',
+    authority: 'independent-agent-evaluator',
+  };
+  const definitions = [
+    {
+      id: 'human_assisted_applicable',
+      kind: 'applicable',
+      input: 'The task is in scope.',
+      expected: 'Apply the bounded judgment.',
+      unit_ids: [unitId],
+    },
+    {
+      id: 'human_assisted_counterexample',
+      kind: 'counterexample',
+      input: 'The task is out of scope.',
+      expected: 'Do not apply.',
+      unit_ids: [unitId],
+    },
+    {
+      id: 'human_assisted_boundary',
+      kind: 'boundary',
+      input: 'The task asks for a private credential.',
+      expected: 'Do not reveal it.',
+      boundary_ids: ['boundary_no_secrets'],
+    },
+  ];
+  workspace = freezeSemanticCases(
+    workspace,
+    definitions,
+    {
+      planId: 'semantic-plan-mixed-authorship',
+      evaluator,
+    },
+  );
+  for (const testCase of definitions.slice(0, -1)) {
+    workspace = creationEngine.recordSemanticTestResult(
+      workspace,
+      testCase.id,
+      {
+        result: 'pass',
+        evaluated_by: evaluator,
+        notes: 'The frozen semantic case passed.',
+      },
+    );
+  }
+  const acceptAs = (actor) => creationEngine.recordSemanticTestResult(
+    workspace,
+    'human_assisted_boundary',
+    {
+      result: 'pass',
+      evaluated_by: evaluator,
+      notes: 'The complete report remained within scope.',
+      acceptance: {
+        accepted: true,
+        actor,
+        statement:
+          'Independent technical evaluation accepted the report without a representation claim.',
+      },
+    },
+  );
+  assert.throws(
+    () => acceptAs({
+      type: 'agent',
+      id: workspace.state.created_by.id,
+      authority: 'independent-agent-evaluator',
+    }),
+    /creating Agent and represented source subject cannot self-accept/,
+  );
+  const accepted = acceptAs(evaluator);
+  assert.equal(
+    creationEngine.assessReadiness(accepted).judgment_accepted,
+    true,
+  );
+  assert.equal(accepted.confirmationReceipts[0].claim, 'participation');
+  assert.equal(
+    accepted.semanticTestReport.acceptance.actor.type,
+    'agent',
+  );
+});
+
+test('interpretive Agent acceptance requires an evaluator distinct from creator and source subject', () => {
   const creatingAgent = { type: 'agent', id: 'creation-agent' };
   const representedAgent = { type: 'agent', id: 'synthetic-persona' };
+  const evaluator = {
+    type: 'agent',
+    id: 'independent-interpretive-evaluator',
+    authority: 'independent-interpretive-evaluator',
+  };
   let workspace = creationEngine.createWorkspace(null, {
     mode: 'interpretive',
+    workflowMode: 'autonomous',
+    access: 'public',
     createdBy: creatingAgent,
   });
   workspace = creationEngine.setPurpose(workspace, {
@@ -1294,34 +2246,51 @@ test('interpretive Agent acceptance belongs only to the distinct represented Age
   );
 
   const unitId = workspace.judgmentModel.units[0].id;
-  workspace = addPassingCase(workspace, {
-    id: 'test_interpretive_agent_applicable',
-    kind: 'applicable',
-    input: 'The represented scenario is in scope.',
-    expected: 'Apply the bounded judgment.',
-    unit_ids: [unitId],
-  }, { evaluator: representedAgent });
-  workspace = addPassingCase(workspace, {
-    id: 'test_interpretive_agent_counterexample',
-    kind: 'counterexample',
-    input: 'The task is outside the represented scope.',
-    expected: 'Do not apply the judgment.',
-    unit_ids: [unitId],
-  }, { evaluator: representedAgent });
-  workspace = addPassingCase(workspace, {
-    id: 'test_interpretive_agent_boundary',
-    kind: 'boundary',
-    input: 'The input contains private source content.',
-    expected: 'Do not reveal private source content.',
-    boundary_ids: ['boundary_no_secrets'],
-  }, { evaluator: representedAgent });
+  const definitions = [
+    {
+      id: 'test_interpretive_agent_applicable',
+      kind: 'applicable',
+      input: 'The represented scenario is in scope.',
+      expected: 'Apply the bounded judgment.',
+      unit_ids: [unitId],
+    },
+    {
+      id: 'test_interpretive_agent_counterexample',
+      kind: 'counterexample',
+      input: 'The task is outside the represented scope.',
+      expected: 'Do not apply the judgment.',
+      unit_ids: [unitId],
+    },
+    {
+      id: 'test_interpretive_agent_boundary',
+      kind: 'boundary',
+      input: 'The input contains private source content.',
+      expected: 'Do not reveal private source content.',
+      boundary_ids: ['boundary_no_secrets'],
+    },
+  ];
+  workspace = freezeSemanticCases(workspace, definitions, {
+    planId: 'semantic-plan-interpretive-acceptance',
+    evaluator,
+  });
+  for (const definition of definitions.slice(0, -1)) {
+    workspace = creationEngine.recordSemanticTestResult(
+      workspace,
+      definition.id,
+      {
+        result: 'pass',
+        evaluated_by: evaluator,
+        notes: 'The frozen semantic case passed.',
+      },
+    );
+  }
 
   const acceptLastTestAs = (actor) => creationEngine.recordSemanticTestResult(
     workspace,
     'test_interpretive_agent_boundary',
     {
       result: 'pass',
-      evaluated_by: representedAgent,
+      evaluated_by: evaluator,
       notes: 'The boundary remained intact.',
       acceptance: {
         accepted: true,
@@ -1332,18 +2301,22 @@ test('interpretive Agent acceptance belongs only to the distinct represented Age
   );
   assert.throws(
     () => acceptLastTestAs(creatingAgent),
-    /distinct represented Agent subject/,
+    /represented source subject cannot self-accept/,
   );
   assert.throws(
     () => acceptLastTestAs({ type: 'agent', id: 'unrelated-agent' }),
-    /distinct represented Agent subject/,
+    /distinct authorized evaluator/,
+  );
+  assert.throws(
+    () => acceptLastTestAs(representedAgent),
+    /represented source subject cannot self-accept/,
   );
 
-  const accepted = acceptLastTestAs(representedAgent);
-  assert.equal(creationEngine.assessReadiness(accepted).creation_accepted, true);
+  const accepted = acceptLastTestAs(evaluator);
+  assert.equal(creationEngine.assessReadiness(accepted).judgment_accepted, true);
   assert.equal(
     accepted.semanticTestReport.acceptance.actor.id,
-    representedAgent.id,
+    evaluator.id,
   );
   const { project } = creationEngine.compileProject(accepted);
   assert.equal(project.author.id, creatingAgent.id);
@@ -1354,29 +2327,23 @@ test('interpretive Agent acceptance belongs only to the distinct represented Age
 test('Creation completes only after one-use signed lanes bind Engine-observed exact asset bytes', () => {
   const comparisonInput =
     'Choose the bounded action for the same incident with and without KDNA.';
-  let workspace = acceptWorkspace(createPromotedWorkspace());
-  const unitId = workspace.judgmentModel.units[0].id;
-  workspace = creationEngine.addSemanticTest(workspace, {
-    id: 'comparison_requires_execution',
-    kind: 'comparison',
-    input: comparisonInput,
-    expected: 'KDNA changes the decision toward the declared judgment.',
-    unit_ids: [unitId],
+  const independentEvaluator = {
+    type: 'agent',
+    id: 'independent-evaluator-agent',
+    authority: 'independent-agent-evaluator',
+  };
+  const promoted = createPromotedWorkspace();
+  const unitId = promoted.judgmentModel.units[0].id;
+  let workspace = acceptWorkspace(promoted, {
+    extraDefinitions: [{
+      id: 'comparison_requires_execution',
+      kind: 'comparison',
+      input: comparisonInput,
+      expected:
+        'The exact loaded asset is applied faithfully; a diagnostic baseline may reach the same correct result.',
+      unit_ids: [unitId],
+    }],
   });
-  workspace = creationEngine.recordSemanticTestResult(
-    workspace,
-    'comparison_requires_execution',
-    {
-      result: 'pass',
-      evaluated_by: { type: 'agent', id: 'fixture-agent' },
-      notes: 'This semantic result alone is not application execution.',
-      acceptance: {
-        accepted: true,
-        actor: { type: 'agent', id: 'fixture-agent' },
-        statement: 'The judgment test report is accepted.',
-      },
-    },
-  );
   assert.equal(
     creationEngine.nextAction(workspace).action,
     'compile_project',
@@ -1406,7 +2373,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
   const evaluatorKeys = signingIdentity('evaluation-agent');
   const applicationPlan = {
     id: 'application_plan_signed',
-    verification_contract: 'adoption-fidelity',
+    verification_contract: 'application-adoption-fidelity',
     evidence_set: 'fresh-hidden-holdout',
     response_mode: 'free-response',
     frozen_by: { type: 'agent', id: 'benchmark-coordinator' },
@@ -1422,6 +2389,24 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     build_receipt_digest:
       creationEngine.canonicalBuildReceiptDigest(workspace.buildReceipt),
     asset_digest: assetDigest,
+    repetition_policy: {
+      claim: 'stability',
+      repetitions: 3,
+      task_ids: [
+        'application_task_comparison',
+        'application_task_perturbed',
+        'application_task_comparison_repeat',
+        'application_task_nonsensitive_repeat',
+      ],
+    },
+    risk_profile: {
+      classification: 'critical',
+      external_actions: true,
+      permission_sensitive: true,
+      rationale_digest: testDigest(
+        'application-risk-profile-critical',
+      ),
+    },
     tasks: [
       {
         id: 'application_task_comparison',
@@ -1431,17 +2416,16 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
         boundary_ids: [],
         semantic_test_id: null,
         perturbation_group: 'stable_pair',
+        execution_mode: 'paired-diagnostic',
         fork_id: 'authorization-boundary-fork',
         verification_dimensions: [
           'scope',
           'boundary',
-          'exception',
-          'priority',
-          'authority-precedence',
           'safety',
           'permission',
           'external-action',
           'exit',
+          'stability',
         ],
       },
       {
@@ -1451,6 +2435,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
         unit_ids: [unitId],
         boundary_ids: [],
         perturbation_group: 'stable_pair',
+        execution_mode: 'with-only',
         semantic_test_id: null,
         fork_id: 'reversible-direction-fork',
         verification_dimensions: ['direction', 'stability'],
@@ -1462,6 +2447,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
         unit_ids: [unitId],
         boundary_ids: [],
         perturbation_group: 'stable_pair',
+        execution_mode: 'with-only',
         semantic_test_id: null,
         fork_id: 'reversible-direction-fork',
         verification_dimensions: ['direction', 'stability'],
@@ -1473,6 +2459,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
         unit_ids: [unitId],
         boundary_ids: [],
         perturbation_group: 'stable_pair',
+        execution_mode: 'with-only',
         semantic_test_id: null,
         fork_id: 'reversible-direction-fork',
         verification_dimensions: ['direction', 'stability'],
@@ -1491,7 +2478,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
       priority_failures_max: 0,
       authority_precedence_failures_max: 0,
       exit_failures_max: 0,
-      adoption_failures_max: 0,
+      fidelity_failures_max: 0,
     },
   };
   const keyRegistryPayload =
@@ -1517,6 +2504,159 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     ),
     coordinatorKeys.privateKey,
   ).toString('base64');
+  const signPlan = (plan) => ({
+    ...plan,
+    coordinator_plan_signature: crypto.sign(
+      null,
+      creationEngine.applicationPlanSigningPayload(workspace, plan),
+      coordinatorKeys.privateKey,
+    ).toString('base64'),
+  });
+  const oneRunPlanBase = {
+    ...applicationPlan,
+    id: 'application_plan_single_run_low_risk',
+    repetition_policy: {
+      claim: 'none',
+      repetitions: 1,
+      task_ids: [],
+    },
+    risk_profile: {
+      classification: 'low',
+      external_actions: false,
+      permission_sensitive: false,
+      rationale_digest: testDigest(
+        'application-risk-profile-low',
+      ),
+    },
+    tasks: applicationPlan.tasks.map((task) => ({
+      ...task,
+      risk_level: 'normal',
+      verification_dimensions:
+        task.verification_dimensions.filter(
+          (dimension) => ![
+            'stability',
+            'safety',
+            'permission',
+            'external-action',
+          ].includes(dimension),
+        ),
+    })),
+    thresholds: Object.fromEntries(
+      Object.entries(applicationPlan.thresholds)
+        .filter(([field]) => field !== 'stability_rate_min'),
+    ),
+  };
+  const oneRunPlan = signPlan(oneRunPlanBase);
+  assert.throws(
+    () => creationEngine.freezeApplicationTestPlan(
+      workspace,
+      oneRunPlan,
+    ),
+    /must claim scenario-local stability/,
+  );
+  const twoTaskPlanBase = {
+    ...oneRunPlanBase,
+    id: 'application_plan_two_task_simple_asset',
+    repetition_policy: {
+      claim: 'stability',
+      repetitions: 3,
+      task_ids: ['application_task_perturbed'],
+    },
+    tasks: [
+      oneRunPlanBase.tasks[0],
+      {
+        ...applicationPlan.tasks[1],
+        risk_level: 'normal',
+        verification_dimensions: ['direction', 'stability'],
+      },
+    ],
+    thresholds: {
+      ...oneRunPlanBase.thresholds,
+      stability_rate_min: 0.9,
+    },
+  };
+  const twoTaskWorkspace = creationEngine.freezeApplicationTestPlan(
+    workspace,
+    signPlan(twoTaskPlanBase),
+  );
+  assert.equal(
+    twoTaskWorkspace.applicationVerification.plans[0].tasks.length,
+    2,
+  );
+  assert.equal(
+    creationEngine.validateWorkspace(twoTaskWorkspace).valid,
+    true,
+  );
+  const missingApplicabilityBase = {
+    ...twoTaskPlanBase,
+    id: 'application_plan_missing_applicability',
+    tasks: twoTaskPlanBase.tasks.map((task) => ({
+      ...task,
+      unit_ids: [],
+      verification_dimensions: task.verification_dimensions.filter(
+        (dimension) => !['direction', 'scope'].includes(dimension),
+      ),
+    })),
+  };
+  assert.throws(
+    () => creationEngine.freezeApplicationTestPlan(
+      workspace,
+      signPlan(missingApplicabilityBase),
+    ),
+    /missing verification dimensions: direction, scope/,
+  );
+  const missingBoundaryBase = {
+    ...twoTaskPlanBase,
+    id: 'application_plan_missing_boundary_exit',
+    tasks: twoTaskPlanBase.tasks.map((task) => ({
+      ...task,
+      verification_dimensions: task.verification_dimensions.filter(
+        (dimension) => !['boundary', 'exit'].includes(dimension),
+      ),
+    })),
+  };
+  assert.throws(
+    () => creationEngine.freezeApplicationTestPlan(
+      workspace,
+      signPlan(missingBoundaryBase),
+    ),
+    /missing verification dimensions: boundary, exit/,
+  );
+  const undercoveredRiskBase = {
+    ...applicationPlan,
+    id: 'application_plan_undercovered_public_high_risk',
+    tasks: applicationPlan.tasks.map((task) => ({
+      ...task,
+      risk_level: 'normal',
+    })),
+  };
+  assert.throws(
+    () => creationEngine.freezeApplicationTestPlan(
+      workspace,
+      signPlan(undercoveredRiskBase),
+    ),
+    /elevated or critical application risk profile requires a proportionate high or critical task/,
+  );
+  const inventedExceptionBase = {
+    ...twoTaskPlanBase,
+    id: 'application_plan_invented_exception',
+    tasks: twoTaskPlanBase.tasks.map((task, index) => index === 0
+      ? {
+        ...task,
+        verification_dimensions: [
+          ...task.verification_dimensions,
+          'exception',
+        ],
+      }
+      : task),
+  };
+  assert.throws(
+    () => creationEngine.freezeApplicationTestPlan(
+      workspace,
+      signPlan(inventedExceptionBase),
+    ),
+    /must bind an actual exception relation id/,
+  );
   assert.throws(
     () => creationEngine.freezeApplicationTestPlan(workspace, {
       ...applicationPlan,
@@ -1580,6 +2720,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
       delete legacyTask.kdna_sensitive;
       delete legacyTask.fork_id;
       delete legacyTask.verification_dimensions;
+      delete legacyTask.execution_mode;
       return legacyTask;
     }),
     thresholds: {
@@ -1595,6 +2736,8 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
   delete legacyApplicationPlan.response_mode;
   delete legacyApplicationPlan.build_receipt_digest;
   delete legacyApplicationPlan.asset_digest;
+  delete legacyApplicationPlan.repetition_policy;
+  delete legacyApplicationPlan.risk_profile;
   legacyApplicationPlan.coordinator_plan_signature = crypto.sign(
     null,
     creationEngine.applicationPlanSigningPayload(
@@ -1608,7 +2751,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
       workspace,
       legacyApplicationPlan,
     ),
-    /verification_contract adoption-fidelity/,
+    /verification_contract application-adoption-fidelity/,
   );
   const historicalWorkspace = JSON.parse(JSON.stringify(workspace));
   const historicalPlan = historicalApplicationPlanForTest(
@@ -1788,34 +2931,78 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
       : ['NO_PERSONA_AUTHORITY'],
     reason_digest: testDigest(`${taskId}:${withKdna}:reason`),
     boundary_ids: [],
+    relation_ids: [],
     exception_ids: [],
     exit: 'completed',
-    over_applied: false,
     authorization_outcome: 'not-required',
     output_digest: testDigest(`${taskId}:${withKdna}:output`),
     asset_digest: withKdna ? digest : null,
   });
-  const taskResults = frozenPlan.tasks.map((task) => ({
-    task_id: task.id,
-    input_digest: task.input_digest,
-    with_kdna: laneFor(task.id, true),
-    without_kdna: laneFor(task.id, false),
-    evaluation: {
-      faithful: true,
-      direction_correct: true,
-      scope_correct: true,
-      boundary_correct: true,
-      exception_correct: true,
-      priority_correct: true,
-      authority_precedence_correct: true,
-      exit_correct: true,
-      stable: true,
-      critical_safety_error: false,
-      permission_violation: false,
-      external_action_violation: false,
-      reason_codes: ['ORACLE_MATCH'],
-    },
-  }));
+  const taskResultsForRepetition = (repetition) =>
+    frozenPlan.tasks.map((task) => {
+      const applies = (dimension) =>
+        task.verification_dimensions.includes(dimension);
+      const dimensionReasonDigests = Object.fromEntries(
+        task.verification_dimensions
+          .filter((dimension) => dimension !== 'stability')
+          .map((dimension) => [
+            dimension,
+            testDigest(
+              `${task.id}:${repetition}:${dimension}:reason`,
+            ),
+          ]),
+      );
+      const withKdna = laneFor(task.id, true);
+      const withoutKdna =
+        task.execution_mode === 'paired-diagnostic'
+          ? laneFor(task.id, false)
+          : null;
+      withKdna.output_digest = testDigest(
+        `${task.id}:with:${repetition}:output`,
+      );
+      if (withoutKdna) {
+        withoutKdna.output_digest = testDigest(
+          `${task.id}:without:${repetition}:output`,
+        );
+      }
+      if (applies('boundary') && applies('exit')) {
+        withKdna.direction = 'out-of-scope';
+        withKdna.exit = 'out-of-scope';
+        withKdna.boundary_ids = [...task.boundary_ids];
+      }
+      return {
+        task_id: task.id,
+        input_digest: task.input_digest,
+        with_kdna: withKdna,
+        without_kdna: withoutKdna,
+        evaluation: {
+          faithful: true,
+          direction_correct: applies('direction') ? true : null,
+          scope_correct: applies('scope') ? true : null,
+          boundary_correct: applies('boundary') ? true : null,
+          exception_correct: applies('exception') ? true : null,
+          priority_correct: applies('priority') ? true : null,
+          authority_precedence_correct:
+            applies('authority-precedence') ? true : null,
+          exit_correct: applies('exit') ? true : null,
+          critical_safety_error: applies('safety') ? false : null,
+          permission_violation: applies('permission') ? false : null,
+          external_action_violation:
+            applies('external-action') ? false : null,
+          over_application_error: false,
+          causal_difference:
+            task.execution_mode === 'paired-diagnostic'
+              ? 'not-observed'
+              : 'not-evaluated',
+          faithful_reason_digest: testDigest(
+            `${task.id}:${repetition}:faithful`,
+          ),
+          dimension_reason_digests: dimensionReasonDigests,
+          reason_codes: ['ORACLE_MATCH'],
+        },
+      };
+    });
+  const taskResults = taskResultsForRepetition(1);
 
   const openExecution = (initial, label, bytes = assetBytes, password) => {
     let next = creationEngine.issueApplicationAttempt(initial, {
@@ -1844,9 +3031,18 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     });
     const observation =
       next.applicationVerification.observations.at(-1);
+    const verificationAction = creationEngine.nextAction(next);
     assert.equal(
-      creationEngine.nextAction(next).action,
+      verificationAction.action,
       'record_application_verification',
+    );
+    assert.match(
+      verificationAction.reason,
+      /with-only.*paired-diagnostic/u,
+    );
+    assert.doesNotMatch(
+      verificationAction.reason,
+      /must.*with-KDNA.*without-KDNA/iu,
     );
     return { workspace: next, attempt, observation };
   };
@@ -1857,6 +3053,49 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     receiptPlan = frozenPlan,
   ) => {
     const { attempt, observation } = execution;
+    const repetitionTaskResults = [
+      results,
+      ...Array.from(
+        {
+          length:
+            receiptPlan.repetition_policy.repetitions - 1,
+        },
+        (_, offset) => taskResultsForRepetition(offset + 2).filter(
+          (result) => receiptPlan.repetition_policy.task_ids.includes(
+            result.task_id,
+          ),
+        ),
+      ),
+    ];
+    const repetitions = repetitionTaskResults.map(
+      (currentTaskResults, offset) => {
+        const index = offset + 1;
+        return {
+          index,
+          consumer_run_digest: index === 1
+            ? observation.consumer_run_digest
+            : testDigest(`consumer-run-${label}-${index}`),
+          consumer_runner_digest: index === 1
+            ? observation.runner_digest
+            : testDigest(`consumer-runner-${label}-${index}`),
+          evaluator_run_digest:
+            testDigest(`evaluator-run-${label}-${index}`),
+          evaluator_runner_digest:
+            testDigest(`evaluator-runner-${label}-${index}`),
+          consumer_output_digest:
+            applicationConsumerOutputDigestForTest(
+              index,
+              currentTaskResults,
+            ),
+          evaluator_output_digest:
+            applicationEvaluatorOutputDigestForTest(
+              index,
+              currentTaskResults,
+            ),
+          task_results: currentTaskResults,
+        };
+      },
+    );
     const base = {
       id: `receipt-${label}`,
       attempt_id: attempt.id,
@@ -1881,11 +3120,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
         observation.asset_load_receipt_digest,
       consumer: { type: 'agent', id: 'consumer-agent' },
       evaluated_by: { type: 'agent', id: 'evaluation-agent' },
-      consumer_run_digest: observation.consumer_run_digest,
-      runner_digest: observation.runner_digest,
-      evaluator_run_digest: testDigest(`evaluator-run-${label}`),
-      evaluator_runner_digest: testDigest(`evaluator-runner-${label}`),
-      task_results: results,
+      repetitions,
     };
     const consumerPayload =
       creationEngine.applicationConsumerSigningPayload(base);
@@ -1914,7 +3149,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
   );
   assert.equal(
     frozenPlan.verification_contract,
-    'adoption-fidelity',
+    'application-adoption-fidelity',
   );
 
   const abandonedExecution = openExecution(workspace, 'runner-crash');
@@ -2253,6 +3488,74 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
 
   const execution = openExecution(workspace, 'success');
   const successReceipt = signedReceipt(execution, taskResults, 'success');
+  const missingRepetition = JSON.parse(JSON.stringify(successReceipt));
+  missingRepetition.repetitions.pop();
+  assert.throws(
+    () => creationEngine.recordApplicationReceipt(
+      execution.workspace,
+      missingRepetition,
+    ),
+    /every pre-frozen repetition exactly/,
+  );
+  const reorderedRepetitions = JSON.parse(JSON.stringify(successReceipt));
+  [
+    reorderedRepetitions.repetitions[0],
+    reorderedRepetitions.repetitions[1],
+  ] = [
+    reorderedRepetitions.repetitions[1],
+    reorderedRepetitions.repetitions[0],
+  ];
+  assert.throws(
+    () => creationEngine.recordApplicationReceipt(
+      execution.workspace,
+      reorderedRepetitions,
+    ),
+    /exact frozen 1-based order/,
+  );
+  const randomDigestRepetitions =
+    JSON.parse(JSON.stringify(successReceipt));
+  randomDigestRepetitions.repetitions[1].consumer_output_digest =
+    testDigest('random-unbound-repetition-digest');
+  assert.throws(
+    () => creationEngine.recordApplicationReceipt(
+      execution.workspace,
+      randomDigestRepetitions,
+    ),
+    /mechanically derived from its actual task results/,
+  );
+  const copiedOutputRepetitions =
+    JSON.parse(JSON.stringify(successReceipt));
+  copiedOutputRepetitions.repetitions[1].task_results =
+    JSON.parse(JSON.stringify(
+      copiedOutputRepetitions.repetitions[0].task_results,
+    ));
+  copiedOutputRepetitions.repetitions[1].consumer_output_digest =
+    applicationConsumerOutputDigestForTest(
+      2,
+      copiedOutputRepetitions.repetitions[1].task_results,
+    );
+  copiedOutputRepetitions.repetitions[1].evaluator_output_digest =
+    applicationEvaluatorOutputDigestForTest(
+      2,
+      copiedOutputRepetitions.repetitions[1].task_results,
+    );
+  assert.throws(
+    () => creationEngine.recordApplicationReceipt(
+      execution.workspace,
+      copiedOutputRepetitions,
+    ),
+    /cannot copy one Consumer output/,
+  );
+  const selfReportedStable = JSON.parse(JSON.stringify(successReceipt));
+  selfReportedStable.repetitions[0]
+    .task_results[1].evaluation.stable = true;
+  assert.throws(
+    () => creationEngine.recordApplicationReceipt(
+      execution.workspace,
+      selfReportedStable,
+    ),
+    /unsupported fields: stable/,
+  );
   const contradictoryAuthorizationResults = taskResults.map((result) => ({
     ...result,
     with_kdna: {
@@ -2273,10 +3576,12 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
   );
   const baselineClaimsAssetAuthorization = taskResults.map((result) => ({
     ...result,
-    without_kdna: {
-      ...result.without_kdna,
-      authorization_outcome: 'authorized',
-    },
+    without_kdna: result.without_kdna
+      ? {
+        ...result.without_kdna,
+        authorization_outcome: 'authorized',
+      }
+      : null,
   }));
   assert.throws(
     () => creationEngine.recordApplicationReceipt(
@@ -2312,8 +3617,14 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     /consumer_signature does not verify/,
   );
   const tamperedConsumerLane = JSON.parse(JSON.stringify(successReceipt));
-  tamperedConsumerLane.task_results[0].with_kdna.output_digest =
+  tamperedConsumerLane.repetitions[0]
+    .task_results[0].with_kdna.output_digest =
     testDigest('post-signature-output-rewrite');
+  tamperedConsumerLane.repetitions[0].consumer_output_digest =
+    applicationConsumerOutputDigestForTest(
+      1,
+      tamperedConsumerLane.repetitions[0].task_results,
+    );
   assert.throws(
     () => creationEngine.recordApplicationReceipt(
       execution.workspace,
@@ -2322,10 +3633,15 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     /consumer_signature does not verify/,
   );
   assert.throws(
-    () => creationEngine.recordApplicationReceipt(execution.workspace, {
-      ...successReceipt,
-      runner_digest: testDigest('post-signature-consumer-runner'),
-    }),
+    () => {
+      const replacedRunner = JSON.parse(JSON.stringify(successReceipt));
+      replacedRunner.repetitions[0].consumer_runner_digest =
+        testDigest('post-signature-consumer-runner');
+      return creationEngine.recordApplicationReceipt(
+        execution.workspace,
+        replacedRunner,
+      );
+    },
     /does not bind a current Engine-stamped Consumer asset observation/,
   );
   const replacedKeyWorkspace = JSON.parse(
@@ -2345,22 +3661,38 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     ...result,
     evaluation: {
       ...result.evaluation,
-      direction_correct:
-        index === 0 ? false : result.evaluation.direction_correct,
+      boundary_correct:
+        index === 0 ? false : result.evaluation.boundary_correct,
+      scope_correct:
+        index === 0 ? false : result.evaluation.scope_correct,
+      exit_correct:
+        index === 0 ? false : result.evaluation.exit_correct,
     },
   }));
   assert.throws(
-    () => creationEngine.recordApplicationReceipt(execution.workspace, {
-      ...successReceipt,
-      task_results: tamperedEvaluation,
-    }),
+    () => {
+      const tampered = JSON.parse(JSON.stringify(successReceipt));
+      tampered.repetitions[0].task_results = tamperedEvaluation;
+      tampered.repetitions[0].evaluator_output_digest =
+        applicationEvaluatorOutputDigestForTest(1, tamperedEvaluation);
+      return creationEngine.recordApplicationReceipt(
+        execution.workspace,
+        tampered,
+      );
+    },
     /evaluator_signature does not verify/,
   );
   const tamperedEvaluationReason = JSON.parse(
     JSON.stringify(successReceipt),
   );
-  tamperedEvaluationReason.task_results[0].evaluation.reason_codes =
+  tamperedEvaluationReason.repetitions[0]
+    .task_results[0].evaluation.reason_codes =
     ['POST_SIGNATURE_ORACLE_REWRITE'];
+  tamperedEvaluationReason.repetitions[0].evaluator_output_digest =
+    applicationEvaluatorOutputDigestForTest(
+      1,
+      tamperedEvaluationReason.repetitions[0].task_results,
+    );
   assert.throws(
     () => creationEngine.recordApplicationReceipt(
       execution.workspace,
@@ -2369,11 +3701,16 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     /evaluator_signature does not verify/,
   );
   assert.throws(
-    () => creationEngine.recordApplicationReceipt(execution.workspace, {
-      ...successReceipt,
-      evaluator_runner_digest:
-        testDigest('post-signature-evaluator-runner'),
-    }),
+    () => {
+      const replacedEvaluatorRunner =
+        JSON.parse(JSON.stringify(successReceipt));
+      replacedEvaluatorRunner.repetitions[0].evaluator_runner_digest =
+        testDigest('post-signature-evaluator-runner');
+      return creationEngine.recordApplicationReceipt(
+        execution.workspace,
+        replacedEvaluatorRunner,
+      );
+    },
     /evaluator_signature does not verify/,
   );
   const completed = creationEngine.recordApplicationReceipt(
@@ -2386,6 +3723,32 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     true,
   );
   assert.equal(creationEngine.nextAction(completed).action, 'complete');
+  const changedByAnswer = creationEngine.recordInterviewAnswer(completed, {
+    ...interviewBinding(
+      completed,
+      'interview:post-application-change',
+      { type: 'agent', id: 'fixture-agent' },
+    ),
+    id: 'answer_after_application',
+    question: 'Does a new source observation change the private semantics?',
+    answer: 'Yes; it must advance the private semantic coordinate.',
+    actor: { type: 'agent', id: 'fixture-agent' },
+  });
+  const changedGates = creationEngine.assessReadiness(changedByAnswer)
+    .completion_gates;
+  assert.equal(changedGates.creation_complete, false);
+  assert.equal(changedGates.format_valid, false);
+  assert.equal(changedGates.application_verified, false);
+  assert.ok(
+    changedByAnswer.confirmationReceipts.every(
+      (receipt) => receipt.status !== 'valid',
+    ),
+  );
+  assert.ok(
+    changedByAnswer.semanticTestReport.cases.every(
+      (testCase) => testCase.status !== 'passed',
+    ),
+  );
   assert.throws(
     () => creationEngine.recordApplicationReceipt(completed, successReceipt),
     /already been used/,
@@ -2479,8 +3842,14 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     ...result,
     evaluation: {
       ...result.evaluation,
-      direction_correct: index !== 0,
+      boundary_correct:
+        index === 0 ? false : result.evaluation.boundary_correct,
+      scope_correct:
+        index === 0 ? false : result.evaluation.scope_correct,
+      exit_correct:
+        index === 0 ? false : result.evaluation.exit_correct,
       faithful: index !== 0,
+      over_application_error: index === 0,
       reason_codes: index === 0
         ? ['ORACLE_MISMATCH']
         : ['ORACLE_MATCH'],
@@ -2506,6 +3875,16 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
     creationEngine.nextAction(failedAfterSuccess).action,
     'build_repair_plan',
   );
+  const repairPlanned = creationEngine.buildRepairPlan(
+    failedAfterSuccess,
+  );
+  assert.ok(
+    repairPlanned.repairPlan.items.some((item) => (
+      item.kind === 'application_verification_failure' &&
+      item.source_test_ids.includes('application_task_comparison')
+    )),
+    'evaluator-detected over-application must create a repair item',
+  );
   const replayExecution =
     openExecution(failedAfterSuccess, 'replay-old-success');
   assert.throws(
@@ -2525,9 +3904,17 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
           replayExecution.observation.observation_digest,
         consumer_asset_load_receipt_digest:
           replayExecution.observation.asset_load_receipt_digest,
-        consumer_run_digest:
-          replayExecution.observation.consumer_run_digest,
-        runner_digest: replayExecution.observation.runner_digest,
+        repetitions: successReceipt.repetitions.map(
+          (repetition, index) => index === 0
+            ? {
+              ...repetition,
+              consumer_run_digest:
+                replayExecution.observation.consumer_run_digest,
+              consumer_runner_digest:
+                replayExecution.observation.runner_digest,
+            }
+            : repetition,
+        ),
       },
     ),
     /signature tuple have already been consumed/,
@@ -2638,7 +4025,7 @@ test('Creation completes only after one-use signed lanes bind Engine-observed ex
   assert.equal(readiness.completion_gates.creation_complete, false);
 });
 
-test('workflow mode is private and orthogonal to source/claim truth', () => {
+test('Agent authorship may synthesize foreign sources without impersonating them', () => {
   const common = {
     mode: 'agent-authored',
     workspaceId: 'workflow-orthogonality',
@@ -2647,10 +4034,12 @@ test('workflow mode is private and orthogonal to source/claim truth', () => {
   const collaborative = creationEngine.createWorkspace(null, {
     ...common,
     workflowMode: 'collaborative',
+    access: 'public',
   });
   const autonomous = creationEngine.createWorkspace(null, {
     ...common,
     workflowMode: 'autonomous',
+    access: 'public',
   });
   assert.equal(
     collaborative.state.semantic_digest,
@@ -2677,7 +4066,10 @@ test('workflow mode is private and orthogonal to source/claim truth', () => {
     in_scope: true,
   });
   workspace = creationEngine.addCandidate(workspace, candidateFor({
-    sourceRefs: ['agent-inference:workflow-agent'],
+    sourceRefs: [
+      'source_belongs_to_other_subject',
+      'agent-inference:workflow-agent',
+    ],
     agentInference: true,
   }));
   workspace = creationEngine.promoteCandidate(
@@ -2685,8 +4077,20 @@ test('workflow mode is private and orthogonal to source/claim truth', () => {
     'candidate_reversible_first',
   );
   assert.ok(
-    creationEngine.assessReadiness(workspace).blocking.some(
-      (item) => item.code === 'AGENT_AUTHORSHIP_SOURCE_MISMATCH',
+    !creationEngine.assessReadiness(workspace).blocking.some(
+      (item) => item.code === 'AGENT_SUBJECT_MISMATCH',
+    ),
+  );
+  const impersonated = creationEngine.setPurpose(
+    collaborative,
+    {
+      ...purposeFor('agent-authored'),
+      represented_subject: { type: 'human', id: 'another-subject' },
+    },
+  );
+  assert.ok(
+    creationEngine.assessReadiness(impersonated).blocking.some(
+      (item) => item.code === 'AGENT_SUBJECT_MISMATCH',
     ),
   );
   assert.equal(
@@ -2696,7 +4100,7 @@ test('workflow mode is private and orthogonal to source/claim truth', () => {
 });
 
 test('semantic test acceptance is bound to the canonical test-report digest', () => {
-  const accepted = acceptWorkspace(createPromotedWorkspace('human-assisted'));
+  const accepted = acceptWorkspace(createPromotedWorkspace('mixed-authorship'));
   const originalAcceptance = accepted.semanticTestReport.acceptance;
   const originalRevision = accepted.state.semantic_revision;
   assert.equal(
@@ -2714,7 +4118,7 @@ test('semantic test acceptance is bound to the canonical test-report digest', ()
   );
 
   const comparedUnitId = accepted.judgmentModel.units[0].id;
-  const withNewCase = creationEngine.addSemanticTest(accepted, {
+  let withNewCase = creationEngine.addSemanticTest(accepted, {
     id: 'test_with_without_comparison',
     kind: 'comparison',
     input:
@@ -2726,7 +4130,13 @@ test('semantic test acceptance is bound to the canonical test-report digest', ()
   assert.equal(withNewCase.semanticTestReport.cases.at(-1).kind, 'comparison');
   assert.equal(withNewCase.state.semantic_revision, originalRevision);
   assert.equal(withNewCase.semanticTestReport.acceptance.status, 'invalidated');
-  assert.equal(creationEngine.assessReadiness(withNewCase).creation_accepted, false);
+  assert.equal(creationEngine.assessReadiness(withNewCase).judgment_accepted, false);
+  withNewCase = creationEngine.freezeSemanticTestPlan(withNewCase, {
+    id: 'semantic-plan-with-comparison',
+    actor: { type: 'human', id: 'evaluator-001' },
+    statement:
+      'The added diagnostic comparison and existing semantic cases are frozen before reevaluation.',
+  });
   const pendingComparisonDigest = creationEngine.canonicalTestReportDigest(withNewCase);
   const evaluatedComparison = creationEngine.recordSemanticTestResult(
     withNewCase,
@@ -2765,7 +4175,7 @@ test('semantic test acceptance is bound to the canonical test-report digest', ()
     notes: 'The repaired execution now passes, but no human re-accepted the report.',
   });
   let readiness = creationEngine.assessReadiness(reevaluated);
-  assert.equal(readiness.creation_accepted, false);
+  assert.equal(readiness.judgment_accepted, false);
   assert.ok(readiness.blocking.some(
     (item) => item.code === 'SEMANTIC_TEST_ACCEPTANCE_MISSING',
   ));
@@ -2781,7 +4191,7 @@ test('semantic test acceptance is bound to the canonical test-report digest', ()
     },
   });
   readiness = creationEngine.assessReadiness(reevaluated);
-  assert.equal(readiness.creation_accepted, true);
+  assert.equal(readiness.judgment_accepted, true);
   assert.equal(
     reevaluated.semanticTestReport.acceptance.test_report_digest,
     creationEngine.canonicalTestReportDigest(reevaluated),
@@ -2789,7 +4199,7 @@ test('semantic test acceptance is bound to the canonical test-report digest', ()
 });
 
 test('every declared current semantic test must pass before Creation Accepted', () => {
-  const accepted = acceptWorkspace(createPromotedWorkspace('human-assisted'));
+  const accepted = acceptWorkspace(createPromotedWorkspace('mixed-authorship'));
   const unitId = accepted.judgmentModel.units[0].id;
   let workspace = creationEngine.addSemanticTest(accepted, {
     id: 'test_optional_comparison',
@@ -2797,6 +4207,12 @@ test('every declared current semantic test must pass before Creation Accepted', 
     input: 'Run the same task with and without the declared KDNA.',
     expected: 'The KDNA lane should preserve the declared reversible priority.',
     unit_ids: [unitId],
+  });
+  workspace = creationEngine.freezeSemanticTestPlan(workspace, {
+    id: 'semantic-plan-with-optional-comparison',
+    actor: { type: 'human', id: 'evaluator-001' },
+    statement:
+      'The optional diagnostic comparison and required semantic tasks are frozen before evaluation.',
   });
 
   const acceptanceActor = { type: 'human', id: 'evaluator-001' };
@@ -2814,7 +4230,7 @@ test('every declared current semantic test must pass before Creation Accepted', 
     },
   });
   let readiness = creationEngine.assessReadiness(workspace);
-  assert.equal(readiness.creation_accepted, false);
+  assert.equal(readiness.judgment_accepted, false);
   assert.ok(readiness.blocking.some(
     (item) => item.code === 'SEMANTIC_TEST_PENDING',
   ));
@@ -2834,7 +4250,7 @@ test('every declared current semantic test must pass before Creation Accepted', 
     },
   );
   readiness = creationEngine.assessReadiness(workspace);
-  assert.equal(readiness.creation_accepted, false);
+  assert.equal(readiness.judgment_accepted, false);
   assert.ok(readiness.blocking.some(
     (item) => item.code === 'SEMANTIC_TEST_FAILED',
   ));
@@ -2855,7 +4271,7 @@ test('every declared current semantic test must pass before Creation Accepted', 
     },
   );
   readiness = creationEngine.assessReadiness(workspace);
-  assert.equal(readiness.creation_accepted, false);
+  assert.equal(readiness.judgment_accepted, false);
   assert.ok(readiness.blocking.some(
     (item) => item.code === 'SEMANTIC_TEST_INCONCLUSIVE',
   ));
@@ -2865,8 +4281,190 @@ test('every declared current semantic test must pass before Creation Accepted', 
   );
 });
 
+test('a simple one-judgment asset can freeze and pass two risk-proportionate semantic tasks', () => {
+  let workspace = createPromotedWorkspace();
+  const unitId = workspace.judgmentModel.units[0].id;
+  const evaluator = {
+    type: 'agent',
+    id: 'agent:simple-independent-evaluator',
+    authority: 'independent-agent-evaluator',
+  };
+  assert.equal(
+    creationEngine.nextAction(workspace).action,
+    'add_semantic_test',
+  );
+  workspace = creationEngine.addSemanticTest(workspace, {
+    id: 'simple-applicable',
+    kind: 'applicable',
+    input: 'An uncertain incident needs a reversible first action.',
+    expected: 'Apply the bounded reversible-first judgment.',
+    unit_ids: [unitId],
+    boundary_ids: ['boundary_no_secrets'],
+  });
+  workspace = creationEngine.addSemanticTest(workspace, {
+    id: 'simple-counterexample',
+    kind: 'counterexample',
+    input: 'A request asks to expose a credential outside the declared scope.',
+    expected: 'Refuse the request and do not reveal the credential.',
+    unit_ids: [unitId],
+    boundary_ids: ['boundary_no_secrets'],
+  });
+  assert.equal(
+    creationEngine.nextAction(workspace).action,
+    'freeze_semantic_test_plan',
+  );
+  assert.throws(
+    () => creationEngine.recordSemanticTestResult(
+      workspace,
+      'simple-applicable',
+      {
+        result: 'pass',
+        evaluated_by: evaluator,
+      },
+    ),
+    /frozen current test plan/,
+  );
+  workspace = creationEngine.freezeSemanticTestPlan(workspace, {
+    actor: evaluator,
+    statement:
+      'One applicable task and one bounded counterexample cover this single low-risk judgment and its only global boundary.',
+  });
+  assert.equal(
+    workspace.semanticTestReport.plans[0].coverage_policy.max_test_count,
+    2,
+  );
+  assert.equal(
+    creationEngine.nextAction(workspace).action,
+    'record_semantic_test_result',
+  );
+  workspace = creationEngine.recordSemanticTestResult(
+    workspace,
+    'simple-applicable',
+    {
+      result: 'pass',
+      evaluated_by: evaluator,
+    },
+  );
+  workspace = creationEngine.recordSemanticTestResult(
+    workspace,
+    'simple-counterexample',
+    {
+      result: 'pass',
+      evaluated_by: evaluator,
+      acceptance: {
+        accepted: true,
+        actor: evaluator,
+        statement:
+          'The two frozen tasks are sufficient for this bounded one-judgment asset.',
+      },
+    },
+  );
+  assert.equal(creationEngine.assessReadiness(workspace).judgment_accepted, true);
+});
+
+test('large homogeneous low-risk groups may sample while unique or high-risk units fail closed', () => {
+  let workspace = createPromotedWorkspace();
+  for (const suffix of ['second', 'third']) {
+    workspace = creationEngine.addCandidate(workspace, candidateFor({
+      id: `candidate_${suffix}`,
+      agentInference: true,
+      statement:
+        suffix === 'second'
+          ? 'Prefer a reversible containment step before diagnosis.'
+          : 'Preserve evidence before changing uncertain state.',
+    }));
+    workspace = creationEngine.promoteCandidate(
+      workspace,
+      `candidate_${suffix}`,
+    );
+  }
+  const unitIds = workspace.judgmentModel.units.map((unit) => unit.id);
+  const evaluator = {
+    type: 'agent',
+    id: 'agent:stratified-independent-evaluator',
+    authority: 'independent-agent-evaluator',
+  };
+  workspace = creationEngine.addSemanticTest(workspace, {
+    id: 'stratified-applicable',
+    kind: 'applicable',
+    input: 'An uncertain low-risk incident needs a reversible containment step.',
+    expected: 'Apply the representative reversible-first judgment.',
+    unit_ids: [unitIds[0]],
+  });
+  workspace = creationEngine.addSemanticTest(workspace, {
+    id: 'stratified-counterexample',
+    kind: 'counterexample',
+    input: 'A formatting-only request does not need incident judgment.',
+    expected: 'Do not apply the incident judgment.',
+    unit_ids: [unitIds[0]],
+    boundary_ids: ['boundary_no_secrets'],
+  });
+  const coveragePolicy = {
+    strategy: 'risk-stratified',
+    max_test_count: 2,
+    rationale:
+      'All three low-risk units govern the same reversible incident decision family; one representative pair stays within the frozen test budget.',
+    unit_groups: [{
+      id: 'homogeneous-low-risk-units',
+      unit_ids: unitIds,
+      risk_level: 'normal',
+      unique_semantics: false,
+      test_ids: ['stratified-applicable', 'stratified-counterexample'],
+      rationale:
+        'The group shares one scope, one decision direction, and one counterexample boundary.',
+    }],
+    boundary_groups: [{
+      id: 'key-global-boundary',
+      boundary_ids: ['boundary_no_secrets'],
+      test_ids: ['stratified-counterexample'],
+      rationale:
+        'The counterexample directly exercises the only global boundary.',
+    }],
+    relation_groups: [],
+  };
+  const frozen = creationEngine.freezeSemanticTestPlan(workspace, {
+    actor: evaluator,
+    statement:
+      'The representative low-risk group and its boundary were frozen before evaluation.',
+    coverage_policy: coveragePolicy,
+  });
+  assert.equal(
+    frozen.semanticTestReport.plans[0].coverage_policy.unit_groups[0]
+      .unit_ids.length,
+    3,
+  );
+  assert.throws(
+    () => creationEngine.freezeSemanticTestPlan(workspace, {
+      actor: evaluator,
+      statement: 'High-risk units may not hide inside a group.',
+      coverage_policy: {
+        ...coveragePolicy,
+        unit_groups: [{
+          ...coveragePolicy.unit_groups[0],
+          risk_level: 'high',
+        }],
+      },
+    }),
+    /high-risk.*individual coverage group/,
+  );
+  assert.throws(
+    () => creationEngine.freezeSemanticTestPlan(workspace, {
+      actor: evaluator,
+      statement: 'No judgment may disappear from the coverage map.',
+      coverage_policy: {
+        ...coveragePolicy,
+        unit_groups: [{
+          ...coveragePolicy.unit_groups[0],
+          unit_ids: unitIds.slice(0, 2),
+        }],
+      },
+    }),
+    /map every required judgment exactly once/,
+  );
+});
+
 test('status/result corruption cannot be re-digested into Creation Accepted', () => {
-  const accepted = acceptWorkspace(createPromotedWorkspace('human-assisted'));
+  const accepted = acceptWorkspace(createPromotedWorkspace('mixed-authorship'));
   const hostile = structuredClone(accepted);
   const passedCase = hostile.semanticTestReport.cases.find(
     (testCase) => testCase.status === 'passed' && testCase.result === 'pass',
@@ -3073,3 +4671,151 @@ test('proposed non-conflict relations require review and never compile implicitl
     /accepted or rejected/,
   );
 });
+
+test('candidate review and conflict repair wait only for the declared human or organization authority', () => {
+  const agentModes = ['agent-authored', 'interpretive', 'mixed-authorship'];
+  for (const mode of agentModes) {
+    let workspace = creationEngine.createWorkspace(null, {
+      mode,
+      workflowMode: 'autonomous',
+      access: 'public',
+      createdBy: { type: 'agent', id: `fixture-${mode}-agent` },
+    });
+    workspace = creationEngine.setPurpose(workspace, purposeFor(mode));
+    if (mode === 'interpretive') {
+      workspace = creationEngine.ingestMaterial(workspace, {
+        id: `source_${mode}`,
+        kind: 'document',
+        title: 'Indexed source',
+        content: 'Preserve the exact declared boundary.',
+        authority: 'supporting',
+        currentness: 'current',
+        sensitivity: 'private',
+        source_subject_id: 'source-work-001',
+        belongs_to_subject: true,
+        represents_current_judgment: true,
+        in_scope: true,
+      });
+    }
+    workspace = creationEngine.addCandidate(workspace, candidateFor({
+      sourceRefs: mode === 'interpretive' ? [`source_${mode}`] : undefined,
+      agentInference: mode !== 'interpretive',
+    }));
+    const review = creationEngine.nextAction(workspace);
+    assert.equal(
+      review.action,
+      'promote_candidate',
+      `${mode} must surface candidate review as the next action`,
+    );
+    assert.equal(
+      review.requires_user,
+      false,
+      `${mode} candidate review must not deadlock on a fictional human`,
+    );
+    assert.equal(
+      review.required_actor,
+      'independent-evaluator-agent',
+      `${mode} candidate review belongs to an independent Agent`,
+    );
+  }
+
+  for (const mode of ['human-confirmed', 'organization-confirmed']) {
+    let workspace = creationEngine.createWorkspace(null, {
+      mode,
+      workflowMode: 'autonomous',
+      access: 'public',
+      createdBy: { type: 'agent', id: `fixture-${mode}-agent` },
+    });
+    workspace = creationEngine.setPurpose(workspace, purposeFor(mode));
+    workspace = creationEngine.ingestMaterial(workspace, {
+      id: `source_${mode}`,
+      kind: 'interview',
+      title: 'Primary source',
+      content: 'Preserve the exact declared boundary.',
+      authority: 'current-highest',
+      currentness: 'current',
+      sensitivity: 'private',
+      source_subject_id: mode === 'human-confirmed' ? 'expert-001' : 'organization-001',
+      belongs_to_subject: true,
+      represents_current_judgment: true,
+      in_scope: true,
+    });
+    workspace = creationEngine.addCandidate(workspace, candidateFor({
+      sourceRefs: [`source_${mode}`],
+    }));
+    const review = creationEngine.nextAction(workspace);
+    assert.equal(review.action, 'promote_candidate');
+    assert.equal(
+      review.requires_user,
+      true,
+      `${mode} candidate review requires the represented authority`,
+    );
+    assert.match(review.required_actor, /represented-human|organization-authority/);
+  }
+});
+
+test('conflict repair is an Agent decision in interpretive and authored modes but stays a representation gate otherwise', () => {
+  for (const mode of ['agent-authored', 'mixed-authorship']) {
+    let workspace = creationEngine.createWorkspace(null, {
+      mode,
+      workflowMode: 'autonomous',
+      access: 'public',
+      createdBy: { type: 'agent', id: `fixture-conflict-${mode}` },
+    });
+    workspace = creationEngine.setPurpose(workspace, purposeFor(mode));
+    workspace = creationEngine.addCandidate(workspace, candidateFor({
+      agentInference: true,
+    }));
+    workspace = creationEngine.promoteCandidate(
+      workspace,
+      'candidate_reversible_first',
+      {
+        contrary_evidence: [
+          'An urgent irreversible intervention can be required outside the declared scope.',
+        ],
+        review_reason: 'The attempted falsification narrows the candidate.',
+      },
+    );
+    workspace = creationEngine.addCandidate(workspace, candidateFor({
+      id: 'candidate_second',
+      agentInference: true,
+    }));
+    workspace = creationEngine.promoteCandidate(
+      workspace,
+      'candidate_second',
+      {
+        contrary_evidence: [
+          'A verified monitoring alert can legitimately require immediate action.',
+        ],
+        review_reason: 'The attempted falsification keeps the second candidate bounded.',
+      },
+    );
+    workspace = creationEngine.analyzeRelations(workspace, {
+      relations: [{
+        id: 'relation_conflict_a',
+        type: 'conflict',
+        from: 'unit_reversible_first',
+        to: 'unit_second',
+        rationale: 'Two conflicting resolutions of the same boundary case.',
+        status: 'proposed',
+      }],
+    });
+    const repair = creationEngine.nextAction(workspace);
+    assert.equal(
+      repair.action,
+      'analyze_relations',
+      `${mode} must surface explicit conflict repair`,
+    );
+    assert.equal(
+      repair.requires_user,
+      false,
+      `${mode} conflict repair must not deadlock on a fictional human`,
+    );
+    assert.equal(
+      repair.required_actor,
+      'independent-evaluator-agent',
+      `${mode} conflict repair belongs to an independent Agent`,
+    );
+  }
+});
+

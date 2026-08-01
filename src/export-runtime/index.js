@@ -216,7 +216,6 @@ function buildPayload(compiled) {
   const reasoning = parseJsonFile(compiled.files, 'KDNA_Reasoning.json', { reasoning_chains: [] });
   const evolution = parseJsonFile(compiled.files, 'KDNA_Evolution.json', { changelog: [], version_notes: [] });
 
-  const firstAxiom = Array.isArray(core.axioms) ? core.axioms[0] : null;
   // Bug (2026-06-28 audit follow-up): prior buildPayload omitted every
   // type that compile added after the original 6-type launch — aesthetics,
   // frameworks, term / banned_term, ontology — and additionally mis-mapped
@@ -229,10 +228,6 @@ function buildPayload(compiled) {
     profile: PAYLOAD_PROFILE,
     profile_version: PAYLOAD_PROFILE_VERSION,
     core: {
-      highest_question:
-        core.highest_question ||
-        firstAxiom?.one_sentence ||
-        '(unset — author should set highest_question in judgment_core)',
       ...pickJudgmentCore(core),
       axioms: Array.isArray(core.axioms) ? core.axioms : [],
       ontology: Array.isArray(core.ontology) ? core.ontology : [],
