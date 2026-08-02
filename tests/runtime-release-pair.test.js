@@ -50,13 +50,10 @@ test('release dependency graph binds the exact Core candidate and has no Runtime
     [[
       '@aikdna/kdna-core',
       '0.21.0',
-      '1b919605988eb514f2491195d6a77b96b17151c4',
+      '32aa3ff8e633291d4bb9e01de5a70181c8415d93',
     ]],
   );
-  assert.throws(
-    () => assertRegistryReleaseReady(path.resolve(__dirname, '..')),
-    /still candidate-bound/,
-  );
+  assert.doesNotThrow(() => assertRegistryReleaseReady(path.resolve(__dirname, '..')));
 });
 
 test('blank authoring project reaches current Core LoadPlan and Runtime Capsule', (t) => {
