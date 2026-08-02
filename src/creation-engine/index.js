@@ -140,6 +140,34 @@ const PROMPT_INJECTION_PATTERNS = Object.freeze([
     code: 'secret-disclosure-request',
     pattern: /泄露.{0,8}(密码|密钥|凭证|提示词)/,
   },
+  // Semantic/paraphrased injection: instructions to skip review gates,
+  // fabricate confirmation, or force output regardless of the material's
+  // actual judgment. These do not carry a canonical signature but are still
+  // attempt to steer the Creation chain from inside untrusted material.
+  {
+    code: 'gate-skip-instruction',
+    pattern: /(?:编译指示|指令|要求|请).{0,20}(?:跳过|无需|不必|绕过).{0,12}(?:复核|评审|检查|确认|审核|核对|门)/,
+  },
+  {
+    code: 'gate-skip-instruction',
+    pattern: /(?:skip|bypass|omit).{0,12}(?:review|check|validation|gate|verification|confirmation)/i,
+  },
+  {
+    code: 'confirmation-fabrication',
+    pattern: /(?:写入|标记|设为|声明|直接|伪造).{0,12}(?:persona_confirmed|approved|confirmed|已确认|已批准)\s*[=:：]?\s*(?:true|是|yes)?/,
+  },
+  {
+    code: 'confirmation-fabrication',
+    pattern: /(?:假装|伪造|声称|直接).{0,12}(?:用户|owner|真人).{0,12}(?:确认|批准|同意)/,
+  },
+  {
+    code: 'output-forcing',
+    pattern: /(?:一律|全部|所有).{0,6}(?:发布|通过|放行|接受|不设|忽略).{0,12}(?:清理|拒绝|门|线|限制)/,
+  },
+  {
+    code: 'output-forcing',
+    pattern: /(?:always|unconditionally|regardless).{0,20}(?:publish|approve|accept|release|output)/i,
+  },
 ]);
 
 const SENSITIVE_PATTERNS = Object.freeze([

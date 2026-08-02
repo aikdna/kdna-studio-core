@@ -151,7 +151,10 @@
         "developer-message-reference",
         "identity-reassignment",
         "instruction-refusal",
-        "secret-disclosure-request"
+        "secret-disclosure-request",
+        "gate-skip-instruction",
+        "confirmation-fabrication",
+        "output-forcing"
       ]
     },
     "Digest": {
