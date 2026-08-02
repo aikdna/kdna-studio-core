@@ -5,10 +5,10 @@ package is a source migration, not a drop-in package rename.
 
 The registry coordinates verified by this repository are:
 
-| Coordinate | Role | Runtime requirement |
-|---|---|---|
-| `@aikdna/studio-core@1.2.1` | Historical package | Node.js 18 or later; `@aikdna/kdna-core` `^0.3.0`; peer `@aikdna/kdna-cli` 0.16.0 or later |
-| `@aikdna/kdna-studio-core@2.0.2` | Maintained package | Node.js 18 or later; exact `@aikdna/kdna-core@0.20.0` |
+| Coordinate                       | Role               | Runtime requirement                                                                        |
+| -------------------------------- | ------------------ | ------------------------------------------------------------------------------------------ |
+| `@aikdna/studio-core@1.2.1`      | Historical package | Node.js 18 or later; `@aikdna/kdna-core` `^0.3.0`; peer `@aikdna/kdna-cli` 0.16.0 or later |
+| `@aikdna/kdna-studio-core@2.0.2` | Maintained package | Node.js 18 or later; exact `@aikdna/kdna-core@0.20.0`                                      |
 
 The old registry tarball does not contain
 `studio-schemas/studio.project.schema.json`, although its main entry point
@@ -42,7 +42,7 @@ const {
   cards,
   compile,
   exportRuntime,
-} = require('@aikdna/kdna-studio-core');
+} = require("@aikdna/kdna-studio-core");
 ```
 
 ## Required application changes
@@ -55,12 +55,12 @@ do not update the input object. Assign the return value and replace any card
 already stored in a project:
 
 ```js
-const studioProject = project.createProject('writing_judgment');
-let card = cards.createCard('axiom', fields);
-card = cards.transitionCard(card, 'revised', { by: 'expert_001' });
+const studioProject = project.createProject("writing_judgment");
+let card = cards.createCard("axiom", fields);
+card = cards.transitionCard(card, "revised", { by: "expert_001" });
 card = cards.lockCard(card, {
-  by: 'expert_001',
-  statement: 'I confirm this judgment.',
+  by: "expert_001",
+  statement: "I confirm this judgment.",
   checked: {
     applies_when: true,
     does_not_apply_when: true,
@@ -83,7 +83,7 @@ reconstruct invalid legacy records explicitly:
 ```js
 const result = project.validateProject(storedProject);
 if (!result.valid) {
-  throw new Error(result.issues.join('\n'));
+  throw new Error(result.issues.join("\n"));
 }
 
 const loaded = project.loadProject(storedProject);

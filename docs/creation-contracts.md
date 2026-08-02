@@ -26,13 +26,13 @@ remain private Studio state.
 
 `mode` describes judgment authority:
 
-| Mode | Permitted claim | Acceptance boundary |
-|---|---|---|
-| `agent-authored` | The declared Agent authored the bounded judgments | A distinct independent Agent evaluator or an eligible non-Agent may accept |
-| `human-confirmed` | A named human represents the current judgment | That human confirms the exact current semantic digest |
-| `organization-confirmed` | An authorized actor represents an organization | Matching subject, scope, authority, and current-digest confirmation |
-| `interpretive` | The asset is a bounded interpretation of named sources | Source-grounded independent evaluation; never represents the source author |
-| `mixed-authorship` | Human and Agent both made substantive judgment-content contributions | Unit-scoped contribution evidence; the human confirms only the human-contributed current content |
+| Mode                     | Permitted claim                                                      | Acceptance boundary                                                                              |
+| ------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `agent-authored`         | The declared Agent authored the bounded judgments                    | A distinct independent Agent evaluator or an eligible non-Agent may accept                       |
+| `human-confirmed`        | A named human represents the current judgment                        | That human confirms the exact current semantic digest                                            |
+| `organization-confirmed` | An authorized actor represents an organization                       | Matching subject, scope, authority, and current-digest confirmation                              |
+| `interpretive`           | The asset is a bounded interpretation of named sources               | Source-grounded independent evaluation; never represents the source author                       |
+| `mixed-authorship`       | Human and Agent both made substantive judgment-content contributions | Unit-scoped contribution evidence; the human confirms only the human-contributed current content |
 
 Human participation or assistance is a receipt, not an authority mode.
 Creating and evaluating Agents must be distinct where independent Agent

@@ -1,12 +1,13 @@
 ---
 name: Feature Request
 about: Suggest an improvement
-title: '[feat]: '
+title: "[feat]: "
 labels: enhancement
-assignees: ''
+assignees: ""
 ---
 
 ## Problem
+
 What problem does this solve?
 
 ## Proposed Solution

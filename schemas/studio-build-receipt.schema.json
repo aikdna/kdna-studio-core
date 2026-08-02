@@ -28,12 +28,21 @@
     "build_id": { "type": "string", "minLength": 1 },
     "domain_id": { "type": "string", "minLength": 1 },
     "registry_name": { "type": ["string", "null"] },
-    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$" },
-    "judgment_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$" },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$"
+    },
+    "judgment_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$"
+    },
     "content_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "asset_digest": { "type": "null" },
     "compiler": { "const": "@aikdna/kdna-studio-core" },
-    "compiler_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$" },
+    "compiler_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$"
+    },
     "signature_status": { "type": "string", "minLength": 1 },
     "encryption_profile": {
       "oneOf": [
@@ -42,10 +51,7 @@
       ]
     },
     "encryption_profile_version": {
-      "oneOf": [
-        { "type": "null" },
-        { "const": "0.1.0" }
-      ]
+      "oneOf": [{ "type": "null" }, { "const": "0.1.0" }]
     },
     "built_at": { "type": "string", "format": "date-time" }
   },

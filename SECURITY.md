@@ -17,11 +17,11 @@ chance to address it.
 
 We actively support the latest mainline release for security updates.
 
-| Component | Supported Versions |
-|-----------|-------------------|
-| KDNA Protocol | Latest tagged release in `aikdna/kdna` |
-| kdna-studio-core | Latest mainline release |
-| kdna-cli | Latest minor release |
+| Component        | Supported Versions                     |
+| ---------------- | -------------------------------------- |
+| KDNA Protocol    | Latest tagged release in `aikdna/kdna` |
+| kdna-studio-core | Latest mainline release                |
+| kdna-cli         | Latest minor release                   |
 
 Older versions may receive critical security patches on a case-by-case basis.
 

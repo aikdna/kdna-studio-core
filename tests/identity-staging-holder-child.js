@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 // Live staging-owner fixture for tests/creator-identity.test.js. Not a test.
 //
@@ -12,12 +12,12 @@
 // no matter how old the directory is made to look — and that it is reclaimed
 // once the owner is dead.
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
 const parentDir = process.argv[2];
 if (!parentDir) {
-  process.stderr.write('usage: identity-staging-holder-child.js <parentDir>\n');
+  process.stderr.write("usage: identity-staging-holder-child.js <parentDir>\n");
   process.exit(2);
 }
 
@@ -26,9 +26,19 @@ const stagingDir = path.join(parentDir, stagingName);
 fs.mkdirSync(stagingDir, { mode: 0o700 });
 // A provable transaction remnant: only identity-file names, a subset of the
 // canonical three-file set.
-fs.writeFileSync(path.join(stagingDir, 'kdna.key'), 'held-private-key-placeholder', { mode: 0o600 });
-fs.writeFileSync(path.join(stagingDir, 'kdna.pub'), 'held-public-key-placeholder', { mode: 0o644 });
-fs.writeFileSync(path.join(parentDir, '.holder-ready'), stagingName, { mode: 0o644 });
+fs.writeFileSync(
+  path.join(stagingDir, "kdna.key"),
+  "held-private-key-placeholder",
+  { mode: 0o600 },
+);
+fs.writeFileSync(
+  path.join(stagingDir, "kdna.pub"),
+  "held-public-key-placeholder",
+  { mode: 0o644 },
+);
+fs.writeFileSync(path.join(parentDir, ".holder-ready"), stagingName, {
+  mode: 0o644,
+});
 
 // Stay alive until the parent kills us.
 setInterval(() => {}, 1 << 30);

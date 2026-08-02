@@ -43,14 +43,14 @@ const AUTHORITY_RANK = {
 };
 
 function isPlainObject(v) {
-  return v !== null && typeof v === 'object' && !Array.isArray(v);
+  return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
 function runSagGate(sourceAuthority, opts = {}) {
   const strict = !!opts.strict;
   const result = {
-    gate: 'source_authority',
-    status: 'skipped',
+    gate: "source_authority",
+    status: "skipped",
     errors: [],
     warnings: [],
     source_authority: sourceAuthority || null,
@@ -58,33 +58,40 @@ function runSagGate(sourceAuthority, opts = {}) {
   };
 
   if (!isPlainObject(sourceAuthority)) {
-    result.status = 'skipped';
-    result.warnings.push('No source_authority.json provided; SAG gate skipped.');
+    result.status = "skipped";
+    result.warnings.push(
+      "No source_authority.json provided; SAG gate skipped.",
+    );
     return result;
   }
 
   // R1. precedence_order references must be valid source ids.
-  const sources = Array.isArray(sourceAuthority.sources) ? sourceAuthority.sources : [];
+  const sources = Array.isArray(sourceAuthority.sources)
+    ? sourceAuthority.sources
+    : [];
   const sourceIds = new Set();
   for (const s of sources) {
-    if (isPlainObject(s) && typeof s.id === 'string') {
+    if (isPlainObject(s) && typeof s.id === "string") {
       sourceIds.add(s.id);
     }
   }
-  const order = Array.isArray(sourceAuthority.precedence_order) ? sourceAuthority.precedence_order : [];
+  const order = Array.isArray(sourceAuthority.precedence_order)
+    ? sourceAuthority.precedence_order
+    : [];
   const missing = order.filter((id) => !sourceIds.has(id));
   if (missing.length > 0) {
-    const msg = `source_authority.json: precedence_order references unknown source id(s): ${missing.join(', ')}.`;
+    const msg = `source_authority.json: precedence_order references unknown source id(s): ${missing.join(", ")}.`;
     if (strict) result.errors.push(msg);
     else result.warnings.push(msg);
   }
 
   // R2. At least one current_highest source.
   const highest = sources.filter(
-    (s) => isPlainObject(s) && s.authority === 'current_highest',
+    (s) => isPlainObject(s) && s.authority === "current_highest",
   );
   if (highest.length === 0) {
-    const msg = 'source_authority.json: no source has authority "current_highest"; at least one current_highest source is required to establish current authority.';
+    const msg =
+      'source_authority.json: no source has authority "current_highest"; at least one current_highest source is required to establish current authority.';
     if (strict) result.errors.push(msg);
     else result.warnings.push(msg);
   }
@@ -92,17 +99,17 @@ function runSagGate(sourceAuthority, opts = {}) {
   // R3. authority/status consistency.
   for (const s of sources) {
     if (!isPlainObject(s)) continue;
-    if (s.authority === 'deprecated' && s.status !== 'deprecated') {
+    if (s.authority === "deprecated" && s.status !== "deprecated") {
       const msg = `source_authority.json: source "${s.id}" has authority "deprecated" but status is "${s.status}"; status MUST be "deprecated" when authority is "deprecated".`;
       if (strict) result.errors.push(msg);
       else result.warnings.push(msg);
     }
-    if (s.authority === 'current_highest' && s.status !== 'active') {
+    if (s.authority === "current_highest" && s.status !== "active") {
       const msg = `source_authority.json: source "${s.id}" has authority "current_highest" but status is "${s.status}"; status MUST be "active" for current_highest sources.`;
       if (strict) result.errors.push(msg);
       else result.warnings.push(msg);
     }
-    if (s.authority === 'deprecated' && order.includes(s.id)) {
+    if (s.authority === "deprecated" && order.includes(s.id)) {
       const msg = `source_authority.json: deprecated source "${s.id}" appears in precedence_order; deprecated sources cannot be authoritative precursors.`;
       if (strict) result.errors.push(msg);
       else result.warnings.push(msg);
@@ -114,7 +121,11 @@ function runSagGate(sourceAuthority, opts = {}) {
   if (order.length > 0 && highest.length > 0) {
     const firstHighestIdx = Math.min(
       ...order
-        .map((id, i) => ({ id, i, isHighest: highest.some((h) => h.id === id) }))
+        .map((id, i) => ({
+          id,
+          i,
+          isHighest: highest.some((h) => h.id === id),
+        }))
         .filter((e) => e.isHighest)
         .map((e) => e.i),
     );
@@ -137,18 +148,21 @@ function runSagGate(sourceAuthority, opts = {}) {
 
   // R5. PII without consent is a soft warning only.
   const sensitivity = sourceAuthority.sensitivity || {};
-  if (sensitivity.sources_contain_pii === true && sensitivity.author_consent_on_file !== true) {
+  if (
+    sensitivity.sources_contain_pii === true &&
+    sensitivity.author_consent_on_file !== true
+  ) {
     result.warnings.push(
-      'source_authority.json: sensitivity.sources_contain_pii is true but author_consent_on_file is not true; recording author consent is recommended before publishing.',
+      "source_authority.json: sensitivity.sources_contain_pii is true but author_consent_on_file is not true; recording author consent is recommended before publishing.",
     );
   }
 
   if (result.errors.length > 0) {
-    result.status = 'fail';
+    result.status = "fail";
   } else if (result.warnings.length > 0) {
-    result.status = 'warn';
+    result.status = "warn";
   } else {
-    result.status = 'pass';
+    result.status = "pass";
   }
   return result;
 }

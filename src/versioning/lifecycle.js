@@ -9,26 +9,26 @@
  *   5. Preserve regression evidence across version upgrades
  */
 
-const crypto = require('crypto');
+const crypto = require("crypto");
 
 // ── Lifecycle States ──────────────────────────────────────────────────
 
 const LIFECYCLE_STATES = [
-  'draft',           // Not yet published
-  'published',       // Publicly available
-  'deprecated',      // Still available but replaced/superseded
-  'removed',         // No longer available — removed from distribution
-  'revoked',         // Removed for trust/security reasons
+  "draft", // Not yet published
+  "published", // Publicly available
+  "deprecated", // Still available but replaced/superseded
+  "removed", // No longer available — removed from distribution
+  "revoked", // Removed for trust/security reasons
 ];
 
 /**
  * Create a lifecycle record for an asset.
  */
-function createLifecycle(assetId, initialVersion = '0.1.0') {
+function createLifecycle(assetId, initialVersion = "0.1.0") {
   return {
     asset_id: assetId,
     current_version: initialVersion,
-    state: 'draft',
+    state: "draft",
     versions: [],
     created_at: new Date().toISOString(),
   };
@@ -38,20 +38,24 @@ function createLifecycle(assetId, initialVersion = '0.1.0') {
  * Record a new published version. Links to previous version in lineage.
  */
 function publishVersion(lifecycle, version, digest, diff, changelog) {
-  const previousVersion = lifecycle.versions.length > 0
-    ? lifecycle.versions[lifecycle.versions.length - 1] : null;
+  const previousVersion =
+    lifecycle.versions.length > 0
+      ? lifecycle.versions[lifecycle.versions.length - 1]
+      : null;
 
   const entry = {
     version,
-    digest: digest || 'sha256:' + crypto.randomBytes(32).toString('hex'),
+    digest: digest || "sha256:" + crypto.randomBytes(32).toString("hex"),
     published_at: new Date().toISOString(),
     previous_version: previousVersion?.version || null,
-    diff: diff ? {
-      added: diff.added?.length || 0,
-      removed: diff.removed?.length || 0,
-      changed: diff.changed?.length || 0,
-      bump: diff.summary ? 'recorded' : 'unknown',
-    } : null,
+    diff: diff
+      ? {
+          added: diff.added?.length || 0,
+          removed: diff.removed?.length || 0,
+          changed: diff.changed?.length || 0,
+          bump: diff.summary ? "recorded" : "unknown",
+        }
+      : null,
     changelog: changelog || null,
     regression_evidence: null,
     deprecation: null,
@@ -59,7 +63,7 @@ function publishVersion(lifecycle, version, digest, diff, changelog) {
 
   lifecycle.versions.push(entry);
   lifecycle.current_version = version;
-  lifecycle.state = 'published';
+  lifecycle.state = "published";
 
   return entry;
 }
@@ -68,51 +72,51 @@ function publishVersion(lifecycle, version, digest, diff, changelog) {
  * Deprecate a version with a replacement pointer.
  */
 function deprecateVersion(lifecycle, version, opts = {}) {
-  const entry = lifecycle.versions.find(v => v.version === version);
+  const entry = lifecycle.versions.find((v) => v.version === version);
   if (!entry) throw new Error(`Version ${version} not found in lifecycle`);
 
   entry.deprecation = {
     deprecated_at: new Date().toISOString(),
     replaced_by: opts.replacedBy || null,
-    reason: opts.reason || 'No longer recommended',
+    reason: opts.reason || "No longer recommended",
     removal_date: opts.removalDate || null,
     migration_guide: opts.migrationGuide || null,
   };
 
-  lifecycle.state = 'deprecated';
+  lifecycle.state = "deprecated";
   return entry;
 }
 
 /**
  * Remove a version from distribution.
  */
-function removeVersion(lifecycle, version, reason = '') {
-  const entry = lifecycle.versions.find(v => v.version === version);
+function removeVersion(lifecycle, version, reason = "") {
+  const entry = lifecycle.versions.find((v) => v.version === version);
   if (!entry) throw new Error(`Version ${version} not found in lifecycle`);
 
   entry.removal = {
     removed_at: new Date().toISOString(),
-    reason: reason || 'Removed from distribution',
+    reason: reason || "Removed from distribution",
   };
 
-  lifecycle.state = 'removed';
+  lifecycle.state = "removed";
   return entry;
 }
 
 /**
  * Revoke a version (trust/security).
  */
-function revokeVersion(lifecycle, version, reason = '') {
-  const entry = lifecycle.versions.find(v => v.version === version);
+function revokeVersion(lifecycle, version, reason = "") {
+  const entry = lifecycle.versions.find((v) => v.version === version);
   if (!entry) throw new Error(`Version ${version} not found in lifecycle`);
 
   entry.revocation = {
     revoked_at: new Date().toISOString(),
-    reason: reason || 'Revoked for trust or security reasons',
+    reason: reason || "Revoked for trust or security reasons",
     advisory_url: null,
   };
 
-  lifecycle.state = 'revoked';
+  lifecycle.state = "revoked";
   return entry;
 }
 
@@ -127,23 +131,23 @@ function revokeVersion(lifecycle, version, reason = '') {
  * number (patch bump) to distinguish the rollback event.
  */
 function rollbackToVersion(lifecycle, targetVersion, opts = {}) {
-  const target = lifecycle.versions.find(v => v.version === targetVersion);
+  const target = lifecycle.versions.find((v) => v.version === targetVersion);
   if (!target) throw new Error(`Target version ${targetVersion} not found`);
 
   const current = lifecycle.versions[lifecycle.versions.length - 1];
-  if (!current) throw new Error('No current version to rollback from');
+  if (!current) throw new Error("No current version to rollback from");
 
   const rolledBackVersion = opts.newVersion || bumpPatch(current.version);
 
   const entry = {
     version: rolledBackVersion,
-    digest: target.digest,  // same content as rollback target
+    digest: target.digest, // same content as rollback target
     published_at: new Date().toISOString(),
     previous_version: current.version,
     rollback: {
       from_version: current.version,
       to_version: targetVersion,
-      reason: opts.reason || 'Rollback requested',
+      reason: opts.reason || "Rollback requested",
     },
     changelog: `Rollback from ${current.version} to content of ${targetVersion}`,
     regression_evidence: null,
@@ -155,7 +159,7 @@ function rollbackToVersion(lifecycle, targetVersion, opts = {}) {
 }
 
 function bumpPatch(version) {
-  const parts = version.split('.').map(Number);
+  const parts = version.split(".").map(Number);
   return `${parts[0]}.${parts[1]}.${(parts[2] || 0) + 1}`;
 }
 
@@ -167,7 +171,7 @@ function bumpPatch(version) {
  * on previously passing fixture cases.
  */
 function attachRegressionEvidence(lifecycle, version, evidence) {
-  const entry = lifecycle.versions.find(v => v.version === version);
+  const entry = lifecycle.versions.find((v) => v.version === version);
   if (!entry) throw new Error(`Version ${version} not found`);
 
   entry.regression_evidence = {
@@ -178,8 +182,12 @@ function attachRegressionEvidence(lifecycle, version, evidence) {
     fixtures_total: evidence.fixturesTotal || 0,
     regressions: evidence.regressions || [],
     assay_result: evidence.assayResult || null,
-    evidence_digest: 'sha256:' + crypto.createHash('sha256')
-      .update(JSON.stringify(evidence)).digest('hex'),
+    evidence_digest:
+      "sha256:" +
+      crypto
+        .createHash("sha256")
+        .update(JSON.stringify(evidence))
+        .digest("hex"),
   };
 
   return entry;
@@ -191,16 +199,16 @@ function attachRegressionEvidence(lifecycle, version, evidence) {
  * Get the recommended update path for a user on oldVersion.
  */
 function getUpdatePath(lifecycle, oldVersion) {
-  const idx = lifecycle.versions.findIndex(v => v.version === oldVersion);
+  const idx = lifecycle.versions.findIndex((v) => v.version === oldVersion);
   if (idx < 0) return { error: `Version ${oldVersion} not found in lifecycle` };
 
   const latest = lifecycle.versions[lifecycle.versions.length - 1];
   const isLatest = oldVersion === latest.version;
   const updatesSince = lifecycle.versions.slice(idx + 1);
 
-  const breakingUpdates = updatesSince.filter(v => {
-    const bump = v.diff?.bump || 'patch';
-    return bump === 'major';
+  const breakingUpdates = updatesSince.filter((v) => {
+    const bump = v.diff?.bump || "patch";
+    return bump === "major";
   });
 
   return {
@@ -210,22 +218,26 @@ function getUpdatePath(lifecycle, oldVersion) {
     updates_available: updatesSince.length,
     breaking_updates: breakingUpdates.length,
     requires_major_upgrade: breakingUpdates.length > 0,
-    recommended: isLatest ? 'none' :
-      breakingUpdates.length > 0 ? 'review_breaking_changes' :
-      'update_available',
-    update_chain: updatesSince.map(v => ({
+    recommended: isLatest
+      ? "none"
+      : breakingUpdates.length > 0
+        ? "review_breaking_changes"
+        : "update_available",
+    update_chain: updatesSince.map((v) => ({
       version: v.version,
       published_at: v.published_at,
       changelog: v.changelog,
-      is_breaking: v.diff?.bump === 'major',
+      is_breaking: v.diff?.bump === "major",
       is_rollback: !!v.rollback,
       is_deprecated: !!v.deprecation,
     })),
-    rollback_available: lifecycle.versions.filter(v => v.version !== latest.version && !v.revocation).map(v => ({
-      version: v.version,
-      published_at: v.published_at,
-      is_deprecated: !!v.deprecation,
-    })),
+    rollback_available: lifecycle.versions
+      .filter((v) => v.version !== latest.version && !v.revocation)
+      .map((v) => ({
+        version: v.version,
+        published_at: v.published_at,
+        is_deprecated: !!v.deprecation,
+      })),
     deprecation: latest.deprecation || null,
   };
 }
@@ -250,7 +262,7 @@ function verifyEvidenceContinuity(lifecycle) {
         from_version: prev.version,
         to_version: curr.version,
         issue: `Version ${prev.version} had regression evidence but ${curr.version} does not — evidence gap`,
-        severity: 'warn',
+        severity: "warn",
       });
     }
   }
@@ -259,8 +271,12 @@ function verifyEvidenceContinuity(lifecycle) {
     continuous: gaps.length === 0,
     gaps,
     total_versions: lifecycle.versions.length,
-    versions_with_evidence: lifecycle.versions.filter(v => v.regression_evidence).length,
-    versions_without_evidence: lifecycle.versions.filter(v => !v.regression_evidence).length,
+    versions_with_evidence: lifecycle.versions.filter(
+      (v) => v.regression_evidence,
+    ).length,
+    versions_without_evidence: lifecycle.versions.filter(
+      (v) => !v.regression_evidence,
+    ).length,
   };
 }
 

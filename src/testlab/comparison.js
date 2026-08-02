@@ -9,28 +9,33 @@
 
 const COMPARISON_ARMS = {
   no_kdna: {
-    label: 'No KDNA',
-    description: 'Runner receives only the task — no KDNA content. Measures raw model judgment quality.',
-    prompt_template: 'Task: {task}\n\nPlease provide your best judgment.',
-    budget_profile: 'interactive',
+    label: "No KDNA",
+    description:
+      "Runner receives only the task — no KDNA content. Measures raw model judgment quality.",
+    prompt_template: "Task: {task}\n\nPlease provide your best judgment.",
+    budget_profile: "interactive",
   },
   best_ordinary_prompt: {
-    label: 'Best Ordinary Prompt',
-    description: 'Runner receives the best non-KDNA prompt under comparable budget. The prompt may include role, context, and guidelines but no KDNA judgment axioms.',
-    prompt_template: 'You are an expert in {task_family}. Task: {task}\n\nProvide a structured judgment with reasoning, confidence, and alternatives.',
-    budget_profile: 'interactive',
+    label: "Best Ordinary Prompt",
+    description:
+      "Runner receives the best non-KDNA prompt under comparable budget. The prompt may include role, context, and guidelines but no KDNA judgment axioms.",
+    prompt_template:
+      "You are an expert in {task_family}. Task: {task}\n\nProvide a structured judgment with reasoning, confidence, and alternatives.",
+    budget_profile: "interactive",
   },
   correct_single_kdna: {
-    label: 'Correct KDNA',
-    description: 'Runner receives the selected KDNA asset with the declared projection. Records a named evaluator comparison without treating preference as an intrinsic asset property.',
+    label: "Correct KDNA",
+    description:
+      "Runner receives the selected KDNA asset with the declared projection. Records a named evaluator comparison without treating preference as an intrinsic asset property.",
     prompt_template: null, // Uses kdna load --profile=compact --as=prompt
-    budget_profile: 'code-review',
+    budget_profile: "code-review",
   },
   wrong_or_adjacent_kdna: {
-    label: 'Wrong/Adjacent KDNA',
-    description: 'Runner receives a semantically adjacent but incorrect KDNA asset. Tests whether the model correctly ignores or adapts irrelevant judgment axioms.',
+    label: "Wrong/Adjacent KDNA",
+    description:
+      "Runner receives a semantically adjacent but incorrect KDNA asset. Tests whether the model correctly ignores or adapts irrelevant judgment axioms.",
     prompt_template: null, // Uses a deliberately mismatched KDNA asset
-    budget_profile: 'code-review',
+    budget_profile: "code-review",
   },
 };
 
@@ -41,7 +46,7 @@ const COMPARISON_ARMS = {
  * @param {string} taskFamily — task family label
  * @returns {object} comparison plan
  */
-function buildComparisonPlan(fixtures = [], taskFamily = '') {
+function buildComparisonPlan(fixtures = [], taskFamily = "") {
   const arms = Object.entries(COMPARISON_ARMS).map(([id, config]) => ({
     arm_id: id,
     ...config,
@@ -51,12 +56,12 @@ function buildComparisonPlan(fixtures = [], taskFamily = '') {
   }));
 
   return {
-    plan_version: '0.9.0',
+    plan_version: "0.9.0",
     task_family: taskFamily,
     fixtures_count: fixtures.length,
     arms,
     total_estimated_runs: fixtures.length * arms.length,
-    arms_details: arms.map(a => ({
+    arms_details: arms.map((a) => ({
       arm: a.arm_id,
       label: a.label,
       runs: a.fixture_count,
@@ -80,16 +85,16 @@ function generateComparisonPrompt(fixture, armId, context = {}) {
   let prompt;
   if (arm.prompt_template) {
     prompt = arm.prompt_template
-      .replace('{task}', fixture.task || '')
-      .replace('{task_family}', context.taskFamily || 'general');
+      .replace("{task}", fixture.task || "")
+      .replace("{task_family}", context.taskFamily || "general");
   } else {
-    prompt = `[KDNA Load: ${context.assetId || 'asset.kdna'}]\n\nTask: ${fixture.task || ''}`;
+    prompt = `[KDNA Load: ${context.assetId || "asset.kdna"}]\n\nTask: ${fixture.task || ""}`;
   }
 
   return {
     prompt,
     arm: armId,
-    fixture_id: fixture.fixture_id || fixture.id || 'unknown',
+    fixture_id: fixture.fixture_id || fixture.id || "unknown",
     budget_profile: arm.budget_profile,
   };
 }
@@ -106,46 +111,49 @@ function scoreComparisonResult(result, expected, armId) {
   const notes = [];
   let score = 3;
 
-  const answer = result?.answer || '';
-  const expectedAnswer = expected?.answer || '';
+  const answer = result?.answer || "";
+  const expectedAnswer = expected?.answer || "";
 
   if (!answer) {
-    return { score: 1, passed: false, notes: ['No answer produced'] };
+    return { score: 1, passed: false, notes: ["No answer produced"] };
   }
 
   // For comparison-only conditions, record evaluator-scoped differences.
-  if (armId === 'no_kdna' || armId === 'best_ordinary_prompt') {
+  if (armId === "no_kdna" || armId === "best_ordinary_prompt") {
     // Baseline: raw model may miss domain-specific nuance
     if (result?.reasoning?.length > 0) {
       score = 3; // reasonable baseline
-      notes.push('Baseline reasoning present');
+      notes.push("Baseline reasoning present");
     } else {
       score = 2;
-      notes.push('Minimal reasoning');
+      notes.push("Minimal reasoning");
     }
   }
 
   // For correct KDNA: we expect axiom application
-  if (armId === 'correct_single_kdna') {
+  if (armId === "correct_single_kdna") {
     const sources = result?.sources || result?.result?.sources || [];
     if (sources.length > 0) {
       score = Math.min(5, 3 + sources.length);
       notes.push(`${sources.length} axioms cited`);
     } else {
       score = 2;
-      notes.push('No axioms cited — asset may not be transferring judgment');
+      notes.push("No axioms cited — asset may not be transferring judgment");
     }
   }
 
   // For wrong KDNA: we expect the model to NOT blindly apply axioms
-  if (armId === 'wrong_or_adjacent_kdna') {
-    const misplacedApplication = result?.misplaced_axioms || result?.warnings?.length || 0;
+  if (armId === "wrong_or_adjacent_kdna") {
+    const misplacedApplication =
+      result?.misplaced_axioms || result?.warnings?.length || 0;
     if (misplacedApplication === 0) {
       score = 5;
-      notes.push('Correctly ignored wrong/adjacent axioms');
+      notes.push("Correctly ignored wrong/adjacent axioms");
     } else {
       score = Math.max(1, 4 - misplacedApplication);
-      notes.push(`${misplacedApplication} potentially misplaced axiom applications`);
+      notes.push(
+        `${misplacedApplication} potentially misplaced axiom applications`,
+      );
     }
   }
 
@@ -165,20 +173,25 @@ function scoreComparisonResult(result, expected, armId) {
 function aggregateComparisonResults(runs = []) {
   const byArm = {};
   for (const armId of Object.keys(COMPARISON_ARMS)) {
-    const armRuns = runs.filter(r => r.arm === armId);
-    const scores = armRuns.filter(r => r.score !== undefined).map(r => r.score);
+    const armRuns = runs.filter((r) => r.arm === armId);
+    const scores = armRuns
+      .filter((r) => r.score !== undefined)
+      .map((r) => r.score);
     byArm[armId] = {
       runs: armRuns.length,
-      mean_score: scores.length > 0 ? scores.reduce((s, v) => s + v, 0) / scores.length : 0,
+      mean_score:
+        scores.length > 0
+          ? scores.reduce((s, v) => s + v, 0) / scores.length
+          : 0,
       scores,
-      passed: armRuns.filter(r => r.passed).length,
-      failed: armRuns.filter(r => r.passed === false).length,
+      passed: armRuns.filter((r) => r.passed).length,
+      failed: armRuns.filter((r) => r.passed === false).length,
     };
   }
 
   // Compute improvement over no-KDNA
-  const noKdnaMean = byArm['no_kdna']?.mean_score || 0;
-  const correctMean = byArm['correct_single_kdna']?.mean_score || 0;
+  const noKdnaMean = byArm["no_kdna"]?.mean_score || 0;
+  const correctMean = byArm["correct_single_kdna"]?.mean_score || 0;
   const improvement = correctMean - noKdnaMean;
 
   return {

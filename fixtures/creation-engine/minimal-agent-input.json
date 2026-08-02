@@ -10,9 +10,7 @@
     "scope": "service incident triage",
     "loading_condition": "Load when an Agent must choose the next incident-triage action.",
     "highest_question": "Which action reduces irreversible harm while preserving diagnosis?",
-    "worldview": [
-      "Observed system state remains authoritative."
-    ],
+    "worldview": ["Observed system state remains authoritative."],
     "value_order": [
       "prevent irreversible harm",
       "preserve diagnostic evidence",
@@ -20,9 +18,7 @@
     ],
     "judgment_role": {
       "acts_as": "a scoped incident-triage judgment authority",
-      "does_not_act_as": [
-        "a monitoring data source"
-      ],
+      "does_not_act_as": ["a monitoring data source"],
       "responsibility": "Order qualitative tradeoffs inside incident triage."
     },
     "global_boundaries": [
@@ -37,9 +33,7 @@
     "id": "candidate_reversible_first",
     "statement": "Prefer reversible containment before destructive repair.",
     "rationale": "Reversible containment preserves evidence and rollback options.",
-    "applies_when": [
-      "The root cause remains uncertain."
-    ],
+    "applies_when": ["The root cause remains uncertain."],
     "does_not_apply_when": [
       "A safety emergency requires immediate irreversible action."
     ],

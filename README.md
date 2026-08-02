@@ -47,12 +47,12 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
 `digest_profile_version: 0.1.0`, and Runtime loading yields a
 `kdna.runtime-capsule` contract at `0.1.0`.
 
-| Library | Language | Role |
-|---------|----------|------|
-| `@aikdna/kdna-cli` | JS/npm | **Operate** KDNA — inspect, validate, plan-load, pack/unpack, load |
-| **`@aikdna/kdna-studio-core`** | JS/npm | **Authoring kernel** — project model, cards, review/provenance, compiler, runtime export |
-| `@aikdna/kdna-studio-cli` | JS/npm | **Create via CLI** — `kdna-studio` create, review, export |
-| `@aikdna/kdna-core` | JS/npm | **Use** KDNA — load, validate, format |
+| Library                        | Language | Role                                                                                     |
+| ------------------------------ | -------- | ---------------------------------------------------------------------------------------- |
+| `@aikdna/kdna-cli`             | JS/npm   | **Operate** KDNA — inspect, validate, plan-load, pack/unpack, load                       |
+| **`@aikdna/kdna-studio-core`** | JS/npm   | **Authoring kernel** — project model, cards, review/provenance, compiler, runtime export |
+| `@aikdna/kdna-studio-cli`      | JS/npm   | **Create via CLI** — `kdna-studio` create, review, export                                |
+| `@aikdna/kdna-core`            | JS/npm   | **Use** KDNA — load, validate, format                                                    |
 
 ## What it does
 
@@ -117,21 +117,21 @@ The public `creationEngine` module is the terminal-Agent creation contract. It
 does not require the Studio App:
 
 ```js
-const { creationEngine } = require('@aikdna/kdna-studio-core');
+const { creationEngine } = require("@aikdna/kdna-studio-core");
 
 let workspace = creationEngine.createWorkspace(null, {
-  mode: 'agent-authored',
-  workflowMode: 'autonomous',
-  access: 'public',
-  createdBy: { type: 'agent', id: 'terminal-agent' }
+  mode: "agent-authored",
+  workflowMode: "autonomous",
+  access: "public",
+  createdBy: { type: "agent", id: "terminal-agent" },
 });
 
 workspace = creationEngine.setPurpose(workspace, {
-  objective: 'Keep generated titles to eight words or fewer.',
-  scope: 'headline drafting',
-  non_goals: ['Do not shorten quoted titles.'],
-  loading_condition: 'Load while drafting a new headline.',
-  global_boundaries: ['Quoted titles remain unchanged.']
+  objective: "Keep generated titles to eight words or fewer.",
+  scope: "headline drafting",
+  non_goals: ["Do not shorten quoted titles."],
+  loading_condition: "Load while drafting a new headline.",
+  global_boundaries: ["Quoted titles remain unchanged."],
 });
 
 console.log(creationEngine.nextAction(workspace));
@@ -267,53 +267,58 @@ const {
   cards: cardApi,
   compile,
   exportRuntime,
-  distillation
-} = require('@aikdna/kdna-studio-core');
+  distillation,
+} = require("@aikdna/kdna-studio-core");
 
 // 1. Create a project
-const project = projectApi.createProject('writing_judgment', 'domain', {
-  author: { name: 'Writing Expert', id: 'writer_001' },
+const project = projectApi.createProject("writing_judgment", "domain", {
+  author: { name: "Writing Expert", id: "writer_001" },
   judgmentCore: {
-    highest_question: 'Which in-scope tradeoff should this asset resolve?',
-    worldview: ['Observed task facts remain authoritative.'],
-    value_order: ['prevent irreversible harm', 'preserve reversibility'],
+    highest_question: "Which in-scope tradeoff should this asset resolve?",
+    worldview: ["Observed task facts remain authoritative."],
+    value_order: ["prevent irreversible harm", "preserve reversibility"],
     judgment_role: {
-      acts_as: 'a scoped judgment authority',
-      does_not_act_as: ['a fact source', 'a policy engine'],
-      responsibility: 'Order qualitative tradeoffs inside the declared scope.'
-    }
-  }
+      acts_as: "a scoped judgment authority",
+      does_not_act_as: ["a fact source", "a policy engine"],
+      responsibility: "Order qualitative tradeoffs inside the declared scope.",
+    },
+  },
 });
 
 // Optional: declare a distillation target before extracting from evidence.
 const target = distillation.createDistillationTarget({
-  domainName: 'writing_judgment',
-  domainCategory: 'expression_writing',
-  ownerScope: 'personal',
-  granularity: 'core_principles',
-  taskScope: 'longform article diagnosis and revision',
-  includeAreas: ['argument structure', 'reader framing', 'evidence density'],
-  excludeAreas: ['life habits', 'food preference']
+  domainName: "writing_judgment",
+  domainCategory: "expression_writing",
+  ownerScope: "personal",
+  granularity: "core_principles",
+  taskScope: "longform article diagnosis and revision",
+  includeAreas: ["argument structure", "reader framing", "evidence density"],
+  excludeAreas: ["life habits", "food preference"],
 });
 project.distillation_target = target;
 
 // 2. Create judgment cards
-let card = cardApi.createCard('axiom', {
-  one_sentence: 'Most writing problems are structural, not language-level.',
-  full_statement: 'When reviewing content, diagnose structure before language.',
-  why: 'Surface polishing on structurally weak content wastes effort.',
-  applies_when: ['User asks to review content'],
-  does_not_apply_when: ['User explicitly asks for grammar check only'],
-  failure_risk: 'May over-diagnose structural problems in content that only needs polish.'
+let card = cardApi.createCard("axiom", {
+  one_sentence: "Most writing problems are structural, not language-level.",
+  full_statement: "When reviewing content, diagnose structure before language.",
+  why: "Surface polishing on structurally weak content wastes effort.",
+  applies_when: ["User asks to review content"],
+  does_not_apply_when: ["User explicitly asks for grammar check only"],
+  failure_risk:
+    "May over-diagnose structural problems in content that only needs polish.",
 });
 
 // 3. This example records optional review provenance for the card.
 // Card state operations are immutable, so keep each returned card.
-card = cardApi.transitionCard(card, 'revised', { by: 'writer_001' });
+card = cardApi.transitionCard(card, "revised", { by: "writer_001" });
 card = cardApi.lockCard(card, {
-  by: 'writer_001',
-  statement: 'This represents my professional writing judgment.',
-  checked: { applies_when: true, does_not_apply_when: true, failure_risk: true }
+  by: "writer_001",
+  statement: "This represents my professional writing judgment.",
+  checked: {
+    applies_when: true,
+    does_not_apply_when: true,
+    failure_risk: true,
+  },
 });
 project.cards.push(card);
 
@@ -329,25 +334,27 @@ console.log(Object.keys(runtimeAsset.files), gate.lockedJudgmentCards);
 For a smaller source-integrity-first flow, use the additive facade:
 
 ```js
-const { authoring } = require('@aikdna/kdna-studio-core');
+const { authoring } = require("@aikdna/kdna-studio-core");
 
-const project = authoring.createProject('@example/writing-judgment');
+const project = authoring.createProject("@example/writing-judgment");
 const card = authoring.addSourceJudgment(project, {
-  sourceType: 'human',
-  sourceLabel: 'Author interview, 2026-07-20',
-  statement: 'Diagnose structural problems before editing individual sentences.',
-  rationale: 'Sentence polishing cannot repair a missing argument or an incoherent sequence.',
-  appliesWhen: ['Reviewing a long-form article'],
-  doesNotApplyWhen: ['The request is limited to spelling'],
-  failureRisk: 'The review may exceed the requested scope.'
+  sourceType: "human",
+  sourceLabel: "Author interview, 2026-07-20",
+  statement:
+    "Diagnose structural problems before editing individual sentences.",
+  rationale:
+    "Sentence polishing cannot repair a missing argument or an incoherent sequence.",
+  appliesWhen: ["Reviewing a long-form article"],
+  doesNotApplyWhen: ["The request is limited to spelling"],
+  failureRisk: "The review may exceed the requested scope.",
 });
 authoring.reviewJudgment(project, card.id, {
-  by: 'reviewer-01',
-  statement: 'I checked the source, judgment, scope, boundary, and risk.'
+  by: "reviewer-01",
+  statement: "I checked the source, judgment, scope, boundary, and risk.",
 });
 authoring.confirmJudgment(project, card.id, {
-  by: 'reviewer-01',
-  statement: 'I confirm this judgment for the declared scope.'
+  by: "reviewer-01",
+  statement: "I confirm this judgment for the declared scope.",
 });
 const runtimeAsset = authoring.exportRuntimeAsset(project);
 ```
@@ -362,7 +369,7 @@ Use `exportRuntime.exportRuntimeAsset(project)` to produce a canonical KDNA
 runtime source directory payload:
 
 ```js
-const { exportRuntime } = require('@aikdna/kdna-studio-core');
+const { exportRuntime } = require("@aikdna/kdna-studio-core");
 
 const runtimeAsset = exportRuntime.exportRuntimeAsset(project);
 // runtimeAsset.files contains only:
@@ -385,34 +392,34 @@ runtime validity rule.
 Access values are canonicalized for runtime export:
 
 | Studio / legacy value | Runtime value |
-|---|---|
-| `open` | `public` |
-| `protected` | `licensed` |
-| `runtime` | `remote` |
+| --------------------- | ------------- |
+| `open`                | `public`      |
+| `protected`           | `licensed`    |
+| `runtime`             | `remote`      |
 
 Top-level source JSON entries such as `KDNA_Core.json`, `KDNA_Patterns.json`,
 and `KDNA_CARD.json` must not be present in runtime export output.
 
 ## Card Types (current)
 
-| Type | Compiles to | Description |
-|------|------------|-------------|
-| `axiom` | KDNA_Core.json | Core judgment principle |
-| `ontology` | KDNA_Core.json | Concept boundaries |
-| `framework` | KDNA_Core.json | Structured diagnostic approach |
-| `stance` | KDNA_Core.json | Domain position/perspective |
-| `misunderstanding` | KDNA_Patterns.json | Common wrong interpretation |
-| `self_check` | KDNA_Patterns.json | Yes/no verification question |
-| `banned_term` | KDNA_Patterns.json | Terms to avoid and replacements |
-| `term` | KDNA_Patterns.json | Standard term definitions |
-| `boundary` | KDNA_Core.json | In-scope and out-of-scope boundaries |
-| `risk` | KDNA_Core.json | Named risks and mitigations |
-| `aesthetic` | KDNA_Core.json | Domain aesthetic judgment |
-| `scenario` | KDNA_Scenarios.json | Situational judgment examples |
-| `case` | KDNA_Cases.json | Source-authored cases |
-| `pattern` | KDNA_Patterns.json | Reusable judgment patterns |
-| `reasoning` | KDNA_Reasoning.json | Source-authored reasoning chains |
-| `evolution_stage` | KDNA_Evolution.json | Source-authored evolution stages |
+| Type               | Compiles to         | Description                          |
+| ------------------ | ------------------- | ------------------------------------ |
+| `axiom`            | KDNA_Core.json      | Core judgment principle              |
+| `ontology`         | KDNA_Core.json      | Concept boundaries                   |
+| `framework`        | KDNA_Core.json      | Structured diagnostic approach       |
+| `stance`           | KDNA_Core.json      | Domain position/perspective          |
+| `misunderstanding` | KDNA_Patterns.json  | Common wrong interpretation          |
+| `self_check`       | KDNA_Patterns.json  | Yes/no verification question         |
+| `banned_term`      | KDNA_Patterns.json  | Terms to avoid and replacements      |
+| `term`             | KDNA_Patterns.json  | Standard term definitions            |
+| `boundary`         | KDNA_Core.json      | In-scope and out-of-scope boundaries |
+| `risk`             | KDNA_Core.json      | Named risks and mitigations          |
+| `aesthetic`        | KDNA_Core.json      | Domain aesthetic judgment            |
+| `scenario`         | KDNA_Scenarios.json | Situational judgment examples        |
+| `case`             | KDNA_Cases.json     | Source-authored cases                |
+| `pattern`          | KDNA_Patterns.json  | Reusable judgment patterns           |
+| `reasoning`        | KDNA_Reasoning.json | Source-authored reasoning chains     |
+| `evolution_stage`  | KDNA_Evolution.json | Source-authored evolution stages     |
 
 ## Card State Machine
 
@@ -421,6 +428,7 @@ draft → revised → locked → tested → published → deprecated
 ```
 
 Rules:
+
 - `locked`/`tested`/`published` are Studio project review states, not KDNA Core format-validity states.
 - Studio release exports use reviewed cards as release evidence.
 - A validated `.kdna` file can still be structurally valid without Human Lock; trust, authorship, signatures, and release evidence are separate layers.
@@ -434,13 +442,13 @@ requirement and does not certify content quality.
 
 ```js
 lockCard(card, {
-  by: 'expert_id',
-  statement: 'I confirm this reflects my domain judgment.',
+  by: "expert_id",
+  statement: "I confirm this reflects my domain judgment.",
   checked: {
     applies_when: true,
     does_not_apply_when: true,
-    failure_risk: true
-  }
+    failure_risk: true,
+  },
 });
 ```
 

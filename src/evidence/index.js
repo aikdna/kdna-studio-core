@@ -5,18 +5,21 @@
  * Spans are extracted text segments that MAY indicate a judgment pattern.
  */
 
-const crypto = require('crypto');
+const crypto = require("crypto");
 
-function createEvidenceEntry(type, title, content, source = 'manual') {
+function createEvidenceEntry(type, title, content, source = "manual") {
   return {
     id: `ev_${crypto.randomUUID()}`,
     type,
     title,
-    content_hash: `sha256:${crypto.createHash('sha256').update(content || '').digest('hex')}`,
+    content_hash: `sha256:${crypto
+      .createHash("sha256")
+      .update(content || "")
+      .digest("hex")}`,
     source,
     imported_at: new Date().toISOString(),
     spans: [],
-    content: type === 'text' || type === 'chat' ? content : undefined,
+    content: type === "text" || type === "chat" ? content : undefined,
   };
 }
 
@@ -39,14 +42,15 @@ function addEvidence(project, evidence) {
   project.evidence_materials = project.evidence_materials || [];
   project.evidence_materials.push(evidence);
   if (project.stages?.evidence_room) {
-    project.stages.evidence_room.evidence_count = project.evidence_materials.length;
-    project.stages.evidence_room.status = 'in_progress';
+    project.stages.evidence_room.evidence_count =
+      project.evidence_materials.length;
+    project.stages.evidence_room.status = "in_progress";
   }
   return project;
 }
 
 function extractSpan(evidence, start, end, candidatePattern = null) {
-  const text = evidence.content ? evidence.content.slice(start, end) : '';
+  const text = evidence.content ? evidence.content.slice(start, end) : "";
   const span = {
     id: `span_${evidence.id}_${evidence.spans.length}`,
     text: text.slice(0, 200), // cap at 200 chars
@@ -70,18 +74,20 @@ function linkEvidenceToCard(evidence, spanId, card) {
 
 function getEvidenceForCard(evidenceEntries, card) {
   if (!card.evidence_refs) return [];
-  return card.evidence_refs.map(ref => {
-    const [evId, spanId] = ref.split(':');
-    const ev = evidenceEntries.find(e => e.id === evId);
-    if (!ev) return null;
-    const span = spanId ? ev.spans.find(s => s.id === spanId) : null;
-    return { evidence: ev, span };
-  }).filter(Boolean);
+  return card.evidence_refs
+    .map((ref) => {
+      const [evId, spanId] = ref.split(":");
+      const ev = evidenceEntries.find((e) => e.id === evId);
+      if (!ev) return null;
+      const span = spanId ? ev.spans.find((s) => s.id === spanId) : null;
+      return { evidence: ev, span };
+    })
+    .filter(Boolean);
 }
 
 function markEvidenceRoomComplete(project) {
   if (project.stages?.evidence_room) {
-    project.stages.evidence_room.status = 'complete';
+    project.stages.evidence_room.status = "complete";
   }
   return project;
 }

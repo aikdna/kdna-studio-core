@@ -10,14 +10,14 @@
  * does not decide whether a complete judgment card may be compiled.
  */
 
-const cbor = require('cbor-x');
-const crypto = require('crypto');
-const { copyDeclaredJudgmentCore } = require('../judgment-core');
+const cbor = require("cbor-x");
+const crypto = require("crypto");
+const { copyDeclaredJudgmentCore } = require("../judgment-core");
 const {
   REPORT_CONTRACTS,
   RUNTIME_CAPSULE_TYPE,
   RUNTIME_CAPSULE_VERSION,
-} = require('../protocol-contract');
+} = require("../protocol-contract");
 
 // Every type the Human Lock gate and compile pipeline treat as substantive
 // judgment content. MUST stay in sync with cards/index.js#CARD_TYPES and
@@ -26,42 +26,61 @@ const {
 // empty payload and trip the "refusing to compile empty domain" gate even
 // when every card was properly Human Locked.
 const JUDGMENT_CARD_TYPES_FOR_COMPILE = new Set([
-  'axiom', 'ontology', 'misunderstanding', 'self_check',
-  'boundary', 'risk', 'aesthetic', 'scenario', 'case',
-  'stance', 'pattern', 'reasoning', 'framework',
-  'term', 'banned_term', 'evolution_stage',
+  "axiom",
+  "ontology",
+  "misunderstanding",
+  "self_check",
+  "boundary",
+  "risk",
+  "aesthetic",
+  "scenario",
+  "case",
+  "stance",
+  "pattern",
+  "reasoning",
+  "framework",
+  "term",
+  "banned_term",
+  "evolution_stage",
 ]);
 
 function hasHumanLock(card) {
-  return Boolean(card?.locked && card?.human_lock?.by && card?.human_lock?.statement);
+  return Boolean(
+    card?.locked && card?.human_lock?.by && card?.human_lock?.statement,
+  );
 }
 
 function stringList(value) {
-  if (Array.isArray(value)) return value.filter((item) => item !== undefined && item !== null && item !== '');
-  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  if (Array.isArray(value))
+    return value.filter(
+      (item) => item !== undefined && item !== null && item !== "",
+    );
+  if (typeof value === "string" && value.trim()) return [value.trim()];
   return [];
 }
 
-const RUNTIME_RELATION_TYPES = new Set(['priority', 'exception']);
+const RUNTIME_RELATION_TYPES = new Set(["priority", "exception"]);
 const RUNTIME_RELATION_FIELDS = new Set([
-  'from',
-  'to',
-  'via',
-  'applies_when',
-  'does_not_apply_when',
+  "from",
+  "to",
+  "via",
+  "applies_when",
+  "does_not_apply_when",
 ]);
 
 function compileRuntimeRelations(value) {
   if (value === null || value === undefined) return [];
   if (!Array.isArray(value)) {
-    const error = new Error('core_structure must be an array of public Runtime relations');
-    error.code = 'INVALID_RUNTIME_RELATION';
+    const error = new Error(
+      "core_structure must be an array of public Runtime relations",
+    );
+    error.code = "INVALID_RUNTIME_RELATION";
     throw error;
   }
   return value.map((relation, index) => {
-    if (!relation || typeof relation !== 'object' || Array.isArray(relation)) {
+    if (!relation || typeof relation !== "object" || Array.isArray(relation)) {
       const error = new Error(`core_structure[${index}] must be an object`);
-      error.code = 'INVALID_RUNTIME_RELATION';
+      error.code = "INVALID_RUNTIME_RELATION";
       throw error;
     }
     const unknownFields = Object.keys(relation)
@@ -69,15 +88,17 @@ function compileRuntimeRelations(value) {
       .sort();
     if (unknownFields.length > 0) {
       const error = new Error(
-        `core_structure[${index}] contains private or unknown fields: ${unknownFields.join(', ')}`,
+        `core_structure[${index}] contains private or unknown fields: ${unknownFields.join(", ")}`,
       );
-      error.code = 'INVALID_RUNTIME_RELATION';
+      error.code = "INVALID_RUNTIME_RELATION";
       throw error;
     }
-    for (const field of ['from', 'to']) {
-      if (typeof relation[field] !== 'string' || !relation[field].trim()) {
-        const error = new Error(`core_structure[${index}].${field} must be a non-empty string`);
-        error.code = 'INVALID_RUNTIME_RELATION';
+    for (const field of ["from", "to"]) {
+      if (typeof relation[field] !== "string" || !relation[field].trim()) {
+        const error = new Error(
+          `core_structure[${index}].${field} must be a non-empty string`,
+        );
+        error.code = "INVALID_RUNTIME_RELATION";
         throw error;
       }
     }
@@ -85,19 +106,19 @@ function compileRuntimeRelations(value) {
       const error = new Error(
         `core_structure[${index}].via must be priority or exception`,
       );
-      error.code = 'INVALID_RUNTIME_RELATION';
+      error.code = "INVALID_RUNTIME_RELATION";
       throw error;
     }
-    for (const field of ['applies_when', 'does_not_apply_when']) {
+    for (const field of ["applies_when", "does_not_apply_when"]) {
       if (relation[field] === undefined) continue;
       if (
         !Array.isArray(relation[field]) ||
-        relation[field].some((item) => typeof item !== 'string' || !item.trim())
+        relation[field].some((item) => typeof item !== "string" || !item.trim())
       ) {
         const error = new Error(
           `core_structure[${index}].${field} must contain only non-empty strings`,
         );
-        error.code = 'INVALID_RUNTIME_RELATION';
+        error.code = "INVALID_RUNTIME_RELATION";
         throw error;
       }
     }
@@ -114,27 +135,30 @@ function uuidv7() {
   bytes[7] = rand[1];
   bytes[8] = 0x80 | (rand[2] & 0x3f);
   rand.copy(bytes, 9, 3);
-  const hex = bytes.toString('hex');
+  const hex = bytes.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function stableStringify(value) {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`)
+      .join(",")}}`;
   }
   return JSON.stringify(value);
 }
 
 function canonicalizeJson(name, content) {
   const obj = JSON.parse(content);
-  if (name === 'kdna.json') {
+  if (name === "kdna.json") {
     const copy = { ...obj };
     delete copy.signature;
     delete copy.asset_digest;
     delete copy.container_sha256;
     delete copy.content_digest;
-    if (copy.authoring && typeof copy.authoring === 'object') {
+    if (copy.authoring && typeof copy.authoring === "object") {
       const auth = { ...copy.authoring };
       delete auth.content_digest;
       copy.authoring = auth;
@@ -148,26 +172,32 @@ function computeContentDigest(files) {
   // Content digest covers canonical judgment content + public asset metadata.
   // Reports and build-receipt are build evidence, not content — they change with
   // every build and would cause self-referencing if included.
-  const excluded = new Set(['signature.json', '.DS_Store', 'build-receipt.json']);
+  const excluded = new Set([
+    "signature.json",
+    ".DS_Store",
+    "build-receipt.json",
+  ]);
   const payload = Object.keys(files)
-    .filter(name => !excluded.has(name))
-    .filter(name => !name.startsWith('reports/'))
+    .filter((name) => !excluded.has(name))
+    .filter((name) => !name.startsWith("reports/"))
     .sort()
-    .map(name => {
+    .map((name) => {
       let content = files[name];
-      const buf = name.endsWith('.json')
+      const buf = name.endsWith(".json")
         ? Buffer.from(canonicalizeJson(name, content))
         : Buffer.from(content);
-      const hash = crypto.createHash('sha256').update(buf).digest('hex');
+      const hash = crypto.createHash("sha256").update(buf).digest("hex");
       return `${name}:${hash}`;
     })
-    .join('\n');
-  return `sha256:${crypto.createHash('sha256').update(payload).digest('hex')}`;
+    .join("\n");
+  return `sha256:${crypto.createHash("sha256").update(payload).digest("hex")}`;
 }
 
 function isLowerSlugChar(char) {
   const code = char.charCodeAt(0);
-  return (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || char === '_';
+  return (
+    (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || char === "_"
+  );
 }
 
 function isLowerAsciiLetter(char) {
@@ -176,37 +206,50 @@ function isLowerAsciiLetter(char) {
 }
 
 function normalizeDomainIdBase(base) {
-  let normalized = '';
+  let normalized = "";
   let previousUnderscore = false;
   for (const char of String(base).toLowerCase()) {
     if (isLowerSlugChar(char)) {
       normalized += char;
-      previousUnderscore = char === '_';
+      previousUnderscore = char === "_";
     } else if (normalized && !previousUnderscore) {
-      normalized += '_';
+      normalized += "_";
       previousUnderscore = true;
     }
   }
-  return normalized.endsWith('_') ? normalized.slice(0, -1) : normalized;
+  return normalized.endsWith("_") ? normalized.slice(0, -1) : normalized;
 }
 
-function domainIdFromName(name = 'domain') {
-  const base = String(name).includes('/') ? String(name).split('/').pop() : String(name);
+function domainIdFromName(name = "domain") {
+  const base = String(name).includes("/")
+    ? String(name).split("/").pop()
+    : String(name);
   const normalized = normalizeDomainIdBase(base);
-  return isLowerAsciiLetter(normalized[0] || '') ? normalized : `domain_${normalized || 'untitled'}`;
+  return isLowerAsciiLetter(normalized[0] || "")
+    ? normalized
+    : `domain_${normalized || "untitled"}`;
 }
 
 function buildAssetIdentity(project, files, options = {}) {
   const domainId = project.domain_id || domainIdFromName(project.name);
-  const registryName = project.registry_name || (String(project.name || '').startsWith('@') ? project.name : null);
+  const registryName =
+    project.registry_name ||
+    (String(project.name || "").startsWith("@") ? project.name : null);
   return {
     asset_uid: options.asset_uid || project.asset_uid || uuidv7(),
-    project_uid: options.project_uid || project.project_uid || project.project_id || uuidv7(),
+    project_uid:
+      options.project_uid ||
+      project.project_uid ||
+      project.project_id ||
+      uuidv7(),
     build_id: options.build_id || `build_${uuidv7()}`,
     domain_id: domainId,
     registry_name: registryName,
-    version: (project.release && project.release.version) || '0.1.0',
-    judgment_version: (project.release && project.release.judgment_version) || (project.release && project.release.version) || '0.1.0',
+    version: (project.release && project.release.version) || "0.1.0",
+    judgment_version:
+      (project.release && project.release.judgment_version) ||
+      (project.release && project.release.version) ||
+      "0.1.0",
     content_digest: options.content_digest || computeContentDigest(files),
     compiled_at: options.compiled_at || new Date().toISOString(),
   };
@@ -217,26 +260,28 @@ function makeMeta(project) {
     project.distillation_target?.load_condition,
     project.purpose_brief?.loading_condition,
     project.release?.load_condition,
-  ].find((value) => typeof value === 'string' && value.trim().length > 0);
+  ].find((value) => typeof value === "string" && value.trim().length > 0);
   return {
-    version: (project.release && project.release.version) || '0.1.0',
+    version: (project.release && project.release.version) || "0.1.0",
     domain: project.name,
     created: project.created || new Date().toISOString().slice(0, 10),
-    purpose: project.release?.description || `Domain judgment for ${project.name}`,
+    purpose:
+      project.release?.description || `Domain judgment for ${project.name}`,
     // Creation Engine and distillation-first projects declare their loading
     // condition before extraction. Preserve that declaration in authoring
     // compile output so Runtime export can carry it into the current payload
     // projection instead of deriving it from the first axiom.
     load_condition:
-      declaredLoadCondition || 'Load when the task matches applies_when on domain axioms.',
+      declaredLoadCondition ||
+      "Load when the task matches applies_when on domain axioms.",
   };
 }
 
 function compileCore(cards, project, sourceCoreStructure = null) {
   const judgmentCore = copyDeclaredJudgmentCore(project.judgment_core);
   const lockedAxioms = cards
-    .filter(c => c.type === 'axiom' && c.locked)
-    .map(c => ({
+    .filter((c) => c.type === "axiom" && c.locked)
+    .map((c) => ({
       id: c.id,
       ...c.fields,
       applies_when: stringList(c.fields?.applies_when),
@@ -244,11 +289,21 @@ function compileCore(cards, project, sourceCoreStructure = null) {
       status: c.status,
       human_lock: c.human_lock,
     }));
-  const lockedOntology = cards.filter(c => c.type === 'ontology' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
-  const lockedFrameworks = cards.filter(c => c.type === 'framework' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
-  const lockedBoundaries = cards.filter(c => c.type === 'boundary' && c.locked);
-  const lockedRisks = cards.filter(c => c.type === 'risk' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
-  const lockedStances = cards.filter(c => c.type === 'stance' && c.locked).map(c => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
+  const lockedOntology = cards
+    .filter((c) => c.type === "ontology" && c.locked)
+    .map((c) => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
+  const lockedFrameworks = cards
+    .filter((c) => c.type === "framework" && c.locked)
+    .map((c) => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
+  const lockedBoundaries = cards.filter(
+    (c) => c.type === "boundary" && c.locked,
+  );
+  const lockedRisks = cards
+    .filter((c) => c.type === "risk" && c.locked)
+    .map((c) => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
+  const lockedStances = cards
+    .filter((c) => c.type === "stance" && c.locked)
+    .map((c) => ({ id: c.id, ...c.fields, human_lock: c.human_lock }));
 
   return {
     meta: makeMeta(project),
@@ -261,11 +316,11 @@ function compileCore(cards, project, sourceCoreStructure = null) {
     frameworks: lockedFrameworks,
     stances: lockedStances,
     core_structure: compileRuntimeRelations(sourceCoreStructure),
-    boundaries: lockedBoundaries.map(c => ({
+    boundaries: lockedBoundaries.map((c) => ({
       ...JSON.parse(JSON.stringify(c.fields || {})),
       id: c.id,
-      scope: c.fields?.scope || '',
-      out_of_scope: c.fields?.out_of_scope || '',
+      scope: c.fields?.scope || "",
+      out_of_scope: c.fields?.out_of_scope || "",
       acceptable_exceptions: stringList(c.fields?.acceptable_exceptions),
       human_lock: c.human_lock,
     })),
@@ -274,43 +329,54 @@ function compileCore(cards, project, sourceCoreStructure = null) {
 }
 
 function compilePatterns(cards, project) {
-  const lockedMisunderstandings = cards.filter(c => c.type === 'misunderstanding' && c.locked).map(c => ({
-    ...JSON.parse(JSON.stringify(c.fields || {})),
-    id: c.id,
-    wrong: c.fields?.wrong || '',
-    correct: c.fields?.correct || '',
-    key_distinction: c.fields?.key_distinction || '',
-    why: c.fields?.why || `What bad judgment results from believing "${(c.fields?.wrong || '').slice(0, 40)}"`,
-    failure_risk: c.fields?.failure_risk || 'No specific failure risk declared',
-    applies_when: stringList(c.fields?.applies_when),
-    does_not_apply_when: stringList(c.fields?.does_not_apply_when),
-  }));
-  const preserveCreationIdentity = project.source_mode === 'creation-engine';
-  const lockedSelfChecks = cards.filter(c => c.type === 'self_check' && c.locked).map(c => {
-    const fields = JSON.parse(JSON.stringify(c.fields || {}));
-    if (preserveCreationIdentity) {
-      return { id: c.id, ...fields, question: fields.question || '' };
-    }
-    const keys = Object.keys(fields);
-    return keys.length === 1 && keys[0] === 'question'
-      ? (fields.question || '')
-      : { ...fields, question: fields.question || '' };
-  });
-  const lockedAesthetics = cards.filter(c => c.type === 'aesthetic' && c.locked).map(c => ({ id: c.id, ...c.fields }));
-  const lockedPatterns = cards.filter(c => c.type === 'pattern' && c.locked).map(c => {
-    const fields = JSON.parse(JSON.stringify(c.fields || {}));
-    delete fields.legacy_subtype;
-    return {
-      ...fields,
-      type: fields.type || 'pattern',
+  const lockedMisunderstandings = cards
+    .filter((c) => c.type === "misunderstanding" && c.locked)
+    .map((c) => ({
+      ...JSON.parse(JSON.stringify(c.fields || {})),
       id: c.id,
-      name: fields.name || '',
-      one_sentence: fields.one_sentence || '',
-      what_it_looks_like: fields.what_it_looks_like || '',
-      how_to_fix: fields.how_to_fix || '',
-      failure_risk: fields.failure_risk || '',
-    };
-  });
+      wrong: c.fields?.wrong || "",
+      correct: c.fields?.correct || "",
+      key_distinction: c.fields?.key_distinction || "",
+      why:
+        c.fields?.why ||
+        `What bad judgment results from believing "${(c.fields?.wrong || "").slice(0, 40)}"`,
+      failure_risk:
+        c.fields?.failure_risk || "No specific failure risk declared",
+      applies_when: stringList(c.fields?.applies_when),
+      does_not_apply_when: stringList(c.fields?.does_not_apply_when),
+    }));
+  const preserveCreationIdentity = project.source_mode === "creation-engine";
+  const lockedSelfChecks = cards
+    .filter((c) => c.type === "self_check" && c.locked)
+    .map((c) => {
+      const fields = JSON.parse(JSON.stringify(c.fields || {}));
+      if (preserveCreationIdentity) {
+        return { id: c.id, ...fields, question: fields.question || "" };
+      }
+      const keys = Object.keys(fields);
+      return keys.length === 1 && keys[0] === "question"
+        ? fields.question || ""
+        : { ...fields, question: fields.question || "" };
+    });
+  const lockedAesthetics = cards
+    .filter((c) => c.type === "aesthetic" && c.locked)
+    .map((c) => ({ id: c.id, ...c.fields }));
+  const lockedPatterns = cards
+    .filter((c) => c.type === "pattern" && c.locked)
+    .map((c) => {
+      const fields = JSON.parse(JSON.stringify(c.fields || {}));
+      delete fields.legacy_subtype;
+      return {
+        ...fields,
+        type: fields.type || "pattern",
+        id: c.id,
+        name: fields.name || "",
+        one_sentence: fields.one_sentence || "",
+        what_it_looks_like: fields.what_it_looks_like || "",
+        how_to_fix: fields.how_to_fix || "",
+        failure_risk: fields.failure_risk || "",
+      };
+    });
 
   // FIX 1 (2026-06-25 audit, kdna-assets #15 follow-up):
   // Source's `terminology.standard_terms` and `terminology.banned_terms`
@@ -320,19 +386,23 @@ function compilePatterns(cards, project) {
   // structured payload. Now we merge the locked `term` and `banned_term`
   // cards into the structured terminology, so the source's
   // banned_terms identity is preserved end-to-end.
-  const lockedStandardTerms = cards.filter(c => c.type === 'term' && c.locked).map(c => ({
-    ...(preserveCreationIdentity ? { id: c.id } : {}),
-    ...JSON.parse(JSON.stringify(c.fields || {})),
-    term: c.fields?.term || c.id,
-    definition: c.fields?.definition || '',
-  }));
-  const lockedBannedTerms = cards.filter(c => c.type === 'banned_term' && c.locked).map(c => ({
-    ...(preserveCreationIdentity ? { id: c.id } : {}),
-    ...JSON.parse(JSON.stringify(c.fields || {})),
-    term: c.fields?.term || c.id,
-    why: c.fields?.why || '',
-    replace_with: c.fields?.replace_with || '',
-  }));
+  const lockedStandardTerms = cards
+    .filter((c) => c.type === "term" && c.locked)
+    .map((c) => ({
+      ...(preserveCreationIdentity ? { id: c.id } : {}),
+      ...JSON.parse(JSON.stringify(c.fields || {})),
+      term: c.fields?.term || c.id,
+      definition: c.fields?.definition || "",
+    }));
+  const lockedBannedTerms = cards
+    .filter((c) => c.type === "banned_term" && c.locked)
+    .map((c) => ({
+      ...(preserveCreationIdentity ? { id: c.id } : {}),
+      ...JSON.parse(JSON.stringify(c.fields || {})),
+      term: c.fields?.term || c.id,
+      why: c.fields?.why || "",
+      replace_with: c.fields?.replace_with || "",
+    }));
 
   return {
     meta: makeMeta(project),
@@ -348,20 +418,20 @@ function compilePatterns(cards, project) {
 }
 
 function compileScenarios(cards, project) {
-  const locked = cards.filter(c => c.type === 'scenario' && c.locked);
+  const locked = cards.filter((c) => c.type === "scenario" && c.locked);
   if (locked.length === 0) return null;
   return {
     meta: makeMeta(project),
-    scenes: locked.map(c => ({ id: c.id, ...c.fields })),
+    scenes: locked.map((c) => ({ id: c.id, ...c.fields })),
   };
 }
 
 function compileCases(cards, project) {
-  const locked = cards.filter(c => c.type === 'case' && c.locked);
+  const locked = cards.filter((c) => c.type === "case" && c.locked);
   if (locked.length === 0) return null;
   return {
     meta: makeMeta(project),
-    cases: locked.map(c => ({ id: c.id, ...c.fields })),
+    cases: locked.map((c) => ({ id: c.id, ...c.fields })),
   };
 }
 
@@ -380,29 +450,31 @@ function compileReasoning(cards, project, sourceReasoning = null) {
   // synthesis only for assets that have axioms but no explicit
   // reasoning chains (backward compat for legacy assets that
   // were published under the old behavior).
-  const lockedReasoningChains = cards.filter(c => c.type === 'reasoning' && c.locked);
+  const lockedReasoningChains = cards.filter(
+    (c) => c.type === "reasoning" && c.locked,
+  );
   if (lockedReasoningChains.length > 0) {
     return {
       meta: makeMeta(project),
-      reasoning_chains: lockedReasoningChains.map(c => {
-        const sourceFields = c.fields && typeof c.fields === 'object'
-          ? JSON.parse(JSON.stringify(c.fields))
-          : {};
+      reasoning_chains: lockedReasoningChains.map((c) => {
+        const sourceFields =
+          c.fields && typeof c.fields === "object"
+            ? JSON.parse(JSON.stringify(c.fields))
+            : {};
         return {
           ...sourceFields,
           id: c.id,
           axiom: c.fields?.axiom,
-          one_sentence: c.fields?.one_sentence || '',
-        // Source's KDNA_Reasoning.json typically has 'principle' (the
-        // "what the chain says") and 'concrete_action' (the "so what
-        // to do"). Map to the build's expected fields. Preserve
-        // additional fields as-is so the source's chain structure
-        // round-trips through the compile step.
-          so_what: c.fields?.concrete_action
-                  || c.fields?.so_what
-                  || '',
-          logic: Array.isArray(c.fields?.chain) ? c.fields.chain
-                  : (c.fields?.logic || []),
+          one_sentence: c.fields?.one_sentence || "",
+          // Source's KDNA_Reasoning.json typically has 'principle' (the
+          // "what the chain says") and 'concrete_action' (the "so what
+          // to do"). Map to the build's expected fields. Preserve
+          // additional fields as-is so the source's chain structure
+          // round-trips through the compile step.
+          so_what: c.fields?.concrete_action || c.fields?.so_what || "",
+          logic: Array.isArray(c.fields?.chain)
+            ? c.fields.chain
+            : c.fields?.logic || [],
           principle: c.fields?.principle,
           concrete_action: c.fields?.concrete_action,
         };
@@ -416,16 +488,19 @@ function compileReasoning(cards, project, sourceReasoning = null) {
   // previously dead code — the function never read it, so the source's
   // authored chains were dropped at compile even when no Studio
   // reasoning card existed.
-  if (Array.isArray(sourceReasoning?.reasoning_chains) && sourceReasoning.reasoning_chains.length > 0) {
+  if (
+    Array.isArray(sourceReasoning?.reasoning_chains) &&
+    sourceReasoning.reasoning_chains.length > 0
+  ) {
     return {
       meta: makeMeta(project),
       reasoning_chains: sourceReasoning.reasoning_chains.map((c) => ({
         ...JSON.parse(JSON.stringify(c)),
         id: c.id || `chain_source_${Math.random().toString(36).slice(2, 8)}`,
         axiom: c.axiom,
-        one_sentence: c.one_sentence || c.conclusion || '',
-        so_what: c.concrete_action || c.so_what || '',
-        logic: Array.isArray(c.chain) ? c.chain : (c.logic || []),
+        one_sentence: c.one_sentence || c.conclusion || "",
+        so_what: c.concrete_action || c.so_what || "",
+        logic: Array.isArray(c.chain) ? c.chain : c.logic || [],
         principle: c.principle || c.name,
         concrete_action: c.concrete_action,
         source_authored: true,
@@ -436,15 +511,16 @@ function compileReasoning(cards, project, sourceReasoning = null) {
   // Fallback: synthesize 1 chain per axiom. Preserved for backward
   // compat with assets that have axioms but no explicit reasoning
   // cards synthesized by older authoring projects.
-  const lockedAxioms = cards.filter(c => c.type === 'axiom' && c.locked);
+  const lockedAxioms = cards.filter((c) => c.type === "axiom" && c.locked);
   if (lockedAxioms.length === 0) return null;
   return {
     meta: makeMeta(project),
-    reasoning_chains: lockedAxioms.map(ax => ({
+    reasoning_chains: lockedAxioms.map((ax) => ({
       id: `chain_${ax.id}`,
-      one_sentence: ax.fields?.one_sentence || '',
-      logic: [ax.fields?.full_statement || ''],
-      so_what: ax.fields?.why || 'Agent judgment changes when this axiom is loaded.',
+      one_sentence: ax.fields?.one_sentence || "",
+      logic: [ax.fields?.full_statement || ""],
+      so_what:
+        ax.fields?.why || "Agent judgment changes when this axiom is loaded.",
       // Bug (#4 UX follow-up): the prior version did not mark
       // synthesised reasoning_chains. Canonical payload importers
       // therefore imported every synthesised chain as if it were a
@@ -457,7 +533,7 @@ function compileReasoning(cards, project, sourceReasoning = null) {
 }
 
 function compileEvolution(cards, project, sourceEvolution = null) {
-  const lockedCards = cards.filter(c => c.locked);
+  const lockedCards = cards.filter((c) => c.locked);
   if (lockedCards.length === 0) return null;
 
   // FIX 3 (2026-06-25 audit, kdna-assets #15 follow-up):
@@ -475,16 +551,17 @@ function compileEvolution(cards, project, sourceEvolution = null) {
   const sourceStages = [];
   const seenSourceStageIds = new Set();
   const pushSourceStage = (stage, fallbackId = null) => {
-    const source = stage && typeof stage === 'object' ? stage : {};
-    const id = source.id || fallbackId || `stage_source_${source.name || 'unnamed'}`;
+    const source = stage && typeof stage === "object" ? stage : {};
+    const id =
+      source.id || fallbackId || `stage_source_${source.name || "unnamed"}`;
     if (seenSourceStageIds.has(id)) return;
     seenSourceStageIds.add(id);
     sourceStages.push({
       ...source,
       id,
       name: source.name || source.title || id,
-      level: source.level != null ? source.level : '',
-      description: source.description || '',
+      level: source.level != null ? source.level : "",
+      description: source.description || "",
       // Mark these as source-authored for downstream consumers.
       source_authored: true,
     });
@@ -495,7 +572,7 @@ function compileEvolution(cards, project, sourceEvolution = null) {
   }
 
   for (const card of lockedCards) {
-    if (card.type === 'evolution_stage') {
+    if (card.type === "evolution_stage") {
       // Source-folder and from-kdna imports materialise KDNA_Evolution
       // stages as locked cards. Preserve those cards in the next runtime
       // payload; otherwise create -> migrate -> create silently loses them.
@@ -508,13 +585,16 @@ function compileEvolution(cards, project, sourceEvolution = null) {
   for (const card of lockedCards) {
     if (seenAxioms.has(card.id)) continue;
     seenAxioms.add(card.id);
-    for (const entry of (card.audit_log || [])) {
-      if (entry.event === 'locked') {
+    for (const entry of card.audit_log || []) {
+      if (entry.event === "locked") {
         stages.push({
           id: `stage_${card.id}`,
           name: card.fields?.one_sentence || card.fields?.question || card.id,
           description: `Card ${card.id} was locked by ${entry.by} at ${entry.at}. Type: ${card.type}.`,
-          indicators: [`${card.type} card locked`, 'Human Lock provenance recorded'],
+          indicators: [
+            `${card.type} card locked`,
+            "Human Lock provenance recorded",
+          ],
           source_authored: false,
         });
       }
@@ -532,45 +612,90 @@ function compileEvolution(cards, project, sourceEvolution = null) {
     // `source_authored: true` so downstream consumers can tell them
     // apart from the synthesised ones.
     evolution_layers: [
-      { id: 'layer_1', name: 'Foundation', capability: 'Core axioms and patterns established.', from_stage: stages[0]?.id || 'none', to_stage: stages[stages.length - 1]?.id || 'none', source_authored: false },
+      {
+        id: "layer_1",
+        name: "Foundation",
+        capability: "Core axioms and patterns established.",
+        from_stage: stages[0]?.id || "none",
+        to_stage: stages[stages.length - 1]?.id || "none",
+        source_authored: false,
+      },
       ...(Array.isArray(sourceEvolution?.evolution_layers)
-        ? sourceEvolution.evolution_layers.map((l) => ({ ...l, source_authored: true }))
+        ? sourceEvolution.evolution_layers.map((l) => ({
+            ...l,
+            source_authored: true,
+          }))
         : []),
     ],
     measurement: [
-      { id: 'meas_axioms', what: 'locked_axioms', how: 'Count of locked axiom cards', threshold: `${lockedCards.filter(c => c.type === 'axiom').length}`, source_authored: false },
-      { id: 'meas_misunderstandings', what: 'locked_misunderstandings', how: 'Count of locked misunderstanding cards', threshold: `${lockedCards.filter(c => c.type === 'misunderstanding').length}`, source_authored: false },
-      { id: 'meas_self_checks', what: 'self_checks', how: 'Count of locked self-check cards', threshold: `${lockedCards.filter(c => c.type === 'self_check').length}`, source_authored: false },
+      {
+        id: "meas_axioms",
+        what: "locked_axioms",
+        how: "Count of locked axiom cards",
+        threshold: `${lockedCards.filter((c) => c.type === "axiom").length}`,
+        source_authored: false,
+      },
+      {
+        id: "meas_misunderstandings",
+        what: "locked_misunderstandings",
+        how: "Count of locked misunderstanding cards",
+        threshold: `${lockedCards.filter((c) => c.type === "misunderstanding").length}`,
+        source_authored: false,
+      },
+      {
+        id: "meas_self_checks",
+        what: "self_checks",
+        how: "Count of locked self-check cards",
+        threshold: `${lockedCards.filter((c) => c.type === "self_check").length}`,
+        source_authored: false,
+      },
       ...(Array.isArray(sourceEvolution?.measurement)
-        ? sourceEvolution.measurement.map((m) => ({ ...m, source_authored: true }))
+        ? sourceEvolution.measurement.map((m) => ({
+            ...m,
+            source_authored: true,
+          }))
         : []),
     ],
     // New: forward the source's changelog + version_notes so the
     // published asset carries the author's own history.
-    changelog: Array.isArray(sourceEvolution?.changelog) ? sourceEvolution.changelog : [],
-    version_notes: Array.isArray(sourceEvolution?.version_notes) ? sourceEvolution.version_notes : [],
+    changelog: Array.isArray(sourceEvolution?.changelog)
+      ? sourceEvolution.changelog
+      : [],
+    version_notes: Array.isArray(sourceEvolution?.version_notes)
+      ? sourceEvolution.version_notes
+      : [],
   };
 }
 
 function compileManifest(project, files, identity = null) {
-  const kdnaFileCount = Object.keys(files).filter(f => f.startsWith('KDNA_')).length;
+  const kdnaFileCount = Object.keys(files).filter((f) =>
+    f.startsWith("KDNA_"),
+  ).length;
   const compiledCards = (project.cards || []).filter(
-    c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== 'deprecated',
+    (c) =>
+      JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== "deprecated",
   );
   const lockedCards = compiledCards.filter(hasHumanLock);
-  const version = require('../../package.json').version;
+  const version = require("../../package.json").version;
   const assetIdentity = identity || buildAssetIdentity(project, files);
   const projectDigest = crypto
-    .createHash('sha256')
-    .update(JSON.stringify({
-      project_id: project.project_id,
-      name: project.name,
-      cards: compiledCards.map(c => ({ id: c.id, type: c.type, fields: c.fields, human_lock: c.human_lock })),
-    }))
-    .digest('hex');
+    .createHash("sha256")
+    .update(
+      JSON.stringify({
+        project_id: project.project_id,
+        name: project.name,
+        cards: compiledCards.map((c) => ({
+          id: c.id,
+          type: c.type,
+          fields: c.fields,
+          human_lock: c.human_lock,
+        })),
+      }),
+    )
+    .digest("hex");
   const manifest = {
-    artifact_type: 'kdna.studio.compile-manifest',
-    schema_version: '1.0',
+    artifact_type: "kdna.studio.compile-manifest",
+    schema_version: "1.0",
     name: project.name,
     domain_id: assetIdentity.domain_id,
     asset_uid: assetIdentity.asset_uid,
@@ -579,46 +704,48 @@ function compileManifest(project, files, identity = null) {
     version: assetIdentity.version,
     judgment_version: assetIdentity.judgment_version,
     content_digest: assetIdentity.content_digest,
-    status: (project.release && project.release.status) || 'experimental',
-    access: (project.release && project.release.access) || 'open',
-    languages: project.languages || ['en'],
-    default_language: project.default_language || 'en',
-    author: project.author || { name: '', id: '' },
-    license: project.license || { type: 'CC-BY-4.0' },
+    status: (project.release && project.release.status) || "experimental",
+    access: (project.release && project.release.access) || "open",
+    languages: project.languages || ["en"],
+    default_language: project.default_language || "en",
+    author: project.author || { name: "", id: "" },
+    license: project.license || { type: "CC-BY-4.0" },
     description: project.release?.description || project.name,
     file_count: kdnaFileCount,
     compile_payload: {
-      type: 'kdna.studio.compile-payload',
-      payload: 'payload.kdnab',
-      payload_encoding: 'cbor',
-      payload_schema: 'studio-compile-payload',
-      payload_digest: `sha256:${crypto.createHash('sha256').update(files['payload.kdnab']).digest('hex')}`,
+      type: "kdna.studio.compile-payload",
+      payload: "payload.kdnab",
+      payload_encoding: "cbor",
+      payload_schema: "studio-compile-payload",
+      payload_digest: `sha256:${crypto.createHash("sha256").update(files["payload.kdnab"]).digest("hex")}`,
     },
     runtime: {
-      min_runtime_version: '0.3.0',
+      min_runtime_version: "0.3.0",
       load_contract: RUNTIME_CAPSULE_TYPE,
       load_contract_version: RUNTIME_CAPSULE_VERSION,
     },
-    creator: project.creator_identity ? {
-      creator_id: project.creator_identity.creator_id,
-      display_name: project.creator_identity.display_name,
-      public_key: project.creator_identity.public_key,
-      verified: project.creator_identity.verified || false,
-    } : null,
+    creator: project.creator_identity
+      ? {
+          creator_id: project.creator_identity.creator_id,
+          display_name: project.creator_identity.display_name,
+          public_key: project.creator_identity.public_key,
+          verified: project.creator_identity.verified || false,
+        }
+      : null,
     authoring: {
-      created_by: 'kdna-studio-sdk',
-      authoring_tool: 'KDNA Studio Core',
+      created_by: "kdna-studio-sdk",
+      authoring_tool: "KDNA Studio Core",
       authoring_tool_version: version,
-      compiler: '@aikdna/kdna-studio-core',
+      compiler: "@aikdna/kdna-studio-core",
       compiler_version: version,
       conformance: {
         passed: true,
-        schema_version: '1.0',
-        validator: '@aikdna/kdna-studio-core',
+        schema_version: "1.0",
+        validator: "@aikdna/kdna-studio-core",
         validator_version: version,
         checked_at: assetIdentity.compiled_at,
       },
-      source_mode: project.source_mode || 'blank',
+      source_mode: project.source_mode || "blank",
       asset_uid: assetIdentity.asset_uid,
       project_uid: assetIdentity.project_uid,
       build_id: assetIdentity.build_id,
@@ -626,13 +753,15 @@ function compileManifest(project, files, identity = null) {
       content_digest: assetIdentity.content_digest,
       studio_project_digest: `sha256:${projectDigest}`,
       human_lock_required: false,
-      human_lock_policy: 'optional_provenance',
+      human_lock_policy: "optional_provenance",
       human_lock_count: lockedCards.length,
-      ai_assisted: (project.cards || []).some(c => c.history?.some(h => h.by === 'ai')),
+      ai_assisted: (project.cards || []).some((c) =>
+        c.history?.some((h) => h.by === "ai"),
+      ),
       human_confirmed: lockedCards.length > 0,
       compiled_at: assetIdentity.compiled_at,
     },
-    lineage: project.lineage || { type: 'original' },
+    lineage: project.lineage || { type: "original" },
     created: project.created || new Date().toISOString().slice(0, 10),
     updated: project.updated || new Date().toISOString().slice(0, 10),
   };
@@ -652,8 +781,10 @@ function buildReports(project, files, identity, provenance, stats) {
   // reasoning / framework / term / banned_term / evolution_stage, so a
   // domain that contained only those types compiled to an empty judgment
   // payload even when every card was Human Locked.
-  const judgmentCards = cards.filter(c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type));
-  const packageVersion = require('../../package.json').version;
+  const judgmentCards = cards.filter((c) =>
+    JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type),
+  );
+  const packageVersion = require("../../package.json").version;
 
   const buildReport = {
     ...REPORT_CONTRACTS.build,
@@ -662,16 +793,16 @@ function buildReports(project, files, identity, provenance, stats) {
     project_uid: identity.project_uid,
     domain_id: identity.domain_id,
     registry_name: identity.registry_name,
-    compiler: '@aikdna/kdna-studio-core',
+    compiler: "@aikdna/kdna-studio-core",
     compiler_version: packageVersion,
     compiled_at: identity.compiled_at,
     content_digest: identity.content_digest,
     stats,
     validations: {
-      schema_validation: 'required_before export',
-      cross_file_validation: 'required_before export',
-      id_uniqueness: 'required_before export',
-      language_version_consistency: 'required_before export',
+      schema_validation: "required_before export",
+      cross_file_validation: "required_before export",
+      id_uniqueness: "required_before export",
+      language_version_consistency: "required_before export",
     },
     outputs: Object.keys(files).sort(),
   };
@@ -680,11 +811,11 @@ function buildReports(project, files, identity, provenance, stats) {
     ...REPORT_CONTRACTS.humanLock,
     build_id: identity.build_id,
     human_lock_required: false,
-    human_lock_policy: 'optional_provenance',
+    human_lock_policy: "optional_provenance",
     human_lock_count: lockedCards.length,
     judgment_card_count: judgmentCards.length,
-    unlocked_judgment_card_count: judgmentCards.filter(c => !c.locked).length,
-    cards: lockedCards.map(c => ({
+    unlocked_judgment_card_count: judgmentCards.filter((c) => !c.locked).length,
+    cards: lockedCards.map((c) => ({
       id: c.id,
       type: c.type,
       locked: true,
@@ -705,21 +836,23 @@ function buildReports(project, files, identity, provenance, stats) {
     judgment_version: identity.judgment_version,
     content_digest: identity.content_digest,
     asset_digest: null,
-    compiler: '@aikdna/kdna-studio-core',
+    compiler: "@aikdna/kdna-studio-core",
     compiler_version: packageVersion,
-    signature_status: 'pending_export_sign',
+    signature_status: "pending_export_sign",
     encryption_profile:
-      project.release?.access === 'licensed' ? 'kdna.encryption.licensed-entry' : null,
+      project.release?.access === "licensed"
+        ? "kdna.encryption.licensed-entry"
+        : null,
     encryption_profile_version:
-      project.release?.access === 'licensed' ? '0.1.0' : null,
+      project.release?.access === "licensed" ? "0.1.0" : null,
     built_at: identity.compiled_at,
   };
 
   return {
-    'reports/build-report.json': JSON.stringify(buildReport, null, 2),
-    'reports/provenance-report.json': JSON.stringify(provenance, null, 2),
-    'reports/human-lock-report.json': JSON.stringify(humanLockReport, null, 2),
-    'build-receipt.json': JSON.stringify(buildReceipt, null, 2),
+    "reports/build-report.json": JSON.stringify(buildReport, null, 2),
+    "reports/provenance-report.json": JSON.stringify(provenance, null, 2),
+    "reports/human-lock-report.json": JSON.stringify(humanLockReport, null, 2),
+    "build-receipt.json": JSON.stringify(buildReceipt, null, 2),
   };
 }
 
@@ -732,7 +865,8 @@ function compileDomain(project, options = {}) {
   // downstream Registry / Lab / Studio export never advertises an empty
   // judgment asset as "successfully compiled".
   const compiledCards = cards.filter(
-    c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== 'deprecated',
+    (c) =>
+      JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== "deprecated",
   );
   const hasJudgmentContent = compiledCards.length > 0;
   if (!hasJudgmentContent) {
@@ -742,18 +876,18 @@ function compileDomain(project, options = {}) {
     // types added since the 1.0 launch. Derive the list from the
     // single source of truth so the message can never drift again.
     const err = new Error(
-      'refusing to compile empty KDNA domain: no non-deprecated judgment content ' +
-      `(${Array.from(JUDGMENT_CARD_TYPES_FOR_COMPILE).join(' / ')}). ` +
-      `Found ${compiledCards.length} compilable card(s) and ${cards.length} total card(s).`
+      "refusing to compile empty KDNA domain: no non-deprecated judgment content " +
+        `(${Array.from(JUDGMENT_CARD_TYPES_FOR_COMPILE).join(" / ")}). ` +
+        `Found ${compiledCards.length} compilable card(s) and ${cards.length} total card(s).`,
     );
-    err.code = 'EMPTY_DOMAIN';
+    err.code = "EMPTY_DOMAIN";
     throw err;
   }
 
   // The compile helpers historically selected on `card.locked`. Feed them a
   // compile-only view so existing field shaping stays stable while Human Lock
   // remains optional provenance on the original project cards.
-  const compileInputCards = compiledCards.map(c => ({ ...c, locked: true }));
+  const compileInputCards = compiledCards.map((c) => ({ ...c, locked: true }));
   const core = compileCore(
     compileInputCards,
     project,
@@ -762,8 +896,16 @@ function compileDomain(project, options = {}) {
   const patterns = compilePatterns(compileInputCards, project);
   const scenarios = compileScenarios(compileInputCards, project);
   const cases = compileCases(compileInputCards, project);
-  const reasoning = compileReasoning(compileInputCards, project, options.source?.reasoning || null);
-  const evolution = compileEvolution(compileInputCards, project, options.source?.evolution || null);
+  const reasoning = compileReasoning(
+    compileInputCards,
+    project,
+    options.source?.reasoning || null,
+  );
+  const evolution = compileEvolution(
+    compileInputCards,
+    project,
+    options.source?.evolution || null,
+  );
 
   // ── RFC-0013 §3.1/§3.2 Compile Gates (PR-3) ───────────────────
   // Run the Source Authority Graph gate and the Truth Charter gate
@@ -771,9 +913,10 @@ function compileDomain(project, options = {}) {
   // Pass options.strictAuthority = true to treat gate issues as errors
   // (recommended for official publication pipelines).
   const strictAuthority = options.strictAuthority === true;
-  const { runSagGate } = require('./source-authority-gate');
-  const { runTcGate } = require('./truth-charter-gate');
-  const sourceAuthority = options.sourceAuthority || project.source_authority || null;
+  const { runSagGate } = require("./source-authority-gate");
+  const { runTcGate } = require("./truth-charter-gate");
+  const sourceAuthority =
+    options.sourceAuthority || project.source_authority || null;
   const truthCharter = options.truthCharter || project.truth_charter || null;
   const sag = runSagGate(sourceAuthority, { strict: strictAuthority });
   const tc = runTcGate(truthCharter, {
@@ -783,31 +926,37 @@ function compileDomain(project, options = {}) {
   });
   const gates = { sag, tc, strict_authority: strictAuthority };
   // Gate policy: strictAuthority=true + any gate.status === 'fail' => throw.
-  if (strictAuthority && (sag.status === 'fail' || tc.status === 'fail')) {
+  if (strictAuthority && (sag.status === "fail" || tc.status === "fail")) {
     const allErrors = [...sag.errors, ...tc.errors];
     const err = new Error(
       `Strict-authority compile failed. ${allErrors.length} gate error(s):\n` +
-        allErrors.map((e) => `  - ${e}`).join('\n'),
+        allErrors.map((e) => `  - ${e}`).join("\n"),
     );
-    err.code = 'GATE_FAIL';
+    err.code = "GATE_FAIL";
     err.gates = gates;
     throw err;
   }
 
   const files = {
-    'KDNA_Core.json': JSON.stringify(core, null, 2),
-    'KDNA_Patterns.json': JSON.stringify(patterns, null, 2),
+    "KDNA_Core.json": JSON.stringify(core, null, 2),
+    "KDNA_Patterns.json": JSON.stringify(patterns, null, 2),
   };
-  if (scenarios) files['KDNA_Scenarios.json'] = JSON.stringify(scenarios, null, 2);
-  if (cases) files['KDNA_Cases.json'] = JSON.stringify(cases, null, 2);
-  if (reasoning) files['KDNA_Reasoning.json'] = JSON.stringify(reasoning, null, 2);
-  if (evolution) files['KDNA_Evolution.json'] = JSON.stringify(evolution, null, 2);
+  if (scenarios)
+    files["KDNA_Scenarios.json"] = JSON.stringify(scenarios, null, 2);
+  if (cases) files["KDNA_Cases.json"] = JSON.stringify(cases, null, 2);
+  if (reasoning)
+    files["KDNA_Reasoning.json"] = JSON.stringify(reasoning, null, 2);
+  if (evolution)
+    files["KDNA_Evolution.json"] = JSON.stringify(evolution, null, 2);
 
   // Encode judgment as CBOR payload
   const payload = {
-    kind: 'kdna.studio.compile-payload',
-    schema_version: '1.0',
-    domain: { name: project.name, version: (project.release && project.release.version) || '0.1.0' },
+    kind: "kdna.studio.compile-payload",
+    schema_version: "1.0",
+    domain: {
+      name: project.name,
+      version: (project.release && project.release.version) || "0.1.0",
+    },
     judgment: { core, patterns },
     profiles: {},
     integrity: {},
@@ -816,20 +965,24 @@ function compileDomain(project, options = {}) {
   if (cases) payload.judgment.cases = cases;
   if (reasoning) payload.judgment.reasoning = reasoning;
   if (evolution) payload.judgment.evolution = evolution;
-  files['payload.kdnab'] = cbor.encode(payload);
+  files["payload.kdnab"] = cbor.encode(payload);
 
   const identity = buildAssetIdentity(project, files);
-  const provenance = require('../provenance').buildProvenance(project, files, identity);
+  const provenance = require("../provenance").buildProvenance(
+    project,
+    files,
+    identity,
+  );
 
   const excludedCount = cards.length - compiledCards.length;
   const stats = {
     total_cards: cards.length,
     compiled_cards: compiledCards.length,
-    locked_cards: cards.filter(c => c.locked).length,
+    locked_cards: cards.filter((c) => c.locked).length,
     human_lock_count: cards.filter(hasHumanLock).length,
     excluded_cards: excludedCount,
-    deprecated_cards: cards.filter(c => c.status === 'deprecated').length,
-    kdna_files: Object.keys(files).filter(f => f.startsWith('KDNA_')).length,
+    deprecated_cards: cards.filter((c) => c.status === "deprecated").length,
+    kdna_files: Object.keys(files).filter((f) => f.startsWith("KDNA_")).length,
     total_files: Object.keys(files).length,
   };
 
@@ -839,9 +992,16 @@ function compileDomain(project, options = {}) {
   provenance.content_fingerprint = identity.content_digest;
 
   // Now build reports/receipt — they will all see the same digest.
-  Object.assign(files, buildReports(project, files, identity, provenance, stats));
-  files['reports/provenance-report.json'] = JSON.stringify(provenance, null, 2);
-  files['kdna.json'] = JSON.stringify(compileManifest(project, files, identity), null, 2);
+  Object.assign(
+    files,
+    buildReports(project, files, identity, provenance, stats),
+  );
+  files["reports/provenance-report.json"] = JSON.stringify(provenance, null, 2);
+  files["kdna.json"] = JSON.stringify(
+    compileManifest(project, files, identity),
+    null,
+    2,
+  );
   stats.total_files = Object.keys(files).length;
 
   return {
@@ -855,69 +1015,110 @@ function compileDomain(project, options = {}) {
 function generateReadme(project, options = {}) {
   const cards = project.cards || [];
   const judgmentCards = cards.filter(
-    c => JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== 'deprecated',
+    (c) =>
+      JUDGMENT_CARD_TYPES_FOR_COMPILE.has(c.type) && c.status !== "deprecated",
   );
   const humanLocked = judgmentCards.filter(hasHumanLock);
-  const axioms = judgmentCards.filter(c => c.type === 'axiom');
-  const misunderstandings = judgmentCards.filter(c => c.type === 'misunderstanding');
-  const selfChecks = judgmentCards.filter(c => c.type === 'self_check');
-  const boundaries = judgmentCards.filter(c => c.type === 'boundary');
+  const axioms = judgmentCards.filter((c) => c.type === "axiom");
+  const misunderstandings = judgmentCards.filter(
+    (c) => c.type === "misunderstanding",
+  );
+  const selfChecks = judgmentCards.filter((c) => c.type === "self_check");
+  const boundaries = judgmentCards.filter((c) => c.type === "boundary");
   const lines = [];
   lines.push(`# ${project.name}`);
-  lines.push('');
-  if (options.description) { lines.push(options.description); lines.push(''); }
+  lines.push("");
+  if (options.description) {
+    lines.push(options.description);
+    lines.push("");
+  }
 
-  lines.push('## Where it comes from');
-  lines.push('');
-  lines.push(options.origin || `${judgmentCards.length} non-deprecated judgment cards authored with KDNA Studio. Review provenance is reported separately.`);
-  lines.push('');
+  lines.push("## Where it comes from");
+  lines.push("");
+  lines.push(
+    options.origin ||
+      `${judgmentCards.length} non-deprecated judgment cards authored with KDNA Studio. Review provenance is reported separately.`,
+  );
+  lines.push("");
 
-  lines.push('## Where it applies');
-  lines.push('');
-  const appliesWhen = [...new Set(axioms.flatMap(ax => ax.fields?.applies_when || []))];
-  appliesWhen.length ? appliesWhen.forEach(w => lines.push(`- ${w}`)) : lines.push('- As declared in each axiom\'s applies_when field.');
-  lines.push('');
+  lines.push("## Where it applies");
+  lines.push("");
+  const appliesWhen = [
+    ...new Set(axioms.flatMap((ax) => ax.fields?.applies_when || [])),
+  ];
+  appliesWhen.length
+    ? appliesWhen.forEach((w) => lines.push(`- ${w}`))
+    : lines.push("- As declared in each axiom's applies_when field.");
+  lines.push("");
 
-  lines.push('## How it is verified');
-  lines.push('');
-  lines.push(`- ${axioms.length} authored axioms with applies_when / does_not_apply_when / failure_risk`);
+  lines.push("## How it is verified");
+  lines.push("");
+  lines.push(
+    `- ${axioms.length} authored axioms with applies_when / does_not_apply_when / failure_risk`,
+  );
   lines.push(`- ${selfChecks.length} self-check questions`);
   lines.push(`- ${misunderstandings.length} misunderstanding patterns`);
-  lines.push(`- ${humanLocked.length} cards with explicit Human Lock provenance`);
-  lines.push('');
+  lines.push(
+    `- ${humanLocked.length} cards with explicit Human Lock provenance`,
+  );
+  lines.push("");
 
-  lines.push('## When it does NOT apply');
-  lines.push('');
-  const notApply = [...new Set(axioms.flatMap(ax => ax.fields?.does_not_apply_when || []))];
-  notApply.forEach(w => lines.push(`- ${w}`));
-  for (const oos of boundaries.flatMap(b => [b.fields?.out_of_scope || '']).filter(Boolean)) {
+  lines.push("## When it does NOT apply");
+  lines.push("");
+  const notApply = [
+    ...new Set(axioms.flatMap((ax) => ax.fields?.does_not_apply_when || [])),
+  ];
+  notApply.forEach((w) => lines.push(`- ${w}`));
+  for (const oos of boundaries
+    .flatMap((b) => [b.fields?.out_of_scope || ""])
+    .filter(Boolean)) {
     if (!notApply.includes(oos)) lines.push(`- ${oos}`);
   }
-  lines.push('');
+  lines.push("");
 
   if (axioms.length > 0) {
-    lines.push('## Top Axioms'); lines.push('');
-    axioms.forEach(ax => {
+    lines.push("## Top Axioms");
+    lines.push("");
+    axioms.forEach((ax) => {
       lines.push(`- **${ax.fields?.one_sentence || ax.id}**`);
-      if (ax.fields?.failure_risk) lines.push(`  - Failure risk: ${ax.fields.failure_risk}`);
+      if (ax.fields?.failure_risk)
+        lines.push(`  - Failure risk: ${ax.fields.failure_risk}`);
     });
-    lines.push('');
+    lines.push("");
   }
 
   if (misunderstandings.length > 0) {
-    lines.push('## Top Misunderstandings'); lines.push('');
-    misunderstandings.forEach(ms => {
+    lines.push("## Top Misunderstandings");
+    lines.push("");
+    misunderstandings.forEach((ms) => {
       lines.push(`- WRONG: ${ms.fields?.wrong}`);
       lines.push(`  CORRECT: ${ms.fields?.correct}`);
     });
-    lines.push('');
+    lines.push("");
   }
 
-  lines.push('## Files'); lines.push('');
-  lines.push('One packaged `.kdna` asset containing a manifest, CBOR judgment payload, checksums, and optional evidence reports.');
-  lines.push('');
+  lines.push("## Files");
+  lines.push("");
+  lines.push(
+    "One packaged `.kdna` asset containing a manifest, CBOR judgment payload, checksums, and optional evidence reports.",
+  );
+  lines.push("");
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
-module.exports = { compileDomain, compileCore, compilePatterns, compileScenarios, compileCases, compileReasoning, compileEvolution, compileManifest, generateReadme, buildAssetIdentity, computeContentDigest, runSagGate: require('./source-authority-gate').runSagGate, runTcGate: require('./truth-charter-gate').runTcGate };
+module.exports = {
+  compileDomain,
+  compileCore,
+  compilePatterns,
+  compileScenarios,
+  compileCases,
+  compileReasoning,
+  compileEvolution,
+  compileManifest,
+  generateReadme,
+  buildAssetIdentity,
+  computeContentDigest,
+  runSagGate: require("./source-authority-gate").runSagGate,
+  runTcGate: require("./truth-charter-gate").runTcGate,
+};

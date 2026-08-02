@@ -1,15 +1,17 @@
 #!/usr/bin/env node
-'use strict';
+"use strict";
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { readAuthoritativeGitState } = require('./authoritative-git');
-const { validateReleaseContext } = require('./release-policy');
-const { assertRegistryReleaseReady } = require('./runtime-candidate-binding');
+const fs = require("node:fs");
+const path = require("node:path");
+const { readAuthoritativeGitState } = require("./authoritative-git");
+const { validateReleaseContext } = require("./release-policy");
+const { assertRegistryReleaseReady } = require("./runtime-candidate-binding");
 
-const root = path.resolve(__dirname, '..');
-const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+const root = path.resolve(__dirname, "..");
+const pkg = JSON.parse(
+  fs.readFileSync(path.join(root, "package.json"), "utf8"),
+);
+const changelog = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
 
 try {
   assertRegistryReleaseReady(root);
@@ -20,7 +22,9 @@ try {
     env: process.env,
     git: readAuthoritativeGitState(root, tag, { environment: process.env }),
   });
-  console.log(`Release context verified: ${context.name}@${context.version} ${context.commit}`);
+  console.log(
+    `Release context verified: ${context.name}@${context.version} ${context.commit}`,
+  );
 } catch (error) {
   console.error(`Release context rejected: ${error.message}`);
   process.exitCode = 1;

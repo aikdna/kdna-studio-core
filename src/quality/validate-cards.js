@@ -7,14 +7,34 @@
 
 const ANTI_PATTERNS = {
   axiom: {
-    slogans: ['is key', 'is important', 'matters', 'is critical', 'is essential', 'should be', 'must be'],
-    sops: ['first, you should', 'follow these steps', 'always remember to', 'the process is'],
+    slogans: [
+      "is key",
+      "is important",
+      "matters",
+      "is critical",
+      "is essential",
+      "should be",
+      "must be",
+    ],
+    sops: [
+      "first, you should",
+      "follow these steps",
+      "always remember to",
+      "the process is",
+    ],
   },
   misunderstanding: {
-    straw_men: ['some people say', 'many believe', 'it is commonly thought'],
+    straw_men: ["some people say", "many believe", "it is commonly thought"],
   },
   self_check: {
-    generics: ['is this good', 'is this correct', 'is this helpful', 'is this clear', 'does this work', 'is it right'],
+    generics: [
+      "is this good",
+      "is this correct",
+      "is this helpful",
+      "is this clear",
+      "does this work",
+      "is it right",
+    ],
   },
 };
 
@@ -22,19 +42,19 @@ function validateCard(card) {
   const issues = [];
 
   switch (card.type) {
-    case 'axiom':
+    case "axiom":
       validateAxiom(card, issues);
       break;
-    case 'misunderstanding':
+    case "misunderstanding":
       validateMisunderstanding(card, issues);
       break;
-    case 'self_check':
+    case "self_check":
       validateSelfCheck(card, issues);
       break;
-    case 'ontology':
+    case "ontology":
       validateOntology(card, issues);
       break;
-    case 'boundary':
+    case "boundary":
       validateBoundary(card, issues);
       break;
   }
@@ -43,17 +63,17 @@ function validateCard(card) {
 }
 
 function validateAxiom(card, issues) {
-  const oneLiner = (card.fields?.one_sentence || '').toLowerCase();
-  const full = (card.fields?.full_statement || '').toLowerCase();
+  const oneLiner = (card.fields?.one_sentence || "").toLowerCase();
+  const full = (card.fields?.full_statement || "").toLowerCase();
 
   // Anti-slogan: reject axioms that are just motivational slogans
   for (const slogan of ANTI_PATTERNS.axiom.slogans) {
     if (oneLiner.includes(slogan) && oneLiner.length < 40) {
       issues.push({
-        type: 'slogan',
-        severity: 'warning',
+        type: "slogan",
+        severity: "warning",
         message: `${card.id}: one_sentence may be a slogan — "${oneLiner.slice(0, 60)}"`,
-        fix: 'Axioms must be specific, testable judgment principles. Replace vague slogans with concrete decision rules.',
+        fix: "Axioms must be specific, testable judgment principles. Replace vague slogans with concrete decision rules.",
       });
       break;
     }
@@ -63,10 +83,10 @@ function validateAxiom(card, issues) {
   for (const sop of ANTI_PATTERNS.axiom.sops) {
     if (oneLiner.includes(sop) || full.includes(sop)) {
       issues.push({
-        type: 'sop',
-        severity: 'warning',
+        type: "sop",
+        severity: "warning",
         message: `${card.id}: axiom reads like a procedure, not a judgment principle`,
-        fix: 'Axioms encode how to judge, not what steps to follow. Rephrase as a decision principle.',
+        fix: "Axioms encode how to judge, not what steps to follow. Rephrase as a decision principle.",
       });
       break;
     }
@@ -74,96 +94,162 @@ function validateAxiom(card, issues) {
 
   // Anti-vagueness: one_sentence must be specific enough
   if (oneLiner.length < 15) {
-    issues.push({ type: 'too_short', severity: 'blocking', message: `${card.id}: one_sentence too short (${oneLiner.length} chars)`, fix: 'Make it a complete, specific judgment statement.' });
+    issues.push({
+      type: "too_short",
+      severity: "blocking",
+      message: `${card.id}: one_sentence too short (${oneLiner.length} chars)`,
+      fix: "Make it a complete, specific judgment statement.",
+    });
   }
 
   // SPEC requirement: axiom MUST have full_statement and why
   if (!card.fields?.full_statement || card.fields.full_statement.length < 20) {
-    issues.push({ type: 'missing_full_statement', severity: 'blocking', message: `${card.id}: full_statement missing or too short — SPEC requires a complete, testable explanation`, fix: 'Add a full_statement that is at least 20 characters and explains the principle in full.' });
+    issues.push({
+      type: "missing_full_statement",
+      severity: "blocking",
+      message: `${card.id}: full_statement missing or too short — SPEC requires a complete, testable explanation`,
+      fix: "Add a full_statement that is at least 20 characters and explains the principle in full.",
+    });
   }
 
   if (!card.fields?.why || card.fields.why.length < 20) {
-    issues.push({ type: 'missing_why', severity: 'blocking', message: `${card.id}: why missing or too short — SPEC requires an explanation of what the agent would get wrong without this axiom`, fix: 'Add a why field that explains the failure mode this axiom prevents.' });
+    issues.push({
+      type: "missing_why",
+      severity: "blocking",
+      message: `${card.id}: why missing or too short — SPEC requires an explanation of what the agent would get wrong without this axiom`,
+      fix: "Add a why field that explains the failure mode this axiom prevents.",
+    });
   }
 
   // Check for dictionary-definition style (axiom should not start with "X is")
   if (/^\w+\s+is\s/.test(oneLiner) && oneLiner.length < 50) {
-    issues.push({ type: 'definition_like', severity: 'warning', message: `${card.id}: one_sentence reads like a definition, not a judgment — rephrase as a principle` });
+    issues.push({
+      type: "definition_like",
+      severity: "warning",
+      message: `${card.id}: one_sentence reads like a definition, not a judgment — rephrase as a principle`,
+    });
   }
 }
 
 function validateMisunderstanding(card, issues) {
-  const wrong = (card.fields?.wrong || '').toLowerCase();
-  const correct = (card.fields?.correct || '').toLowerCase();
-  const distinction = card.fields?.key_distinction || '';
+  const wrong = (card.fields?.wrong || "").toLowerCase();
+  const correct = (card.fields?.correct || "").toLowerCase();
+  const distinction = card.fields?.key_distinction || "";
 
   // Anti-straw-man: the wrong belief should be something real people believe
   if (wrong.length < 15) {
-    issues.push({ type: 'vague_wrong', severity: 'warning', message: `${card.id}: wrong belief too short — may describe a straw man no one believes` });
+    issues.push({
+      type: "vague_wrong",
+      severity: "warning",
+      message: `${card.id}: wrong belief too short — may describe a straw man no one believes`,
+    });
   }
   for (const straw of ANTI_PATTERNS.misunderstanding.straw_men) {
     if (wrong.includes(straw)) {
-      issues.push({ type: 'straw_man', severity: 'warning', message: `${card.id}: wrong belief uses straw-man phrasing — describe what people actually get wrong` });
+      issues.push({
+        type: "straw_man",
+        severity: "warning",
+        message: `${card.id}: wrong belief uses straw-man phrasing — describe what people actually get wrong`,
+      });
       break;
     }
   }
 
   if (!distinction || distinction.length < 20) {
-    issues.push({ type: 'missing_distinction', severity: 'blocking', message: `${card.id}: key_distinction missing or too short (${distinction.length} chars)` });
+    issues.push({
+      type: "missing_distinction",
+      severity: "blocking",
+      message: `${card.id}: key_distinction missing or too short (${distinction.length} chars)`,
+    });
   }
 }
 
 function validateSelfCheck(card, issues) {
-  const question = card.fields?.question || '';
+  const question = card.fields?.question || "";
 
-  const isQuestion = question.endsWith('?') || question.endsWith('？') || /[吗是否]$/.test(question);
+  const isQuestion =
+    question.endsWith("?") ||
+    question.endsWith("？") ||
+    /[吗是否]$/.test(question);
   if (!isQuestion) {
-    issues.push({ type: 'not_question', severity: 'blocking', message: `${card.id}: must be a yes/no answerable question` });
+    issues.push({
+      type: "not_question",
+      severity: "blocking",
+      message: `${card.id}: must be a yes/no answerable question`,
+    });
   }
 
   if (question.length < 15) {
-    issues.push({ type: 'vague', severity: 'warning', message: `${card.id}: question too short — make it domain-specific` });
+    issues.push({
+      type: "vague",
+      severity: "warning",
+      message: `${card.id}: question too short — make it domain-specific`,
+    });
   }
 
   for (const gen of ANTI_PATTERNS.self_check.generics) {
     if (question.toLowerCase().includes(gen)) {
-      issues.push({ type: 'generic', severity: 'warning', message: `${card.id}: question is generic — should reference domain-specific criteria` });
+      issues.push({
+        type: "generic",
+        severity: "warning",
+        message: `${card.id}: question is generic — should reference domain-specific criteria`,
+      });
       break;
     }
   }
 }
 
 function validateOntology(card, issues) {
-  const essence = card.fields?.essence || '';
-  const boundary = card.fields?.boundary || '';
-  const trigger = card.fields?.trigger_signal || '';
+  const essence = card.fields?.essence || "";
+  const boundary = card.fields?.boundary || "";
+  const trigger = card.fields?.trigger_signal || "";
 
   if (essence.length < 15) {
-    issues.push({ type: 'vague_essence', severity: 'warning', message: `${card.id}: essence too short — explain operational meaning` });
+    issues.push({
+      type: "vague_essence",
+      severity: "warning",
+      message: `${card.id}: essence too short — explain operational meaning`,
+    });
   }
   if (boundary.length < 10) {
-    issues.push({ type: 'missing_boundary', severity: 'warning', message: `${card.id}: boundary missing — what is this concept NOT?` });
+    issues.push({
+      type: "missing_boundary",
+      severity: "warning",
+      message: `${card.id}: boundary missing — what is this concept NOT?`,
+    });
   }
   if (trigger.length < 10) {
-    issues.push({ type: 'missing_trigger', severity: 'warning', message: `${card.id}: trigger_signal missing — how does the agent detect this concept?` });
+    issues.push({
+      type: "missing_trigger",
+      severity: "warning",
+      message: `${card.id}: trigger_signal missing — how does the agent detect this concept?`,
+    });
   }
 }
 
 function validateBoundary(card, issues) {
-  const scope = card.fields?.scope || '';
-  const outOfScope = card.fields?.out_of_scope || '';
+  const scope = card.fields?.scope || "";
+  const outOfScope = card.fields?.out_of_scope || "";
 
   if (scope.length < 10) {
-    issues.push({ type: 'vague_scope', severity: 'warning', message: `${card.id}: scope too short` });
+    issues.push({
+      type: "vague_scope",
+      severity: "warning",
+      message: `${card.id}: scope too short`,
+    });
   }
   if (outOfScope.length < 10) {
-    issues.push({ type: 'vague_out_of_scope', severity: 'blocking', message: `${card.id}: out_of_scope missing or too short` });
+    issues.push({
+      type: "vague_out_of_scope",
+      severity: "blocking",
+      message: `${card.id}: out_of_scope missing or too short`,
+    });
   }
 }
 
 function validateAllCards(project) {
   const allIssues = [];
-  for (const card of (project.cards || [])) {
+  for (const card of project.cards || []) {
     const cardIssues = validateCard(card);
     allIssues.push({ card_id: card.id, issues: cardIssues });
   }

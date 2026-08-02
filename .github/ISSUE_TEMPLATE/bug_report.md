@@ -1,14 +1,15 @@
 ---
 name: Bug Report
 about: Report a bug
-title: '[bug]: '
+title: "[bug]: "
 labels: bug
-assignees: ''
+assignees: ""
 ---
 
 ## Description
 
 ## Steps to Reproduce
+
 1.
 2.
 3.
@@ -18,5 +19,6 @@ assignees: ''
 ## Actual Behavior
 
 ## Environment
+
 - OS:
 - Version:

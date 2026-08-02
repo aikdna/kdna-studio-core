@@ -53,9 +53,7 @@
         "full_statement": "When required checks have passed but rollback evidence remains incomplete, choose the smallest reversible rollout that can produce the missing evidence.",
         "why": "Without this rule, rollout speed can outrank a verified recovery path.",
         "confidence": "high",
-        "applies_when": [
-          "choosing rollout scope after required checks pass"
-        ],
+        "applies_when": ["choosing rollout scope after required checks pass"],
         "does_not_apply_when": [
           "determining whether required checks actually passed"
         ],

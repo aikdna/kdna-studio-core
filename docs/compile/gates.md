@@ -40,10 +40,10 @@ The return value gains a new top-level `gates` field:
 
 ## Default vs strict
 
-| Mode | Behavior |
-|------|----------|
-| Default (`strictAuthority: false`, default) | All rule violations are reported as `warnings`. No throw. The function still returns a complete `gates` block. |
-| `strictAuthority: true` | Rule violations are reported as `errors`. If any gate's `status === 'fail'`, `compileDomain` throws an `Error` with `code: 'GATE_FAIL'` and the `gates` block attached. |
+| Mode                                        | Behavior                                                                                                                                                                |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Default (`strictAuthority: false`, default) | All rule violations are reported as `warnings`. No throw. The function still returns a complete `gates` block.                                                          |
+| `strictAuthority: true`                     | Rule violations are reported as `errors`. If any gate's `status === 'fail'`, `compileDomain` throws an `Error` with `code: 'GATE_FAIL'` and the `gates` block attached. |
 
 `status: 'fail'` only happens under `strictAuthority: true` (when a rule
 violation becomes an error). In default mode, the same condition reports
@@ -51,26 +51,26 @@ violation becomes an error). In default mode, the same condition reports
 
 ## SAG gate rules (`runSagGate`)
 
-| # | Rule | Default | Strict |
-|---|------|---------|--------|
-| R1 | `precedence_order` references must all exist in `sources[].id` | warning | error |
-| R2 | At least one source must have `authority: "current_highest"` | warning | error |
-| R3a | `authority: "deprecated"` requires `status: "deprecated"` | warning | error |
-| R3b | `authority: "current_highest"` requires `status: "active"` | warning | error |
-| R3c | Deprecated sources must not appear in `precedence_order` | warning | error |
-| R4 | The first `current_highest` in `precedence_order` must not be preceded by any lower-authority source | warning | error |
-| R5 | `sensitivity.sources_contain_pii: true` without `author_consent_on_file: true` | warning (always) | warning (always) |
+| #   | Rule                                                                                                 | Default          | Strict           |
+| --- | ---------------------------------------------------------------------------------------------------- | ---------------- | ---------------- |
+| R1  | `precedence_order` references must all exist in `sources[].id`                                       | warning          | error            |
+| R2  | At least one source must have `authority: "current_highest"`                                         | warning          | error            |
+| R3a | `authority: "deprecated"` requires `status: "deprecated"`                                            | warning          | error            |
+| R3b | `authority: "current_highest"` requires `status: "active"`                                           | warning          | error            |
+| R3c | Deprecated sources must not appear in `precedence_order`                                             | warning          | error            |
+| R4  | The first `current_highest` in `precedence_order` must not be preceded by any lower-authority source | warning          | error            |
+| R5  | `sensitivity.sources_contain_pii: true` without `author_consent_on_file: true`                       | warning (always) | warning (always) |
 
 ## TC gate rules (`runTcGate`)
 
-| # | Rule | Default | Strict |
-|---|------|---------|--------|
-| R1 | `tc_status` must be one of `draft \| synthesized \| locked \| deprecated` | error (always; malformed) | error (always) |
-| R2 | `tc_status: "synthesized"` requires the author to upgrade to `locked` | warning | error |
-| R3 | `tc_status: "deprecated"` cannot govern new compilations | warning | error |
-| R4 | `tc_status: "locked"` requires `locked_at` and `locked_by` | error (always; malformed lock) | error (always) |
-| R5 | `renamed_terms` consistency with `KDNA_Patterns.json.terminology.{standard_terms,banned_terms}` | warning (always; only when terminology has content) | warning (always) |
-| R6 | `forbidden_simplifications` presence is recorded; we do not perform LLM-based semantic verification (out of scope for a deterministic gate) | n/a | n/a |
+| #   | Rule                                                                                                                                        | Default                                             | Strict           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ---------------- |
+| R1  | `tc_status` must be one of `draft \| synthesized \| locked \| deprecated`                                                                   | error (always; malformed)                           | error (always)   |
+| R2  | `tc_status: "synthesized"` requires the author to upgrade to `locked`                                                                       | warning                                             | error            |
+| R3  | `tc_status: "deprecated"` cannot govern new compilations                                                                                    | warning                                             | error            |
+| R4  | `tc_status: "locked"` requires `locked_at` and `locked_by`                                                                                  | error (always; malformed lock)                      | error (always)   |
+| R5  | `renamed_terms` consistency with `KDNA_Patterns.json.terminology.{standard_terms,banned_terms}`                                             | warning (always; only when terminology has content) | warning (always) |
+| R6  | `forbidden_simplifications` presence is recorded; we do not perform LLM-based semantic verification (out of scope for a deterministic gate) | n/a                                                 | n/a              |
 
 Cross-file consistency: if `sourceAuthority` has any `current_highest` source
 of `type: "human_locked_charter"` and TC is present, `TC.judgment_authority_holder`

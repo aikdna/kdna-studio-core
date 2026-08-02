@@ -12,10 +12,22 @@
 // requirements before export. Anything outside it (today: none — every
 // CARD_TYPES entry is judgment-bearing) would be allowed through.
 const JUDGMENT_CARD_TYPES = new Set([
-  'axiom', 'boundary', 'risk', 'aesthetic',
-  'ontology', 'misunderstanding', 'self_check', 'scenario', 'case',
-  'stance', 'pattern', 'reasoning', 'framework',
-  'term', 'banned_term', 'evolution_stage',
+  "axiom",
+  "boundary",
+  "risk",
+  "aesthetic",
+  "ontology",
+  "misunderstanding",
+  "self_check",
+  "scenario",
+  "case",
+  "stance",
+  "pattern",
+  "reasoning",
+  "framework",
+  "term",
+  "banned_term",
+  "evolution_stage",
 ]);
 
 // Historical list retained as a public export for consumers that use it to
@@ -26,33 +38,60 @@ const JUDGMENT_CARD_TYPES = new Set([
 // which are the primary required fields for `risk` and `aesthetic` cards.
 // That let a card keep its old fingerprint after those fields were edited.
 const JUDGMENT_FIELDS = new Set([
-  'one_sentence', 'full_statement', 'why', 'essence', 'boundary',
-  'wrong', 'correct', 'key_distinction', 'question', 'scope',
-  'out_of_scope', 'applies_when', 'does_not_apply_when', 'failure_risk',
-  'acceptable_exceptions', 'trigger_signal', 'when_to_use', 'steps',
-  'name', 'description', 'mitigation',
+  "one_sentence",
+  "full_statement",
+  "why",
+  "essence",
+  "boundary",
+  "wrong",
+  "correct",
+  "key_distinction",
+  "question",
+  "scope",
+  "out_of_scope",
+  "applies_when",
+  "does_not_apply_when",
+  "failure_risk",
+  "acceptable_exceptions",
+  "trigger_signal",
+  "when_to_use",
+  "steps",
+  "name",
+  "description",
+  "mitigation",
   // Phase 3: explicit target and consequence fields
-  'target_user', 'target_decision', 'decision_consequence',
-  'evidence_prerequisite', 'insufficient_evidence_action',
+  "target_user",
+  "target_decision",
+  "decision_consequence",
+  "evidence_prerequisite",
+  "insufficient_evidence_action",
 ]);
 
-const crypto = require('crypto');
+const crypto = require("crypto");
 
 function cardJudgmentFingerprint(card) {
   const fields = card.fields || {};
   function canonicalJson(value) {
     if (value === undefined) return undefined;
-    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (value === null || typeof value !== "object")
+      return JSON.stringify(value);
     if (Array.isArray(value)) {
-      return `[${value.map((entry) => canonicalJson(entry) ?? 'null').join(',')}]`;
+      return `[${value.map((entry) => canonicalJson(entry) ?? "null").join(",")}]`;
     }
-    return `{${Object.keys(value).filter((key) => value[key] !== undefined).sort().map((key) => (
-      `${JSON.stringify(key)}:${canonicalJson(value[key])}`
-    )).join(',')}}`;
+    return `{${Object.keys(value)
+      .filter((key) => value[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
   }
-  return crypto.createHash('sha256')
-    .update(card.type + ':' + canonicalJson(fields))
-    .digest('hex');
+  return crypto
+    .createHash("sha256")
+    .update(card.type + ":" + canonicalJson(fields))
+    .digest("hex");
 }
 
-module.exports = { JUDGMENT_CARD_TYPES, JUDGMENT_FIELDS, cardJudgmentFingerprint };
+module.exports = {
+  JUDGMENT_CARD_TYPES,
+  JUDGMENT_FIELDS,
+  cardJudgmentFingerprint,
+};

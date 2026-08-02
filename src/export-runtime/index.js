@@ -1,20 +1,20 @@
-const crypto = require('crypto');
-const cbor = require('cbor-x');
-const { compileDomain } = require('../compile');
+const crypto = require("crypto");
+const cbor = require("cbor-x");
+const { compileDomain } = require("../compile");
 const {
   assertJudgmentCorePreserved,
   copyDeclaredJudgmentCore,
   pickJudgmentCore,
-} = require('../judgment-core');
+} = require("../judgment-core");
 const {
   FORMAT_VERSION,
   PAYLOAD_PROFILE,
   PAYLOAD_PROFILE_VERSION,
   RUNTIME_ENTRY_SET_DIGEST_PROFILE,
   RUNTIME_ENTRY_SET_DIGEST_PROFILE_VERSION,
-} = require('../protocol-contract');
+} = require("../protocol-contract");
 
-const MIMETYPE = 'application/vnd.kdna.asset';
+const MIMETYPE = "application/vnd.kdna.asset";
 
 function json(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
@@ -22,7 +22,9 @@ function json(value) {
 
 function isLowerSlugChar(char) {
   const code = char.charCodeAt(0);
-  return (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || char === '_';
+  return (
+    (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || char === "_"
+  );
 }
 
 function isLowerAsciiLetter(char) {
@@ -31,35 +33,39 @@ function isLowerAsciiLetter(char) {
 }
 
 function normalizeDomainIdBase(base) {
-  let normalized = '';
+  let normalized = "";
   let previousUnderscore = false;
   for (const char of String(base).toLowerCase()) {
     if (isLowerSlugChar(char)) {
       normalized += char;
-      previousUnderscore = char === '_';
+      previousUnderscore = char === "_";
     } else if (normalized && !previousUnderscore) {
-      normalized += '_';
+      normalized += "_";
       previousUnderscore = true;
     }
   }
-  return normalized.endsWith('_') ? normalized.slice(0, -1) : normalized;
+  return normalized.endsWith("_") ? normalized.slice(0, -1) : normalized;
 }
 
-function domainIdFromName(name = 'domain') {
-  const base = String(name).includes('/') ? String(name).split('/').pop() : String(name);
+function domainIdFromName(name = "domain") {
+  const base = String(name).includes("/")
+    ? String(name).split("/").pop()
+    : String(name);
   const normalized = normalizeDomainIdBase(base);
-  return isLowerAsciiLetter(normalized[0] || '') ? normalized : `domain_${normalized || 'untitled'}`;
+  return isLowerAsciiLetter(normalized[0] || "")
+    ? normalized
+    : `domain_${normalized || "untitled"}`;
 }
 
 function canonicalAccess(value) {
-  if (!value || value === 'open') return 'public';
-  if (value === 'protected') return 'licensed';
-  if (value === 'runtime') return 'remote';
+  if (!value || value === "open") return "public";
+  if (value === "protected") return "licensed";
+  if (value === "runtime") return "remote";
   return value;
 }
 
-function semverValue(value, fallback = '0.1.0') {
-  const raw = String(value || '').trim();
+function semverValue(value, fallback = "0.1.0") {
+  const raw = String(value || "").trim();
   if (/^[0-9]+\.[0-9]+\.[0-9]+([+-].+)?$/.test(raw)) return raw;
   const twoPart = raw.match(/^([0-9]+)\.([0-9]+)$/);
   if (twoPart) return `${twoPart[1]}.${twoPart[2]}.0`;
@@ -71,29 +77,40 @@ function firstDefined(...values) {
 }
 
 function normalizeIsoDateTime(value, options = {}) {
-  const label = options.label || 'timestamp';
-  const candidate = firstDefined(value, options.fallback, new Date().toISOString());
+  const label = options.label || "timestamp";
+  const candidate = firstDefined(
+    value,
+    options.fallback,
+    new Date().toISOString(),
+  );
   if (candidate instanceof Date) {
-    if (Number.isNaN(candidate.getTime())) throw new Error(`${label}: invalid date-time`);
+    if (Number.isNaN(candidate.getTime()))
+      throw new Error(`${label}: invalid date-time`);
     return candidate.toISOString();
   }
-  if (typeof candidate !== 'string' || candidate.trim() === '') {
+  if (typeof candidate !== "string" || candidate.trim() === "") {
     throw new Error(`${label}: expected an ISO 8601 date-time or date`);
   }
 
   const raw = candidate.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     const parsedDate = new Date(`${raw}T00:00:00.000Z`);
-    if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== raw) {
+    if (
+      Number.isNaN(parsedDate.getTime()) ||
+      parsedDate.toISOString().slice(0, 10) !== raw
+    ) {
       throw new Error(`${label}: invalid ISO 8601 date`);
     }
     return parsedDate.toISOString();
   }
 
-  const dateTimePattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|([+-])(\d{2}):(\d{2}))$/;
+  const dateTimePattern =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|([+-])(\d{2}):(\d{2}))$/;
   const parts = raw.match(dateTimePattern);
   if (!parts) {
-    throw new Error(`${label}: expected an ISO 8601 date-time with an explicit timezone`);
+    throw new Error(
+      `${label}: expected an ISO 8601 date-time with an explicit timezone`,
+    );
   }
   const year = Number(parts[1]);
   const month = Number(parts[2]);
@@ -103,41 +120,48 @@ function normalizeIsoDateTime(value, options = {}) {
   const second = Number(parts[6]);
   const offsetHour = Number(parts[9] || 0);
   const offsetMinute = Number(parts[10] || 0);
-  const daysInMonth = month >= 1 && month <= 12
-    ? new Date(Date.UTC(year, month, 0)).getUTCDate()
-    : 0;
+  const daysInMonth =
+    month >= 1 && month <= 12
+      ? new Date(Date.UTC(year, month, 0)).getUTCDate()
+      : 0;
   if (
-    day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59 ||
-    offsetHour > 23 || offsetMinute > 59
+    day < 1 ||
+    day > daysInMonth ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    offsetHour > 23 ||
+    offsetMinute > 59
   ) {
     throw new Error(`${label}: invalid ISO 8601 date-time`);
   }
   const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) throw new Error(`${label}: invalid ISO 8601 date-time`);
+  if (Number.isNaN(parsed.getTime()))
+    throw new Error(`${label}: invalid ISO 8601 date-time`);
   return parsed.toISOString();
 }
 
 function canonicalLineage(lineage) {
-  if (!lineage || typeof lineage !== 'object') return { type: 'original' };
+  if (!lineage || typeof lineage !== "object") return { type: "original" };
   const allowed = new Set([
-    'original',
-    'fork',
-    'adaptation',
-    'translation',
-    'private_variant',
-    'organization_variant',
-    'course_variant',
+    "original",
+    "fork",
+    "adaptation",
+    "translation",
+    "private_variant",
+    "organization_variant",
+    "course_variant",
   ]);
   if (allowed.has(lineage.type)) return lineage;
   return {
     ...lineage,
-    type: 'adaptation',
-    source_lineage_type: lineage.type || 'unknown',
+    type: "adaptation",
+    source_lineage_type: lineage.type || "unknown",
   };
 }
 
 function nonEmptyString(value) {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== "string") return null;
   const normalized = value.trim();
   return normalized || null;
 }
@@ -155,10 +179,13 @@ function canonicalRuntimeCreator(project, sourceManifest) {
   ];
 
   for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
-    const name = nonEmptyString(candidate.name) || nonEmptyString(candidate.display_name);
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate))
+      continue;
+    const name =
+      nonEmptyString(candidate.name) || nonEmptyString(candidate.display_name);
     if (!name) continue;
-    const id = nonEmptyString(candidate.id) || nonEmptyString(candidate.creator_id);
+    const id =
+      nonEmptyString(candidate.id) || nonEmptyString(candidate.creator_id);
     return id ? { name, id } : { name };
   }
 
@@ -166,26 +193,32 @@ function canonicalRuntimeCreator(project, sourceManifest) {
 }
 
 function sha256Hex(value) {
-  return crypto.createHash('sha256').update(Buffer.isBuffer(value) ? value : Buffer.from(value)).digest('hex');
+  return crypto
+    .createHash("sha256")
+    .update(Buffer.isBuffer(value) ? value : Buffer.from(value))
+    .digest("hex");
 }
 
 function buildChecksums(files) {
   const entries = {
-    'kdna.json': { algorithm: 'sha256', value: sha256Hex(files['kdna.json']) },
-    'payload.kdnab': { algorithm: 'sha256', value: sha256Hex(files['payload.kdnab']) },
+    "kdna.json": { algorithm: "sha256", value: sha256Hex(files["kdna.json"]) },
+    "payload.kdnab": {
+      algorithm: "sha256",
+      value: sha256Hex(files["payload.kdnab"]),
+    },
   };
   const combined = Object.keys(entries)
     .sort()
     .map((name) => `${name}:${entries[name].value}`)
-    .join('\n');
+    .join("\n");
   const entrySetDigest = `sha256:${sha256Hex(combined)}`;
   return {
     digest_profile: RUNTIME_ENTRY_SET_DIGEST_PROFILE,
     digest_profile_version: RUNTIME_ENTRY_SET_DIGEST_PROFILE_VERSION,
-    covered_entries: ['kdna.json', 'payload.kdnab'],
-    algorithm: 'sha256',
-    manifest_digest: `sha256:${entries['kdna.json'].value}`,
-    payload_digest: `sha256:${entries['payload.kdnab'].value}`,
+    covered_entries: ["kdna.json", "payload.kdnab"],
+    algorithm: "sha256",
+    manifest_digest: `sha256:${entries["kdna.json"].value}`,
+    payload_digest: `sha256:${entries["payload.kdnab"].value}`,
     entry_set_digest: entrySetDigest,
     entries,
   };
@@ -197,7 +230,7 @@ function parseJsonFile(files, name, fallback = null) {
   // stub in a test, or a `compileDomain` call that returned a
   // missing `files` map) would hit "Cannot read properties of
   // undefined" instead of the intended fallback.
-  if (!files || typeof files !== 'object') return fallback;
+  if (!files || typeof files !== "object") return fallback;
   if (!files[name]) return fallback;
   return JSON.parse(files[name]);
 }
@@ -209,12 +242,19 @@ function buildPayload(compiled) {
   // payload contract, which has its own top-level `meta` (built from
   // project.release). Documenting that explicitly here so a future
   // reader of #29 does not re-add an undocumented `core.meta` passthrough.
-  const core = parseJsonFile(compiled.files, 'KDNA_Core.json', {});
-  const patterns = parseJsonFile(compiled.files, 'KDNA_Patterns.json', {});
-  const scenarios = parseJsonFile(compiled.files, 'KDNA_Scenarios.json', { scenes: [] });
-  const cases = parseJsonFile(compiled.files, 'KDNA_Cases.json', { cases: [] });
-  const reasoning = parseJsonFile(compiled.files, 'KDNA_Reasoning.json', { reasoning_chains: [] });
-  const evolution = parseJsonFile(compiled.files, 'KDNA_Evolution.json', { changelog: [], version_notes: [] });
+  const core = parseJsonFile(compiled.files, "KDNA_Core.json", {});
+  const patterns = parseJsonFile(compiled.files, "KDNA_Patterns.json", {});
+  const scenarios = parseJsonFile(compiled.files, "KDNA_Scenarios.json", {
+    scenes: [],
+  });
+  const cases = parseJsonFile(compiled.files, "KDNA_Cases.json", { cases: [] });
+  const reasoning = parseJsonFile(compiled.files, "KDNA_Reasoning.json", {
+    reasoning_chains: [],
+  });
+  const evolution = parseJsonFile(compiled.files, "KDNA_Evolution.json", {
+    changelog: [],
+    version_notes: [],
+  });
 
   // Bug (2026-06-28 audit follow-up): prior buildPayload omitted every
   // type that compile added after the original 6-type launch — aesthetics,
@@ -236,21 +276,38 @@ function buildPayload(compiled) {
       // payload. Forward the source's core_structure if it has any
       // entries; fall back to [] so legacy callers that authored no
       // core_structure keep the prior behaviour.
-      core_structure: Array.isArray(core.core_structure) ? core.core_structure : [],
+      core_structure: Array.isArray(core.core_structure)
+        ? core.core_structure
+        : [],
       frameworks: Array.isArray(core.frameworks) ? core.frameworks : [],
       boundaries: Array.isArray(core.boundaries) ? core.boundaries : [],
       stances: Array.isArray(core.stances) ? core.stances : [],
       risk_model: {
         risks: Array.isArray(core.risks) ? core.risks : [],
       },
-      aesthetics: Array.isArray(core.aesthetics) ? core.aesthetics
-        : (Array.isArray(patterns.aesthetics) ? patterns.aesthetics : []),
+      aesthetics: Array.isArray(core.aesthetics)
+        ? core.aesthetics
+        : Array.isArray(patterns.aesthetics)
+          ? patterns.aesthetics
+          : [],
     },
     patterns: [
-      ...(Array.isArray(patterns.misunderstandings) ? patterns.misunderstandings : []),
+      ...(Array.isArray(patterns.misunderstandings)
+        ? patterns.misunderstandings
+        : []),
       ...(Array.isArray(patterns.patterns) ? patterns.patterns : []),
-      ...(Array.isArray(patterns.terminology?.standard_terms) ? patterns.terminology.standard_terms.map((t) => ({ ...t, type: 'term' })) : []),
-      ...(Array.isArray(patterns.terminology?.banned_terms) ? patterns.terminology.banned_terms.map((t) => ({ ...t, type: 'banned_term' })) : []),
+      ...(Array.isArray(patterns.terminology?.standard_terms)
+        ? patterns.terminology.standard_terms.map((t) => ({
+            ...t,
+            type: "term",
+          }))
+        : []),
+      ...(Array.isArray(patterns.terminology?.banned_terms)
+        ? patterns.terminology.banned_terms.map((t) => ({
+            ...t,
+            type: "banned_term",
+          }))
+        : []),
     ],
     scenarios: Array.isArray(scenarios.scenes) ? scenarios.scenes : [],
     cases: Array.isArray(cases.cases) ? cases.cases : [],
@@ -288,7 +345,9 @@ function buildPayload(compiled) {
             does_not_apply_when: m.does_not_apply_when,
           }))
         : [],
-      reasoning_chains: Array.isArray(reasoning.reasoning_chains) ? reasoning.reasoning_chains : [],
+      reasoning_chains: Array.isArray(reasoning.reasoning_chains)
+        ? reasoning.reasoning_chains
+        : [],
     },
     evolution: {
       // Studio compile reports include authoring audit projections (for
@@ -300,65 +359,109 @@ function buildPayload(compiled) {
         ? evolution.stages.filter((entry) => entry?.source_authored === true)
         : [],
       evolution_layers: Array.isArray(evolution.evolution_layers)
-        ? evolution.evolution_layers.filter((entry) => entry?.source_authored === true)
+        ? evolution.evolution_layers.filter(
+            (entry) => entry?.source_authored === true,
+          )
         : [],
       measurement: Array.isArray(evolution.measurement)
-        ? evolution.measurement.filter((entry) => entry?.source_authored === true)
+        ? evolution.measurement.filter(
+            (entry) => entry?.source_authored === true,
+          )
         : [],
       changelog: Array.isArray(evolution.changelog) ? evolution.changelog : [],
-      version_notes: Array.isArray(evolution.version_notes) ? evolution.version_notes : [],
+      version_notes: Array.isArray(evolution.version_notes)
+        ? evolution.version_notes
+        : [],
     },
   };
 }
 
 function buildManifest(project, compiled, payloadBytes, options = {}) {
-  const sourceManifest = parseJsonFile(compiled.files, 'kdna.json', {});
-  const importedManifest = project.source_manifest && typeof project.source_manifest === 'object'
-    ? project.source_manifest
-    : {};
-  const packageVersion = require('../../package.json').version;
-  const access = canonicalAccess(options.access || project.release?.access || sourceManifest.access);
+  const sourceManifest = parseJsonFile(compiled.files, "kdna.json", {});
+  const importedManifest =
+    project.source_manifest && typeof project.source_manifest === "object"
+      ? project.source_manifest
+      : {};
+  const packageVersion = require("../../package.json").version;
+  const access = canonicalAccess(
+    options.access || project.release?.access || sourceManifest.access,
+  );
   const domainId = sourceManifest.domain_id || domainIdFromName(project.name);
   const now = normalizeIsoDateTime(
-    firstDefined(options.timestamp, sourceManifest.updated_at, sourceManifest.updated),
-    { label: 'timestamp' },
+    firstDefined(
+      options.timestamp,
+      sourceManifest.updated_at,
+      sourceManifest.updated,
+    ),
+    { label: "timestamp" },
   );
   const createdAt = normalizeIsoDateTime(
-    firstDefined(options.created_at, sourceManifest.created_at, project.created),
-    { fallback: now, label: 'created_at' },
+    firstDefined(
+      options.created_at,
+      sourceManifest.created_at,
+      project.created,
+    ),
+    { fallback: now, label: "created_at" },
   );
   const updatedAt = normalizeIsoDateTime(
     firstDefined(options.updated_at, now),
-    { fallback: now, label: 'updated_at' },
+    { fallback: now, label: "updated_at" },
   );
   const creator = canonicalRuntimeCreator(project, sourceManifest);
 
   const manifest = {
     format_version: FORMAT_VERSION,
     asset_id: options.asset_id || `kdna:studio:${domainId}`,
-    asset_uid: options.asset_uid || `urn:uuid:${sourceManifest.asset_uid || compiled.identity?.asset_uid}`,
-    asset_type: 'domain',
+    asset_uid:
+      options.asset_uid ||
+      `urn:uuid:${sourceManifest.asset_uid || compiled.identity?.asset_uid}`,
+    asset_type: "domain",
     title: options.title || project.title || project.name,
-    version: semverValue(project.release?.version || importedManifest.version || sourceManifest.version, '0.1.0'),
-    judgment_version: semverValue(project.release?.judgment_version || importedManifest.judgment_version || sourceManifest.judgment_version || project.release?.version, '0.1.0'),
+    version: semverValue(
+      project.release?.version ||
+        importedManifest.version ||
+        sourceManifest.version,
+      "0.1.0",
+    ),
+    judgment_version: semverValue(
+      project.release?.judgment_version ||
+        importedManifest.judgment_version ||
+        sourceManifest.judgment_version ||
+        project.release?.version,
+      "0.1.0",
+    ),
     created_at: createdAt,
     updated_at: updatedAt,
     compatibility: {
-      min_loader_version: '0.20.0',
+      min_loader_version: "0.20.0",
       profile: PAYLOAD_PROFILE,
       profile_version: PAYLOAD_PROFILE_VERSION,
     },
     payload: {
-      path: 'payload.kdnab',
-      encoding: 'cbor',
+      path: "payload.kdnab",
+      encoding: "cbor",
       encrypted: !!options.encryptedPayload,
       digest: `sha256:${sha256Hex(payloadBytes)}`,
     },
     access,
-    summary: importedManifest.summary || importedManifest.description || project.release?.description || sourceManifest.description || project.name,
-    language: project.default_language || importedManifest.language || importedManifest.default_language || sourceManifest.default_language || 'en',
-    languages: project.languages || importedManifest.languages || sourceManifest.languages || ['en'],
-    license: project.license || importedManifest.license || sourceManifest.license || { type: 'CC-BY-4.0' },
+    summary:
+      importedManifest.summary ||
+      importedManifest.description ||
+      project.release?.description ||
+      sourceManifest.description ||
+      project.name,
+    language:
+      project.default_language ||
+      importedManifest.language ||
+      importedManifest.default_language ||
+      sourceManifest.default_language ||
+      "en",
+    languages: project.languages ||
+      importedManifest.languages ||
+      sourceManifest.languages || ["en"],
+    license: project.license ||
+      importedManifest.license ||
+      sourceManifest.license || { type: "CC-BY-4.0" },
     keywords: importedManifest.keywords || sourceManifest.keywords || [],
     lineage: canonicalLineage(project.lineage || sourceManifest.lineage),
     load_contract: {
@@ -367,50 +470,58 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
       // previously diverged: the studio-core path emitted incomplete
       // profile entries (scenario had no max_tokens_hint, full had no
       // selection), which broke loaders that read the contract.
-      default_profile: 'compact',
+      default_profile: "compact",
       profiles: {
         index: {
           requires_decryption: false,
           max_tokens_hint: 500,
-          selection: 'manifest metadata',
-          intended_for: ['discovery'],
+          selection: "manifest metadata",
+          intended_for: ["discovery"],
         },
         compact: {
           requires_decryption: Boolean(options.encryptedPayload),
           max_tokens_hint: 2000,
-          selection: 'core judgment summary',
-          intended_for: ['agent prompt'],
+          selection: "core judgment summary",
+          intended_for: ["agent prompt"],
         },
         scenario: {
           requires_decryption: false,
           max_tokens_hint: 3000,
-          selection: 'scenario cards',
-          intended_for: ['situational loading'],
+          selection: "scenario cards",
+          intended_for: ["situational loading"],
         },
         full: {
           requires_decryption: Boolean(options.encryptedPayload),
           max_tokens_hint: 12000,
-          selection: 'full manifest and payload',
-          intended_for: ['audit', 'migration'],
+          selection: "full manifest and payload",
+          intended_for: ["audit", "migration"],
         },
       },
     },
     authoring: {
-      compiler: '@aikdna/kdna-studio-core',
+      compiler: "@aikdna/kdna-studio-core",
       compiler_version: packageVersion,
       conformance: {
         passed: true,
         format_version: FORMAT_VERSION,
-        validator: '@aikdna/kdna-studio-core/export-runtime',
+        validator: "@aikdna/kdna-studio-core/export-runtime",
         validator_version: packageVersion,
         checked_at: now,
       },
-      source_build_id: compiled.identity?.build_id || sourceManifest.build_id || null,
-      studio_project_digest: sourceManifest.authoring?.studio_project_digest || null,
+      source_build_id:
+        compiled.identity?.build_id || sourceManifest.build_id || null,
+      studio_project_digest:
+        sourceManifest.authoring?.studio_project_digest || null,
       human_lock_required: false,
-      human_lock_policy: 'optional_provenance',
-      human_lock_count: sourceManifest.authoring?.human_lock_count ?? compiled.stats?.human_lock_count ?? 0,
-      human_confirmed: (sourceManifest.authoring?.human_lock_count ?? compiled.stats?.human_lock_count ?? 0) > 0,
+      human_lock_policy: "optional_provenance",
+      human_lock_count:
+        sourceManifest.authoring?.human_lock_count ??
+        compiled.stats?.human_lock_count ??
+        0,
+      human_confirmed:
+        (sourceManifest.authoring?.human_lock_count ??
+          compiled.stats?.human_lock_count ??
+          0) > 0,
     },
   };
 
@@ -418,12 +529,15 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
     manifest.creator = creator;
   }
 
-  if (access === 'licensed') {
-    const entitlement = options.entitlement || importedManifest.entitlement || sourceManifest.entitlement;
+  if (access === "licensed") {
+    const entitlement =
+      options.entitlement ||
+      importedManifest.entitlement ||
+      sourceManifest.entitlement;
     if (!entitlement) {
       throw new Error(
-        'Licensed export requires an explicit entitlement contract. ' +
-        'Legacy protected access is ambiguous; provide a password or an explicit entitlement.'
+        "Licensed export requires an explicit entitlement contract. " +
+          "Legacy protected access is ambiguous; provide a password or an explicit entitlement.",
       );
     }
     manifest.entitlement = entitlement;
@@ -431,7 +545,7 @@ function buildManifest(project, compiled, payloadBytes, options = {}) {
   if (options.encryptionMeta) {
     manifest.encryption = options.encryptionMeta;
   }
-  if (access === 'remote') {
+  if (access === "remote") {
     manifest.runtime = options.runtime || { endpoint: null };
   }
   return manifest;
@@ -448,50 +562,54 @@ function exportRuntimeAsset(project, options = {}) {
   // access to the source — it has to forward it.
   const compileOptions = {
     ...(options.compile || {}),
-    source: options.source || project.source || {
-      // When the caller does not provide a source explicitly, fall
-      // back to project.source_manifest, which `cmdCreate --from-kdna`
-      // populates from the original kdna.json. This restores the
-      // legacy `from-kdna` round-trip without requiring every caller
-      // to plumb the source through.
-      patterns: project.source_patterns || null,
-      reasoning: project.source_reasoning || null,
-      evolution: project.source_evolution || null,
-      core_structure: project.source_core_structure || null,
-    },
+    source: options.source ||
+      project.source || {
+        // When the caller does not provide a source explicitly, fall
+        // back to project.source_manifest, which `cmdCreate --from-kdna`
+        // populates from the original kdna.json. This restores the
+        // legacy `from-kdna` round-trip without requiring every caller
+        // to plumb the source through.
+        patterns: project.source_patterns || null,
+        reasoning: project.source_reasoning || null,
+        evolution: project.source_evolution || null,
+        core_structure: project.source_core_structure || null,
+      },
   };
   const compiled = options.compiled || compileDomain(project, compileOptions);
   const payload = buildPayload(compiled);
   const declaredJudgmentCore = copyDeclaredJudgmentCore(project.judgment_core);
-  const compiledCore = parseJsonFile(compiled.files, 'KDNA_Core.json', {});
+  const compiledCore = parseJsonFile(compiled.files, "KDNA_Core.json", {});
   assertJudgmentCorePreserved(
     declaredJudgmentCore,
     pickJudgmentCore(compiledCore),
-    'compiled_core',
+    "compiled_core",
   );
   assertJudgmentCorePreserved(
     declaredJudgmentCore,
     pickJudgmentCore(payload.core),
-    'runtime_payload',
+    "runtime_payload",
   );
   let payloadBytes = cbor.encode(payload);
   let encryptionMeta = null;
 
   // B2: Password-protected export — encrypt payload before manifest/checksums
   if (options.password) {
-    const core = require('@aikdna/kdna-core');
+    const core = require("@aikdna/kdna-core");
     // AAD must match the fields in the final manifest (kdna.json).
     // buildManifest sets: asset_id = options.asset_id || 'kdna:studio:...'
     // version  = semverValue(sourceManifest.version || project.release?.version, ...)
     // encryptedEntryAad picks the first non-empty of (name, asset_id, ''),
     // and the decrypt-side manifest has no `name` field. So: set name=asset_id
     // and version to the exact values the manifest will carry.
-    const sourceManifest = parseJsonFile(compiled.files, 'kdna.json', {});
+    const sourceManifest = parseJsonFile(compiled.files, "kdna.json", {});
     const domainId = sourceManifest.domain_id || domainIdFromName(project.name);
     const finalAssetId = options.asset_id || `kdna:studio:${domainId}`;
-    const finalVersion = semverValue(sourceManifest.version || project.release?.version, '0.1.0');
+    const finalVersion = semverValue(
+      sourceManifest.version || project.release?.version,
+      "0.1.0",
+    );
     const envelope = core.encryptProtectedEntry(payloadBytes, {
-      entryName: 'payload.kdnab',
+      entryName: "payload.kdnab",
       manifest: {
         name: finalAssetId,
         asset_id: finalAssetId,
@@ -503,12 +621,16 @@ function exportRuntimeAsset(project, options = {}) {
     encryptionMeta = {
       profile: core.PASSWORD_PROTECTED_PROFILE,
       profile_version: core.ENCRYPTION_PROFILE_VERSION,
-      encrypted_entries: ['payload.kdnab'],
+      encrypted_entries: ["payload.kdnab"],
     };
     // Password-protected assets are implicitly licensed access.
     // Force override: a password-protected asset cannot be public.
-    options.access = 'licensed';
-    options.entitlement = options.entitlement || { profile: 'password', revocable: false, offline: true };
+    options.access = "licensed";
+    options.entitlement = options.entitlement || {
+      profile: "password",
+      revocable: false,
+      offline: true,
+    };
   }
 
   const manifest = buildManifest(project, compiled, payloadBytes, {
@@ -518,10 +640,10 @@ function exportRuntimeAsset(project, options = {}) {
   });
   const files = {
     mimetype: MIMETYPE,
-    'kdna.json': json(manifest),
-    'payload.kdnab': payloadBytes,
+    "kdna.json": json(manifest),
+    "payload.kdnab": payloadBytes,
   };
-  files['checksums.json'] = json(buildChecksums(files));
+  files["checksums.json"] = json(buildChecksums(files));
   return {
     files,
     manifest,

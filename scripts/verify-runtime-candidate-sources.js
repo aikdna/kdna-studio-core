@@ -1,44 +1,52 @@
 #!/usr/bin/env node
-'use strict';
+"use strict";
 
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const {
   assertPackageTarInstallEquivalent,
   resolveTrustedNpmInvocation,
   verifyCandidateBinding,
-} = require('./runtime-candidate-binding');
+} = require("./runtime-candidate-binding");
 const {
   CANDIDATE_AUTHORITIES,
   readPinnedCandidateCommits,
-} = require('./runtime-candidate-authority');
+} = require("./runtime-candidate-authority");
 const {
   assertNoHiddenIndexFlags,
   assertNoReplacementRefs,
   authoritativeGit,
   materializeCommitTree,
-} = require('./authoritative-git');
+} = require("./authoritative-git");
 
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(__dirname, "..");
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     ...options,
-    encoding: options.encoding === null ? null : 'utf8',
+    encoding: options.encoding === null ? null : "utf8",
     maxBuffer: options.maxBuffer || 64 * 1024 * 1024,
     shell: false,
   });
-  assert.equal(result.error, undefined, `${options.label || 'command'} failed to start`);
-  assert.equal(result.signal, null, `${options.label || 'command'} was interrupted`);
-  assert.equal(result.status, 0, `${options.label || 'command'} failed`);
+  assert.equal(
+    result.error,
+    undefined,
+    `${options.label || "command"} failed to start`,
+  );
+  assert.equal(
+    result.signal,
+    null,
+    `${options.label || "command"} was interrupted`,
+  );
+  assert.equal(result.status, 0, `${options.label || "command"} failed`);
   if (!options.allowStderr) {
     assert.equal(
       options.encoding === null ? result.stderr.length : result.stderr,
-      options.encoding === null ? 0 : '',
-      `${options.label || 'command'} wrote unexpected stderr`,
+      options.encoding === null ? 0 : "",
+      `${options.label || "command"} wrote unexpected stderr`,
     );
   }
   return result.stdout;
@@ -51,57 +59,74 @@ function git(repository, args, options = {}) {
   });
 }
 
-function assertCleanPinnedRepository(repository, expectedCommit, packageSubdirectory) {
+function assertCleanPinnedRepository(
+  repository,
+  expectedCommit,
+  packageSubdirectory,
+) {
   const stat = fs.lstatSync(repository);
   assert.ok(
     stat.isDirectory() && !stat.isSymbolicLink(),
-    'candidate source repository must be a regular non-symlink directory',
+    "candidate source repository must be a regular non-symlink directory",
   );
   assert.equal(
     fs.realpathSync(repository),
     repository,
-    'candidate source repository path must be canonical',
+    "candidate source repository path must be canonical",
   );
   assertNoReplacementRefs(repository);
   assert.equal(
-    git(repository, ['rev-parse', 'HEAD']),
+    git(repository, ["rev-parse", "HEAD"]),
     expectedCommit,
-    'candidate source HEAD does not match the CI pin',
+    "candidate source HEAD does not match the CI pin",
   );
   assert.equal(
-    git(repository, ['rev-parse', `${expectedCommit}^{commit}`]),
+    git(repository, ["rev-parse", `${expectedCommit}^{commit}`]),
     expectedCommit,
-    'candidate source pin is not an exact commit',
+    "candidate source pin is not an exact commit",
   );
   assert.equal(
-    git(repository, ['status', '--porcelain', '--untracked-files=all']),
-    '',
-    'candidate source worktree is not clean',
+    git(repository, ["status", "--porcelain", "--untracked-files=all"]),
+    "",
+    "candidate source worktree is not clean",
   );
   assertNoHiddenIndexFlags(repository);
   const source = path.resolve(repository, packageSubdirectory);
   const relative = path.relative(repository, source);
   assert.ok(
-    relative && !relative.startsWith('..') && !path.isAbsolute(relative),
-    'candidate package path escapes its repository',
+    relative && !relative.startsWith("..") && !path.isAbsolute(relative),
+    "candidate package path escapes its repository",
   );
   const sourceStat = fs.lstatSync(source);
   assert.ok(
     sourceStat.isDirectory() && !sourceStat.isSymbolicLink(),
-    'candidate package path must be a regular non-symlink directory',
+    "candidate package path must be a regular non-symlink directory",
   );
-  assert.equal(fs.realpathSync(source), source, 'candidate package path is not canonical');
-  git(repository, ['cat-file', '-e', `${expectedCommit}:${packageSubdirectory}/package.json`]);
+  assert.equal(
+    fs.realpathSync(source),
+    source,
+    "candidate package path is not canonical",
+  );
+  git(repository, [
+    "cat-file",
+    "-e",
+    `${expectedCommit}:${packageSubdirectory}/package.json`,
+  ]);
   return Object.freeze({ repository, source });
 }
 
-function materializeCommitPackage(repository, expectedCommit, packageSubdirectory, destination) {
+function materializeCommitPackage(
+  repository,
+  expectedCommit,
+  packageSubdirectory,
+  destination,
+) {
   return materializeCommitTree(
     repository,
     expectedCommit,
     packageSubdirectory,
     destination,
-    { requiredPath: 'package.json' },
+    { requiredPath: "package.json" },
   );
 }
 
@@ -110,24 +135,32 @@ function packOnce(invocation, source, destination) {
     invocation.command,
     [
       ...invocation.prefixArgs,
-      'pack',
-      '--json',
-      '--ignore-scripts',
-      '--pack-destination',
+      "pack",
+      "--json",
+      "--ignore-scripts",
+      "--pack-destination",
       destination,
-      '--registry=https://registry.npmjs.org/',
-      '--@aikdna:registry=https://registry.npmjs.org/',
+      "--registry=https://registry.npmjs.org/",
+      "--@aikdna:registry=https://registry.npmjs.org/",
     ],
     {
       cwd: source,
       env: invocation.environment,
-      label: 'candidate source pack',
+      label: "candidate source pack",
     },
   );
   const reports = JSON.parse(stdout);
-  assert.equal(reports.length, 1, 'candidate source pack must emit one artifact');
+  assert.equal(
+    reports.length,
+    1,
+    "candidate source pack must emit one artifact",
+  );
   const report = reports[0];
-  assert.equal(typeof report.filename, 'string', 'candidate source pack filename is missing');
+  assert.equal(
+    typeof report.filename,
+    "string",
+    "candidate source pack filename is missing",
+  );
   return fs.readFileSync(path.join(destination, report.filename));
 }
 
@@ -140,7 +173,9 @@ function verifyCandidateSources(options = {}) {
   const invocation = resolveTrustedNpmInvocation(repositoryRoot, {
     tarballPath: options.tarballPath,
   });
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-candidate-source-pack-'));
+  const temporary = fs.mkdtempSync(
+    path.join(os.tmpdir(), "studio-candidate-source-pack-"),
+  );
   try {
     for (const authority of CANDIDATE_AUTHORITIES) {
       const sourceRoot = environment[authority.sourceEnvironment];
@@ -148,9 +183,16 @@ function verifyCandidateSources(options = {}) {
       const repository = path.resolve(sourceRoot);
       const expectedCommit = pinned.get(authority.name);
       const boundPackage = byName.get(authority.name);
-      assertCleanPinnedRepository(repository, expectedCommit, authority.sourcePackageSubdirectory);
+      assertCleanPinnedRepository(
+        repository,
+        expectedCommit,
+        authority.sourcePackageSubdirectory,
+      );
 
-      const isolatedSource = path.join(temporary, `${authority.name.split('/').at(-1)}-source`);
+      const isolatedSource = path.join(
+        temporary,
+        `${authority.name.split("/").at(-1)}-source`,
+      );
       fs.mkdirSync(isolatedSource, { mode: 0o700 });
       materializeCommitPackage(
         repository,
@@ -158,14 +200,24 @@ function verifyCandidateSources(options = {}) {
         authority.sourcePackageSubdirectory,
         isolatedSource,
       );
-      const packageManifest = JSON.parse(fs.readFileSync(path.join(isolatedSource, 'package.json'), 'utf8'));
-      assert.equal(packageManifest.name, authority.name, `candidate source package mismatch: ${authority.name}`);
-      assert.equal(packageManifest.version, authority.version, `candidate source version mismatch: ${authority.name}`);
+      const packageManifest = JSON.parse(
+        fs.readFileSync(path.join(isolatedSource, "package.json"), "utf8"),
+      );
+      assert.equal(
+        packageManifest.name,
+        authority.name,
+        `candidate source package mismatch: ${authority.name}`,
+      );
+      assert.equal(
+        packageManifest.version,
+        authority.version,
+        `candidate source version mismatch: ${authority.name}`,
+      );
       assert.equal(boundPackage?.commit, expectedCommit);
 
       const packDestination = path.join(
         temporary,
-        `${authority.name.split('/').at(-1)}-pack`,
+        `${authority.name.split("/").at(-1)}-pack`,
       );
       fs.mkdirSync(packDestination);
       const sourcePack = packOnce(invocation, isolatedSource, packDestination);
@@ -183,14 +235,21 @@ function verifyCandidateSources(options = {}) {
       assert.equal(
         comparison.entry_count,
         JSON.parse(
-          fs.readFileSync(path.join(repositoryRoot, authority.evidencePath), 'utf8'),
+          fs.readFileSync(
+            path.join(repositoryRoot, authority.evidencePath),
+            "utf8",
+          ),
         ).pack.entry_count,
         `candidate source pack entry count differs from evidence: ${authority.name}`,
       );
-      assertCleanPinnedRepository(repository, expectedCommit, authority.sourcePackageSubdirectory);
+      assertCleanPinnedRepository(
+        repository,
+        expectedCommit,
+        authority.sourcePackageSubdirectory,
+      );
       console.log(
         `${authority.name}: ${comparison.status}; entries=${comparison.entry_count}; ` +
-          `excluded=${comparison.excluded_non_install_metadata.join(',')}`,
+          `excluded=${comparison.excluded_non_install_metadata.join(",")}`,
       );
     }
     return binding;
@@ -201,7 +260,7 @@ function verifyCandidateSources(options = {}) {
 }
 
 function main(argv = process.argv.slice(2)) {
-  assert.deepEqual(argv, [], 'usage: verify-runtime-candidate-sources.js');
+  assert.deepEqual(argv, [], "usage: verify-runtime-candidate-sources.js");
   return verifyCandidateSources();
 }
 

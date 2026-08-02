@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: 22.23.1
           check-latest: false
-          registry-url: 'https://registry.npmjs.org'
+          registry-url: "https://registry.npmjs.org"
       - run: node --version | grep -Fx "$(printf 'v%s' '22.23.1')"
       - name: Acquire and verify the audited npm release bytes
         run: |

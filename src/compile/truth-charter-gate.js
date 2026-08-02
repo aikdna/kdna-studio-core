@@ -32,10 +32,10 @@
  *   must be present and non-empty.
  */
 
-const VALID_TC_STATUS = ['draft', 'synthesized', 'locked', 'deprecated'];
+const VALID_TC_STATUS = ["draft", "synthesized", "locked", "deprecated"];
 
 function isPlainObject(v) {
-  return v !== null && typeof v === 'object' && !Array.isArray(v);
+  return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
 function runTcGate(truthCharter, opts = {}) {
@@ -43,8 +43,8 @@ function runTcGate(truthCharter, opts = {}) {
   const sourceAuthority = opts.sourceAuthority || null;
   const patterns = opts.patterns || null; // KDNA_Patterns.json content
   const result = {
-    gate: 'truth_charter',
-    status: 'skipped',
+    gate: "truth_charter",
+    status: "skipped",
     errors: [],
     warnings: [],
     truth_charter: truthCharter || null,
@@ -52,8 +52,8 @@ function runTcGate(truthCharter, opts = {}) {
   };
 
   if (!isPlainObject(truthCharter)) {
-    result.status = 'skipped';
-    result.warnings.push('No truth_charter.json provided; TC gate skipped.');
+    result.status = "skipped";
+    result.warnings.push("No truth_charter.json provided; TC gate skipped.");
     return result;
   }
 
@@ -61,28 +61,30 @@ function runTcGate(truthCharter, opts = {}) {
   const tcStatus = truthCharter.tc_status;
   if (!VALID_TC_STATUS.includes(tcStatus)) {
     result.errors.push(
-      `truth_charter.json: tc_status "${tcStatus}" is not one of [${VALID_TC_STATUS.join(', ')}].`,
+      `truth_charter.json: tc_status "${tcStatus}" is not one of [${VALID_TC_STATUS.join(", ")}].`,
     );
-    result.status = 'fail';
+    result.status = "fail";
     return result;
   }
 
   // R2. synthesized + strict -> ERROR.
-  if (tcStatus === 'synthesized') {
-    const msg = 'truth_charter.json: tc_status is "synthesized" (no author-locked truth); strict-authority requires "locked".';
+  if (tcStatus === "synthesized") {
+    const msg =
+      'truth_charter.json: tc_status is "synthesized" (no author-locked truth); strict-authority requires "locked".';
     if (strict) result.errors.push(msg);
     else result.warnings.push(msg);
   }
 
   // R3. deprecated + strict -> ERROR.
-  if (tcStatus === 'deprecated') {
-    const msg = 'truth_charter.json: tc_status is "deprecated"; deprecated charters cannot govern new compilations under strict-authority.';
+  if (tcStatus === "deprecated") {
+    const msg =
+      'truth_charter.json: tc_status is "deprecated"; deprecated charters cannot govern new compilations under strict-authority.';
     if (strict) result.errors.push(msg);
     else result.warnings.push(msg);
   }
 
   // R4. locked requires locked_at and locked_by.
-  if (tcStatus === 'locked') {
+  if (tcStatus === "locked") {
     if (!truthCharter.locked_at || !truthCharter.locked_by) {
       result.errors.push(
         'truth_charter.json: tc_status is "locked" but locked_at or locked_by is missing.',
@@ -98,15 +100,21 @@ function runTcGate(truthCharter, opts = {}) {
     Array.isArray(truthCharter.renamed_terms) &&
     isPlainObject(patterns) &&
     isPlainObject(patterns.terminology) &&
-    (Array.isArray(patterns.terminology.standard_terms) && patterns.terminology.standard_terms.length > 0 ||
-      Array.isArray(patterns.terminology.banned_terms) && patterns.terminology.banned_terms.length > 0)
+    ((Array.isArray(patterns.terminology.standard_terms) &&
+      patterns.terminology.standard_terms.length > 0) ||
+      (Array.isArray(patterns.terminology.banned_terms) &&
+        patterns.terminology.banned_terms.length > 0))
   ) {
     const term = patterns.terminology;
     const banned = new Set(
-      Array.isArray(term.banned_terms) ? term.banned_terms.map((t) => t && t.term).filter(Boolean) : [],
+      Array.isArray(term.banned_terms)
+        ? term.banned_terms.map((t) => t && t.term).filter(Boolean)
+        : [],
     );
     const standard = new Set(
-      Array.isArray(term.standard_terms) ? term.standard_terms.map((t) => t && t.term).filter(Boolean) : [],
+      Array.isArray(term.standard_terms)
+        ? term.standard_terms.map((t) => t && t.term).filter(Boolean)
+        : [],
     );
     for (const r of truthCharter.renamed_terms) {
       if (!isPlainObject(r)) continue;
@@ -130,14 +138,20 @@ function runTcGate(truthCharter, opts = {}) {
   // Cross-file consistency: SAG has human_locked_charter current_highest
   // => TC.judgment_authority_holder must be present and non-empty.
   if (sourceAuthority && isPlainObject(sourceAuthority)) {
-    const sources = Array.isArray(sourceAuthority.sources) ? sourceAuthority.sources : [];
+    const sources = Array.isArray(sourceAuthority.sources)
+      ? sourceAuthority.sources
+      : [];
     const hasHumanLockedCharter = sources.some(
-      (s) => isPlainObject(s) && s.authority === 'current_highest' && s.type === 'human_locked_charter',
+      (s) =>
+        isPlainObject(s) &&
+        s.authority === "current_highest" &&
+        s.type === "human_locked_charter",
     );
     if (hasHumanLockedCharter) {
       const holder = truthCharter.judgment_authority_holder;
-      if (!holder || (typeof holder === 'string' && holder.trim() === '')) {
-        const msg = 'truth_charter.json: SAG has a current_highest source of type human_locked_charter, but TC.judgment_authority_holder is missing or empty; cross-file consistency requires both.';
+      if (!holder || (typeof holder === "string" && holder.trim() === "")) {
+        const msg =
+          "truth_charter.json: SAG has a current_highest source of type human_locked_charter, but TC.judgment_authority_holder is missing or empty; cross-file consistency requires both.";
         if (strict) result.errors.push(msg);
         else result.warnings.push(msg);
       }
@@ -145,11 +159,11 @@ function runTcGate(truthCharter, opts = {}) {
   }
 
   if (result.errors.length > 0) {
-    result.status = 'fail';
+    result.status = "fail";
   } else if (result.warnings.length > 0) {
-    result.status = 'warn';
+    result.status = "warn";
   } else {
-    result.status = 'pass';
+    result.status = "pass";
   }
   return result;
 }

@@ -27,7 +27,10 @@
     "domain_id": { "type": "string", "minLength": 1 },
     "registry_name": { "type": ["string", "null"] },
     "compiler": { "const": "@aikdna/kdna-studio-core" },
-    "compiler_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$" },
+    "compiler_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([+-].+)?$"
+    },
     "compiled_at": { "type": "string", "format": "date-time" },
     "content_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "stats": { "type": "object" },

@@ -421,7 +421,6 @@ replace the output contract shipped by the 1.x line.
 - Add bugs/homepage metadata to package.json
 - Include LICENSE and NOTICE in published tarball
 
-
 ## 1.7.9 (2026-07-01)
 
 - Preserve locked `evolution_stage` cards in `KDNA_Evolution.json` as
@@ -432,7 +431,6 @@ replace the output contract shipped by the 1.x line.
 ## 1.7.8 (2026-07-01)
 
 Normalize runtime routing fields — stringList helper ensures applies_when / does_not_apply_when / acceptable_exceptions always emit as arrays from Studio card fields (#34).
-
 
 ## 1.7.7 (2026-06-28)
 
@@ -546,6 +544,7 @@ even when every card is Human Locked.
 - `tests/empty-domain-gate.test.js` updated to exercise the empty-domain guard with a genuinely non-judgment card type, since `term` is now judgment-bearing.
 
 ## 1.7.1 (2026-06-27)
+
 - Fix (PC-3): `exportRuntimeAsset` no longer injects the legacy
   placeholder ("Load when the task matches applies_when on domain
   axioms.") into `core.highest_question` as if it were a real
@@ -567,6 +566,7 @@ even when every card is Human Locked.
   boundary test in `tests/runtime-export.test.js` on CI.
 
 ## 1.7.0 (2026-06-27)
+
 - B2: encrypt payload via scrypt profile when password is provided
   - `exportRuntimeAsset` encrypts `payload.kdnab` with `encryptProtectedEntryScrypt`
   - Forces `access: licensed` + `entitlement.profile: password` for encrypted exports
@@ -575,41 +575,53 @@ even when every card is Human Locked.
 - Deps: bump @aikdna/kdna-core to ^0.15.0 (B2 scrypt profile)
 
 ## 1.6.0 (2026-06-23)
+
 - Feat: RFC-0014 expanded card fields.
 - Feat: Product Runtime module (RFC-0011).
 
 ## 1.5.12 (2026-06-22)
+
 - Deps: bump @aikdna/kdna-core to ^0.13.0
 
 ## 1.5.11 (2026-06-22)
+
 - Fixed: compilePatterns() now extracts locked pattern cards and maps them to payload patterns field.
 - Fixed: buildPayload() merges pattern cards into the canonical payload alongside misunderstandings.
 - Fixed: compileDomain empty-domain gate includes pattern and stance types.
 
 ## 1.5.10 (2026-06-22)
+
 - Fixed: pattern added to CARD_TYPES array in cards/index.js.
 
 ## 1.5.9 (2026-06-22)
+
 - compileCore now extracts locked stance cards; stance added to valid judgment content types; buildPayload includes stances field.
 
 ## 1.5.8 (2026-06-21)
+
 - (pre-GA cleanup release)
+
 ## 1.5.7 (2026-06-21)
+
 - (pre-GA cleanup release)
 
 ## 1.5.6 (2026-06-20)
+
 - Align README package matrix with the current local `.kdna` CLI path: inspect, validate, plan-load, pack/unpack, load.
 - Depend on `@aikdna/kdna-cli@^0.26.5` for corrected public CLI wording.
 
 ## 1.5.5 (2026-06-20)
+
 - Clarify that Human Lock, signatures, and release evidence are optional provenance layers, not KDNA Core format-validity requirements.
 - Align README and npm package description with the public `.kdna` file model.
 
 ## 1.4.2 (2026-05-30)
+
 - canonicalizeJson: strips authoring.content_digest to prevent self-referencing
 - computeContentDigest: excludes reports/ and build-receipt
 
 ## 1.4.0 (2026-05-29)
+
 - Creator Identity system: Ed25519 keypair, creator_id, passphrase encryption, key rotation (the "key rotation" claim is retracted: rotation was never exported or reachable — see the Unreleased Corrections entry)
 - Project model: source_mode (blank/kdna_asset/source_folder), creator_identity, lineage
 - lockCard: schema gate for axiom full_statement/why, misunderstanding key_distinction
@@ -618,4 +630,5 @@ even when every card is Human Locked.
 - quality: source_mode trust differentiation
 
 ## 1.3.0 (2026-05-25)
+
 - Initial public release

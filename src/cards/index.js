@@ -8,26 +8,33 @@
  *   - Audit trail management
  */
 
-const { cardJudgmentFingerprint } = require('../judgment-fields');
-const { CARD_TYPES } = require('../project-schema');
+const { cardJudgmentFingerprint } = require("../judgment-fields");
+const { CARD_TYPES } = require("../project-schema");
 
-const VALID_STATES = ['draft', 'revised', 'locked', 'tested', 'published', 'deprecated'];
+const VALID_STATES = [
+  "draft",
+  "revised",
+  "locked",
+  "tested",
+  "published",
+  "deprecated",
+];
 
 const TRANSITIONS = {
-  draft: ['revised', 'deprecated'],
-  revised: ['locked', 'draft', 'deprecated'],
-  locked: ['tested', 'revised', 'deprecated'],
-  tested: ['published', 'locked', 'deprecated'],
-  published: ['deprecated'],
+  draft: ["revised", "deprecated"],
+  revised: ["locked", "draft", "deprecated"],
+  locked: ["tested", "revised", "deprecated"],
+  tested: ["published", "locked", "deprecated"],
+  published: ["deprecated"],
   deprecated: [],
 };
 
 function createCard(type, fields = {}, id = null) {
   if (!CARD_TYPES.includes(type)) throw new Error(`Invalid card type: ${type}`);
   const card = {
-    id: id || `${type.slice(0, 2)}_${require('crypto').randomUUID()}`,
+    id: id || `${type.slice(0, 2)}_${require("crypto").randomUUID()}`,
     type,
-    status: 'draft',
+    status: "draft",
     locked: false,
     fields,
     evidence_refs: [],
@@ -35,82 +42,125 @@ function createCard(type, fields = {}, id = null) {
     human_lock: null,
     feynman_restatement: null,
     audit_log: [
-      { at: new Date().toISOString(), event: 'created', by: 'unspecified-source' }
+      {
+        at: new Date().toISOString(),
+        event: "created",
+        by: "unspecified-source",
+      },
     ],
   };
   return card;
 }
 
 function transitionCard(card, toState, transitionContext = {}) {
-  if (!VALID_STATES.includes(toState)) throw new Error(`Invalid state: ${toState}`);
+  if (!VALID_STATES.includes(toState))
+    throw new Error(`Invalid state: ${toState}`);
   if (!TRANSITIONS[card.status].includes(toState)) {
     throw new Error(`Invalid transition: ${card.status} → ${toState}`);
   }
   const newCard = { ...card, fields: { ...card.fields } };
   newCard.status = toState;
-  newCard.locked = ['locked', 'tested', 'published'].includes(toState);
-  newCard.audit_log = [...(card.audit_log || []), {
-    at: new Date().toISOString(),
-    event: toState,
-    by: transitionContext.by || 'system',
-    ...(transitionContext.reason && { reason: transitionContext.reason }),
-  }];
+  newCard.locked = ["locked", "tested", "published"].includes(toState);
+  newCard.audit_log = [
+    ...(card.audit_log || []),
+    {
+      at: new Date().toISOString(),
+      event: toState,
+      by: transitionContext.by || "system",
+      ...(transitionContext.reason && { reason: transitionContext.reason }),
+    },
+  ];
   return newCard;
 }
 
 function lockCard(card, lockPayload) {
-  if (!lockPayload.by) throw new Error('lockPayload.by is required');
-  if (!lockPayload.statement) throw new Error('lockPayload.statement is required (expert confirmation in own words)');
-  if (!lockPayload.checked?.applies_when) throw new Error('Must confirm applies_when reviewed');
-  if (!lockPayload.checked?.does_not_apply_when) throw new Error('Must confirm does_not_apply_when reviewed');
-  if (!lockPayload.checked?.failure_risk) throw new Error('Must confirm failure_risk reviewed');
+  if (!lockPayload.by) throw new Error("lockPayload.by is required");
+  if (!lockPayload.statement)
+    throw new Error(
+      "lockPayload.statement is required (expert confirmation in own words)",
+    );
+  if (!lockPayload.checked?.applies_when)
+    throw new Error("Must confirm applies_when reviewed");
+  if (!lockPayload.checked?.does_not_apply_when)
+    throw new Error("Must confirm does_not_apply_when reviewed");
+  if (!lockPayload.checked?.failure_risk)
+    throw new Error("Must confirm failure_risk reviewed");
 
   // Schema gate per KDNA SPEC — must run for ALL judgment card types so the
   // Human Lock signature actually covers every type's required fields.
   // Bug: prior version only enforced gates for axiom / misunderstanding,
   // which let boundary / risk / aesthetic lock with empty fields and produce
   // fingerprints that do not reflect their actual content.
-  if (card.type === 'axiom') {
-    if (!String(card.fields?.full_statement || '').trim()) {
-      throw new Error(`Axiom ${card.id} cannot be locked: missing full_statement. SPEC requires a complete, testable explanation.`);
+  if (card.type === "axiom") {
+    if (!String(card.fields?.full_statement || "").trim()) {
+      throw new Error(
+        `Axiom ${card.id} cannot be locked: missing full_statement. SPEC requires a complete, testable explanation.`,
+      );
     }
-    if (!String(card.fields?.why || '').trim()) {
-      throw new Error(`Axiom ${card.id} cannot be locked: missing why. SPEC requires an explanation of failure mode.`);
+    if (!String(card.fields?.why || "").trim()) {
+      throw new Error(
+        `Axiom ${card.id} cannot be locked: missing why. SPEC requires an explanation of failure mode.`,
+      );
     }
   }
-  if (card.type === 'misunderstanding') {
-    if (!String(card.fields?.key_distinction || '').trim()) {
-      throw new Error(`Misunderstanding ${card.id} cannot be locked: missing key_distinction. SPEC requires a clear conceptual boundary.`);
+  if (card.type === "misunderstanding") {
+    if (!String(card.fields?.key_distinction || "").trim()) {
+      throw new Error(
+        `Misunderstanding ${card.id} cannot be locked: missing key_distinction. SPEC requires a clear conceptual boundary.`,
+      );
     }
   }
-  if (card.type === 'boundary') {
+  if (card.type === "boundary") {
     if (!card.fields?.scope || String(card.fields.scope).trim().length < 1) {
-      throw new Error(`Boundary ${card.id} cannot be locked: missing scope. SPEC requires a clear scope statement.`);
+      throw new Error(
+        `Boundary ${card.id} cannot be locked: missing scope. SPEC requires a clear scope statement.`,
+      );
     }
-    if (!card.fields?.out_of_scope || String(card.fields.out_of_scope).trim().length < 1) {
-      throw new Error(`Boundary ${card.id} cannot be locked: missing out_of_scope. SPEC requires an explicit exclusion statement.`);
+    if (
+      !card.fields?.out_of_scope ||
+      String(card.fields.out_of_scope).trim().length < 1
+    ) {
+      throw new Error(
+        `Boundary ${card.id} cannot be locked: missing out_of_scope. SPEC requires an explicit exclusion statement.`,
+      );
     }
   }
-  if (card.type === 'risk') {
+  if (card.type === "risk") {
     if (!card.fields?.name || String(card.fields.name).trim().length < 1) {
-      throw new Error(`Risk ${card.id} cannot be locked: missing name. SPEC requires a named risk.`);
+      throw new Error(
+        `Risk ${card.id} cannot be locked: missing name. SPEC requires a named risk.`,
+      );
     }
-    if (!String(card.fields?.description || '').trim()) {
-      throw new Error(`Risk ${card.id} cannot be locked: missing description. SPEC requires a complete description.`);
+    if (!String(card.fields?.description || "").trim()) {
+      throw new Error(
+        `Risk ${card.id} cannot be locked: missing description. SPEC requires a complete description.`,
+      );
     }
-    if (!card.fields?.mitigation || String(card.fields.mitigation).trim().length < 1) {
-      throw new Error(`Risk ${card.id} cannot be locked: missing mitigation. SPEC requires a mitigation strategy.`);
+    if (
+      !card.fields?.mitigation ||
+      String(card.fields.mitigation).trim().length < 1
+    ) {
+      throw new Error(
+        `Risk ${card.id} cannot be locked: missing mitigation. SPEC requires a mitigation strategy.`,
+      );
     }
   }
-  if (card.type === 'aesthetic') {
+  if (card.type === "aesthetic") {
     // Aesthetic is the broadest of the four — every aesthetic card must
     // declare a name and at least one substantive description / one_sentence.
     if (!card.fields?.name || String(card.fields.name).trim().length < 1) {
-      throw new Error(`Aesthetic ${card.id} cannot be locked: missing name. SPEC requires a named aesthetic principle.`);
+      throw new Error(
+        `Aesthetic ${card.id} cannot be locked: missing name. SPEC requires a named aesthetic principle.`,
+      );
     }
-    const desc = card.fields?.description || card.fields?.one_sentence || card.fields?.essence;
+    const desc =
+      card.fields?.description ||
+      card.fields?.one_sentence ||
+      card.fields?.essence;
     if (!desc || String(desc).trim().length < 1) {
-      throw new Error(`Aesthetic ${card.id} cannot be locked: missing description/one_sentence/essence. SPEC requires a substantive description.`);
+      throw new Error(
+        `Aesthetic ${card.id} cannot be locked: missing description/one_sentence/essence. SPEC requires a substantive description.`,
+      );
     }
   }
 
@@ -125,25 +175,29 @@ function lockCard(card, lockPayload) {
     judgment_fingerprint: cardJudgmentFingerprint(lockedCard),
   };
 
-  return transitionCard(lockedCard, 'locked', { by: lockPayload.by });
+  return transitionCard(lockedCard, "locked", { by: lockPayload.by });
 }
 
 function unlockCard(card, reason, by) {
-  if (!reason) throw new Error('Unlock requires a reason');
+  if (!reason) throw new Error("Unlock requires a reason");
   const unlockedCard = { ...card, fields: { ...card.fields } };
   unlockedCard.human_lock = null;
-  return transitionCard(unlockedCard, 'revised', {
+  return transitionCard(unlockedCard, "revised", {
     by,
     reason: `unlocked: ${reason}`,
   });
 }
 
 function getLockedCards(project) {
-  return project.cards.filter(c => ['locked', 'tested', 'published'].includes(c.status));
+  return project.cards.filter((c) =>
+    ["locked", "tested", "published"].includes(c.status),
+  );
 }
 
 function getPublishableCards(project) {
-  return project.cards.filter(c => c.status === 'tested' || c.status === 'locked');
+  return project.cards.filter(
+    (c) => c.status === "tested" || c.status === "locked",
+  );
 }
 
 module.exports = {

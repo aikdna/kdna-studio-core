@@ -7,22 +7,41 @@
  * authorization, lifecycle, or an unresolved semantic conflict.
  */
 
-
-const GRANULARITY_LEVELS = ['narrow', 'well_scoped', 'broad', 'mixed'];
+const GRANULARITY_LEVELS = ["narrow", "well_scoped", "broad", "mixed"];
 
 const TOO_BROAD_SIGNALS = [
-  'everything', 'all aspects', 'any decision', 'comprehensive',
-  'general purpose', '万能', '所有', '任何', '全部', '一切',
+  "everything",
+  "all aspects",
+  "any decision",
+  "comprehensive",
+  "general purpose",
+  "万能",
+  "所有",
+  "任何",
+  "全部",
+  "一切",
 ];
 
 const TOO_NARROW_SIGNALS = [
-  'exactly', 'precisely this one', 'never again', 'one-time',
-  'only this instance', '仅此一次', '只有这个', '特例',
+  "exactly",
+  "precisely this one",
+  "never again",
+  "one-time",
+  "only this instance",
+  "仅此一次",
+  "只有这个",
+  "特例",
 ];
 
 const VAGUE_SIGNALS = [
-  'depends', 'it varies', 'maybe', 'sometimes',
-  'it depends', 'case by case', '看情况', '视情况而定',
+  "depends",
+  "it varies",
+  "maybe",
+  "sometimes",
+  "it depends",
+  "case by case",
+  "看情况",
+  "视情况而定",
 ];
 
 /**
@@ -38,7 +57,9 @@ const VAGUE_SIGNALS = [
  */
 function diagnoseGranularity(project) {
   const cards = project.cards || [];
-  const judgmentCards = cards.filter(c => c.status === 'locked' || c.type === 'axiom');
+  const judgmentCards = cards.filter(
+    (c) => c.status === "locked" || c.type === "axiom",
+  );
 
   const diagnostics = [];
   let broadHits = 0;
@@ -46,20 +67,31 @@ function diagnoseGranularity(project) {
   let vagueHits = 0;
 
   // Gather all judgment text
-  const allText = judgmentCards.map(c => {
-    const f = c.fields || {};
-    return [f.one_sentence, f.full_statement, f.why, f.applies_when, f.does_not_apply_when]
-      .filter(Boolean).join(' ').toLowerCase();
-  }).join(' ');
+  const allText = judgmentCards
+    .map((c) => {
+      const f = c.fields || {};
+      return [
+        f.one_sentence,
+        f.full_statement,
+        f.why,
+        f.applies_when,
+        f.does_not_apply_when,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+    })
+    .join(" ");
 
   // Check too-broad signals
   for (const signal of TOO_BROAD_SIGNALS) {
     if (allText.includes(signal)) {
       broadHits++;
       diagnostics.push({
-        severity: 'warn',
+        severity: "warn",
         message: `Broad signal detected: "${signal}" — judgment may cover too many decision types`,
-        suggestion: 'Narrow the judgment to one specific decision type. What exact situation does this apply to?',
+        suggestion:
+          "Narrow the judgment to one specific decision type. What exact situation does this apply to?",
       });
     }
   }
@@ -69,9 +101,10 @@ function diagnoseGranularity(project) {
     if (allText.includes(signal)) {
       narrowHits++;
       diagnostics.push({
-        severity: 'warn',
+        severity: "warn",
         message: `Narrow signal detected: "${signal}" — judgment may not be reusable`,
-        suggestion: 'Generalize slightly: what pattern does this instance represent?',
+        suggestion:
+          "Generalize slightly: what pattern does this instance represent?",
       });
     }
   }
@@ -81,39 +114,42 @@ function diagnoseGranularity(project) {
     if (allText.includes(signal)) {
       vagueHits++;
       diagnostics.push({
-        severity: 'info',
+        severity: "info",
         message: `Vague signal detected: "${signal}" — judgment may lack clear criteria`,
-        suggestion: 'Define specific conditions: when exactly does this judgment apply, and when does it not?',
+        suggestion:
+          "Define specific conditions: when exactly does this judgment apply, and when does it not?",
       });
     }
   }
 
   // Determine level
-  let level = 'well_scoped';
+  let level = "well_scoped";
   let score = 8;
 
   if (broadHits >= 3) {
-    level = 'broad';
+    level = "broad";
     score = Math.max(1, 6 - broadHits);
   } else if (narrowHits >= 3) {
-    level = 'narrow';
+    level = "narrow";
     score = Math.max(1, 6 - narrowHits);
   } else if (broadHits > 0) {
-    level = 'broad';
+    level = "broad";
     score = 6;
   } else if (narrowHits > 0) {
-    level = 'narrow';
+    level = "narrow";
     score = 6;
   } else if (vagueHits >= 3) {
     score = 4;
   }
 
   // Recommended action
-  let recommendedAction = 'Ready for Human Lock.';
-  if (level === 'broad') {
-    recommendedAction = 'WARNING: Consider narrowing the judgment scope before locking. Define what specific decision this helps with.';
-  } else if (level === 'narrow') {
-    recommendedAction = 'INFO: Judgment may be too specific. Ensure it generalizes to similar situations before locking.';
+  let recommendedAction = "Ready for Human Lock.";
+  if (level === "broad") {
+    recommendedAction =
+      "WARNING: Consider narrowing the judgment scope before locking. Define what specific decision this helps with.";
+  } else if (level === "narrow") {
+    recommendedAction =
+      "INFO: Judgment may be too specific. Ensure it generalizes to similar situations before locking.";
   }
 
   return {
@@ -135,22 +171,32 @@ function diagnoseGranularity(project) {
  */
 function evaluateOpeningQuestion(answer) {
   const issues = [];
-  const lower = (answer || '').toLowerCase();
+  const lower = (answer || "").toLowerCase();
 
   if (!answer || answer.trim().length < 10) {
-    return { scoped: false, issues: ['Answer too short — needs at least one sentence.'], suggestion: 'Describe: who makes this judgment, about what, and what decision follows?' };
+    return {
+      scoped: false,
+      issues: ["Answer too short — needs at least one sentence."],
+      suggestion:
+        "Describe: who makes this judgment, about what, and what decision follows?",
+    };
   }
 
-  if (lower.includes('when') && lower.includes('should')) {
+  if (lower.includes("when") && lower.includes("should")) {
     // Good sign — conditional judgment
   } else {
-    issues.push('Consider framing as "When X happens, should Y?" rather than a general statement.');
+    issues.push(
+      'Consider framing as "When X happens, should Y?" rather than a general statement.',
+    );
   }
 
   return {
     scoped: issues.length === 0,
     issues,
-    suggestion: issues.length > 0 ? 'Rephrase as: "When [situation], should [decision-maker] [action]?"' : '',
+    suggestion:
+      issues.length > 0
+        ? 'Rephrase as: "When [situation], should [decision-maker] [action]?"'
+        : "",
   };
 }
 

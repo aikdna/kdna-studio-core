@@ -10,18 +10,18 @@
  *   cli-bridge/   Adapter to kdna-cli subprocess calls
  */
 
-const cards = require('./cards');
-const authoring = require('./authoring');
-const compile = require('./compile');
-const creatorIdentity = require('./creator-identity');
-const evidence = require('./evidence');
-const exportRuntime = require('./export-runtime');
-const i18n = require('./i18n');
-const project = require('./project');
-const provenance = require('./provenance');
-const distillation = require('./distillation');
-const protocolContract = require('./protocol-contract');
-const creationEngine = require('./creation-engine');
+const cards = require("./cards");
+const authoring = require("./authoring");
+const compile = require("./compile");
+const creatorIdentity = require("./creator-identity");
+const evidence = require("./evidence");
+const exportRuntime = require("./export-runtime");
+const i18n = require("./i18n");
+const project = require("./project");
+const provenance = require("./provenance");
+const distillation = require("./distillation");
+const protocolContract = require("./protocol-contract");
+const creationEngine = require("./creation-engine");
 
 module.exports = {
   authoring,

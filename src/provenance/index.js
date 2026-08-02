@@ -7,39 +7,46 @@
  *   - Who authored the locked cards
  *   - Content tree fingerprint
  */
-const crypto = require('crypto');
+const crypto = require("crypto");
 
 function buildProvenance(project, compiledFiles, identity = {}) {
-  const lockedCards = (project.cards || []).filter(c => c.locked);
+  const lockedCards = (project.cards || []).filter((c) => c.locked);
   const tests = project.tests || [];
 
   // Content fingerprint: hash of all locked card content
   const cardHashes = lockedCards
     .sort((a, b) => a.id.localeCompare(b.id))
-    .map(c => `${c.id}:${c.fields?.one_sentence || c.fields?.concept || ''}`);
-  const contentFingerprint = crypto.createHash('sha256').update(cardHashes.join('\n')).digest('hex');
+    .map((c) => `${c.id}:${c.fields?.one_sentence || c.fields?.concept || ""}`);
+  const contentFingerprint = crypto
+    .createHash("sha256")
+    .update(cardHashes.join("\n"))
+    .digest("hex");
 
   return {
-    studio_core: 'aikdna/kdna-studio-core',
-    studio_core_version: project.studio_version || require('../../package.json').version,
-    created_by: 'kdna-studio-sdk',
-    compiler: '@aikdna/kdna-studio-core',
-    compiler_version: project.studio_version || require('../../package.json').version,
+    studio_core: "aikdna/kdna-studio-core",
+    studio_core_version:
+      project.studio_version || require("../../package.json").version,
+    created_by: "kdna-studio-sdk",
+    compiler: "@aikdna/kdna-studio-core",
+    compiler_version:
+      project.studio_version || require("../../package.json").version,
     build_id: identity.build_id || `build_${crypto.randomUUID()}`,
     project_id: project.project_id,
-    project_uid: identity.project_uid || project.project_uid || project.project_id || null,
+    project_uid:
+      identity.project_uid || project.project_uid || project.project_id || null,
     asset_uid: identity.asset_uid || null,
     domain_id: identity.domain_id || null,
     registry_name: identity.registry_name || project.name || null,
-    author_id: project.author?.id || '',
+    author_id: project.author?.id || "",
     creator_id: project.creator_identity?.creator_id || null,
-    source_mode: project.source_mode || 'blank',
-    lineage: project.lineage || { type: 'original' },
+    source_mode: project.source_mode || "blank",
+    lineage: project.lineage || { type: "original" },
     locked_card_count: lockedCards.length,
     test_case_count: tests.length,
     built_at: identity.compiled_at || new Date().toISOString(),
     compiled_at: identity.compiled_at || new Date().toISOString(),
-    content_fingerprint: identity.content_digest || `sha256:${contentFingerprint}`,
+    content_fingerprint:
+      identity.content_digest || `sha256:${contentFingerprint}`,
     content_digest: identity.content_digest || `sha256:${contentFingerprint}`,
   };
 }

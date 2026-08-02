@@ -28,10 +28,7 @@
   ],
   "properties": {
     "root": {
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": ["string", "null"]
     },
     "state": {
       "$ref": "#/$defs/CreationState"
@@ -210,10 +207,7 @@
         },
         "workflow_mode": {
           "type": "string",
-          "enum": [
-            "collaborative",
-            "autonomous"
-          ]
+          "enum": ["collaborative", "autonomous"]
         },
         "status": {
           "$ref": "#/$defs/CreationStatus"
@@ -226,10 +220,7 @@
           "$ref": "#/$defs/Digest"
         },
         "next_unresolved_reason": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "created_at": {
           "type": "string",
@@ -242,18 +233,11 @@
         "created_by": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "type",
-            "id"
-          ],
+          "required": ["type", "id"],
           "properties": {
             "type": {
               "type": "string",
-              "enum": [
-                "agent",
-                "human",
-                "organization"
-              ]
+              "enum": ["agent", "human", "organization"]
             },
             "id": {
               "$ref": "#/$defs/NonEmptyString"
@@ -268,20 +252,11 @@
     "Subject": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "type",
-        "id"
-      ],
+      "required": ["type", "id"],
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "agent",
-            "human",
-            "organization",
-            "work",
-            "source-subject"
-          ]
+          "enum": ["agent", "human", "organization", "work", "source-subject"]
         },
         "id": {
           "$ref": "#/$defs/NonEmptyString"
@@ -310,11 +285,7 @@
     "GlobalBoundary": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "statement",
-        "source_refs"
-      ],
+      "required": ["id", "statement", "source_refs"],
       "properties": {
         "id": {
           "$ref": "#/$defs/NonEmptyString"
@@ -395,11 +366,7 @@
     "NonGoalMapping": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "non_goal",
-        "boundary_ids",
-        "rationale"
-      ],
+      "required": ["non_goal", "boundary_ids", "rationale"],
       "properties": {
         "non_goal": {
           "$ref": "#/$defs/NonEmptyString"
@@ -435,14 +402,7 @@
         },
         "media_type": {
           "type": "string",
-          "enum": [
-            "image",
-            "audio",
-            "video",
-            "binary",
-            "pdf",
-            "document"
-          ]
+          "enum": ["image", "audio", "video", "binary", "pdf", "document"]
         },
         "observation_digest": {
           "$ref": "#/$defs/Digest"
@@ -453,9 +413,7 @@
         "tool_coordinate": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "name"
-          ],
+          "required": ["name"],
           "properties": {
             "name": {
               "$ref": "#/$defs/NonEmptyString"
@@ -490,13 +448,7 @@
         },
         "media_type": {
           "type": "string",
-          "enum": [
-            "text",
-            "json",
-            "transcript",
-            "pdf",
-            "document"
-          ]
+          "enum": ["text", "json", "transcript", "pdf", "document"]
         },
         "output_digest": {
           "$ref": "#/$defs/Digest"
@@ -504,9 +456,7 @@
         "extractor": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "name"
-          ],
+          "required": ["name"],
           "properties": {
             "name": {
               "$ref": "#/$defs/NonEmptyString"
@@ -581,16 +531,10 @@
           "$ref": "#/$defs/NonEmptyString"
         },
         "reference": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "source_subject_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "belongs_to_subject": {
           "oneOf": [
@@ -625,42 +569,23 @@
         },
         "currentness": {
           "type": "string",
-          "enum": [
-            "current",
-            "historical",
-            "unknown"
-          ]
+          "enum": ["current", "historical", "unknown"]
         },
         "source_created_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         },
         "source_updated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         },
         "time_basis": {
           "type": "string",
-          "enum": [
-            "declared",
-            "file-metadata",
-            "asset-manifest",
-            "unknown"
-          ]
+          "enum": ["declared", "file-metadata", "asset-manifest", "unknown"]
         },
         "sensitivity": {
           "type": "string",
-          "enum": [
-            "public",
-            "private",
-            "sensitive"
-          ]
+          "enum": ["public", "private", "sensitive"]
         },
         "external_constraints": {
           "$ref": "#/$defs/StringList"
@@ -676,10 +601,7 @@
           ]
         },
         "split_domain": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "expired": {
           "type": "boolean"
@@ -734,40 +656,20 @@
           "properties": {
             "status": {
               "type": "string",
-              "enum": [
-                "pending",
-                "approved",
-                "not-required"
-              ]
+              "enum": ["pending", "approved", "not-required"]
             },
             "decision": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "enum": [
-                "non-leaking-abstraction",
-                "non-public-isolation",
-                null
-              ]
+              "type": ["string", "null"],
+              "enum": ["non-leaking-abstraction", "non-public-isolation", null]
             },
             "reviewer": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "rationale": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "reviewed_at": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": ["string", "null"],
               "format": "date-time"
             }
           }
@@ -815,10 +717,7 @@
         "capabilities": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "pdf",
-            "word"
-          ],
+          "required": ["pdf", "word"],
           "properties": {
             "pdf": {
               "$ref": "#/$defs/MaterialCapability"
@@ -923,10 +822,7 @@
           "$ref": "#/$defs/Digest"
         },
         "channel": {
-          "enum": [
-            "private-fd",
-            "private-temp-file"
-          ]
+          "enum": ["private-fd", "private-temp-file"]
         },
         "delivered_at": {
           "type": "string",
@@ -947,34 +843,21 @@
       "properties": {
         "destination": {
           "type": "string",
-          "enum": [
-            "local-only",
-            "named-remote-processor",
-            "prohibited"
-          ]
+          "enum": ["local-only", "named-remote-processor", "prohibited"]
         },
         "processor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "assurance": {
           "type": "string",
-          "enum": [
-            "host-declared",
-            "verified-host-required"
-          ]
+          "enum": ["host-declared", "verified-host-required"]
         },
         "purpose": {
           "const": "creation-material-analysis"
         },
         "retention": {
           "type": "string",
-          "enum": [
-            "ephemeral-session",
-            "named-processor-policy"
-          ]
+          "enum": ["ephemeral-session", "named-processor-policy"]
         }
       },
       "allOf": [
@@ -985,9 +868,7 @@
                 "const": "named-remote-processor"
               }
             },
-            "required": [
-              "destination"
-            ]
+            "required": ["destination"]
           },
           "then": {
             "properties": {
@@ -1015,25 +896,14 @@
     "MaterialHostExecution": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "location",
-        "processor",
-        "assurance",
-        "capability_digest"
-      ],
+      "required": ["location", "processor", "assurance", "capability_digest"],
       "properties": {
         "location": {
           "type": "string",
-          "enum": [
-            "local",
-            "remote"
-          ]
+          "enum": ["local", "remote"]
         },
         "processor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "assurance": {
           "const": "host-declared"
@@ -1046,20 +916,13 @@
     "MaterialCapability": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "available",
-        "provider",
-        "reason"
-      ],
+      "required": ["available", "provider", "reason"],
       "properties": {
         "available": {
           "type": "boolean"
         },
         "provider": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "reason": {
           "$ref": "#/$defs/NonEmptyString"
@@ -1103,13 +966,7 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "eligible",
-            "accepted",
-            "unsupported",
-            "excluded",
-            "failed"
-          ]
+          "enum": ["eligible", "accepted", "unsupported", "excluded", "failed"]
         },
         "reason_code": {
           "$ref": "#/$defs/NonEmptyString"
@@ -1118,10 +975,7 @@
           "$ref": "#/$defs/NonEmptyString"
         },
         "size_bytes": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "minimum": 0
         },
         "coordinate_digest": {
@@ -1148,10 +1002,7 @@
           ]
         },
         "ingested_material_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       }
     },
@@ -1249,10 +1100,7 @@
           "minimum": 0
         },
         "source_card_type": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "source_card_digest": {
           "$ref": "#/$defs/Digest"
@@ -1273,10 +1121,7 @@
           "$ref": "#/$defs/NonEmptyString"
         },
         "candidate_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "reviewed_by": {
           "oneOf": [
@@ -1289,16 +1134,10 @@
           ]
         },
         "review_rationale": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "reviewed_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       }
@@ -1306,18 +1145,11 @@
     "ReviewActor": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "type",
-        "id"
-      ],
+      "required": ["type", "id"],
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "agent",
-            "human",
-            "organization-authority"
-          ]
+          "enum": ["agent", "human", "organization-authority"]
         },
         "id": {
           "$ref": "#/$defs/NonEmptyString"
@@ -1349,26 +1181,16 @@
         },
         "decision": {
           "type": "string",
-          "enum": [
-            "classification-changed",
-            "reviewed-no-change"
-          ]
+          "enum": ["classification-changed", "reviewed-no-change"]
         },
         "reviewer": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "type",
-            "id"
-          ],
+          "required": ["type", "id"],
           "properties": {
             "type": {
               "type": "string",
-              "enum": [
-                "agent",
-                "human",
-                "organization-authority"
-              ]
+              "enum": ["agent", "human", "organization-authority"]
             },
             "id": {
               "$ref": "#/$defs/NonEmptyString"
@@ -1419,47 +1241,26 @@
     "Confidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "status",
-        "score",
-        "reason"
-      ],
+      "required": ["status", "score", "reason"],
       "properties": {
         "status": {
           "type": "string",
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "unknown"
-          ]
+          "enum": ["low", "medium", "high", "unknown"]
         },
         "score": {
-          "type": [
-            "number",
-            "null"
-          ],
+          "type": ["number", "null"],
           "minimum": 0,
           "maximum": 1
         },
         "reason": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       }
     },
     "CounterexampleSearch": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "scope",
-        "method",
-        "result",
-        "uncertainty",
-        "searched_at"
-      ],
+      "required": ["scope", "method", "result", "uncertainty", "searched_at"],
       "properties": {
         "scope": {
           "$ref": "#/$defs/NonEmptyString"
@@ -1469,11 +1270,7 @@
         },
         "result": {
           "type": "string",
-          "enum": [
-            "found",
-            "none-found",
-            "inconclusive"
-          ]
+          "enum": ["found", "none-found", "inconclusive"]
         },
         "uncertainty": {
           "$ref": "#/$defs/NonEmptyString"
@@ -1545,12 +1342,7 @@
         },
         "confirmation_state": {
           "type": "string",
-          "enum": [
-            "unconfirmed",
-            "confirmed",
-            "not-required",
-            "invalidated"
-          ]
+          "enum": ["unconfirmed", "confirmed", "not-required", "invalidated"]
         },
         "agent_inference": {
           "type": "boolean"
@@ -1579,11 +1371,7 @@
             },
             "status": {
               "type": "string",
-              "enum": [
-                "proposed",
-                "promoted",
-                "rejected"
-              ]
+              "enum": ["proposed", "promoted", "rejected"]
             },
             "card_type": {
               "$ref": "#/$defs/NonEmptyString"
@@ -1596,10 +1384,7 @@
               "format": "date-time"
             },
             "rejection_reason": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             },
             "review_receipt": {
               "oneOf": [
@@ -1634,10 +1419,7 @@
         },
         "decision": {
           "type": "string",
-          "enum": [
-            "promote",
-            "reject"
-          ]
+          "enum": ["promote", "reject"]
         },
         "reviewer": {
           "$ref": "#/$defs/Subject"
@@ -1713,13 +1495,7 @@
         },
         "type": {
           "type": "string",
-          "enum": [
-            "support",
-            "limit",
-            "exception",
-            "conflict",
-            "priority"
-          ]
+          "enum": ["support", "limit", "exception", "conflict", "priority"]
         },
         "from": {
           "$ref": "#/$defs/NonEmptyString"
@@ -1732,18 +1508,10 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "proposed",
-            "accepted",
-            "resolved",
-            "rejected"
-          ]
+          "enum": ["proposed", "accepted", "resolved", "rejected"]
         },
         "resolution": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       }
     },
@@ -1773,17 +1541,10 @@
         },
         "decision": {
           "type": "string",
-          "enum": [
-            "pending",
-            "accepted",
-            "rejected"
-          ]
+          "enum": ["pending", "accepted", "rejected"]
         },
         "decision_reason": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       }
     },
@@ -1845,14 +1606,7 @@
     "UnresolvedQuestion": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "kind",
-        "reason",
-        "target_id",
-        "status",
-        "created_at"
-      ],
+      "required": ["id", "kind", "reason", "target_id", "status", "created_at"],
       "properties": {
         "id": {
           "$ref": "#/$defs/NonEmptyString"
@@ -1864,27 +1618,18 @@
           "$ref": "#/$defs/NonEmptyString"
         },
         "target_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "status": {
           "type": "string",
-          "enum": [
-            "open",
-            "resolved"
-          ]
+          "enum": ["open", "resolved"]
         },
         "created_at": {
           "type": "string",
           "format": "date-time"
         },
         "resolved_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         },
         "resolution": {
@@ -1913,10 +1658,7 @@
       "properties": {
         "decision": {
           "type": "string",
-          "enum": [
-            "confidence-updated",
-            "bounded-uncertainty-retained"
-          ]
+          "enum": ["confidence-updated", "bounded-uncertainty-retained"]
         },
         "actor": {
           "$ref": "#/$defs/Actor"
@@ -1940,21 +1682,14 @@
     "Actor": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "type"
-      ],
+      "required": ["id", "type"],
       "properties": {
         "id": {
           "$ref": "#/$defs/NonEmptyString"
         },
         "type": {
           "type": "string",
-          "enum": [
-            "human",
-            "organization-authority",
-            "agent"
-          ]
+          "enum": ["human", "organization-authority", "agent"]
         },
         "name": {
           "type": "string"
@@ -1988,17 +1723,11 @@
         },
         "claim": {
           "type": "string",
-          "enum": [
-            "participation",
-            "representation"
-          ]
+          "enum": ["participation", "representation"]
         },
         "participation_role": {
           "type": "string",
-          "enum": [
-            "process-assistance",
-            "judgment-content-contribution"
-          ]
+          "enum": ["process-assistance", "judgment-content-contribution"]
         },
         "contribution": {
           "type": "object",
@@ -2036,12 +1765,7 @@
         },
         "scope": {
           "type": "string",
-          "enum": [
-            "unit",
-            "core",
-            "boundaries",
-            "model"
-          ]
+          "enum": ["unit", "core", "boundaries", "model"]
         },
         "target_ids": {
           "$ref": "#/$defs/StringList"
@@ -2061,21 +1785,14 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "valid",
-            "invalidated",
-            "rejected"
-          ]
+          "enum": ["valid", "invalidated", "rejected"]
         },
         "confirmed_at": {
           "type": "string",
           "format": "date-time"
         },
         "invalidated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       },
@@ -2087,14 +1804,10 @@
                 "const": "participation"
               }
             },
-            "required": [
-              "claim"
-            ]
+            "required": ["claim"]
           },
           "then": {
-            "required": [
-              "participation_role"
-            ]
+            "required": ["participation_role"]
           }
         },
         {
@@ -2104,14 +1817,10 @@
                 "const": "judgment-content-contribution"
               }
             },
-            "required": [
-              "participation_role"
-            ]
+            "required": ["participation_role"]
           },
           "then": {
-            "required": [
-              "contribution"
-            ]
+            "required": ["contribution"]
           }
         }
       ]
@@ -2162,15 +1871,8 @@
           "$ref": "#/$defs/NonEmptyString"
         },
         "expected_creator_label": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "\u7b26\u5408",
-            "\u8d85\u51fa\u8303\u56f4",
-            null
-          ],
+          "type": ["string", "null"],
+          "enum": ["\u7b26\u5408", "\u8d85\u51fa\u8303\u56f4", null],
           "description": "Engine-owned classification of the requested case relative to the represented judgment: \u7b26\u5408 for an in-scope expected application, \u8d85\u51fa\u8303\u56f4 when the request itself crosses the declared scope or boundary. This is not a quality rating of a correctly refusing expected response."
         },
         "unit_ids": {
@@ -2186,41 +1888,21 @@
           "type": "boolean"
         },
         "source_ref": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "semantic_digest": {
           "$ref": "#/$defs/Digest"
         },
         "status": {
           "type": "string",
-          "enum": [
-            "pending",
-            "passed",
-            "failed",
-            "inconclusive",
-            "invalidated"
-          ]
+          "enum": ["pending", "passed", "failed", "inconclusive", "invalidated"]
         },
         "result": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "pass",
-            "fail",
-            "inconclusive",
-            null
-          ]
+          "type": ["string", "null"],
+          "enum": ["pass", "fail", "inconclusive", null]
         },
         "observed_creator_label": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "enum": [
             "\u7b26\u5408",
             "\u4e0d\u7b26\u5408",
@@ -2247,17 +1929,11 @@
           "format": "date-time"
         },
         "evaluated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         },
         "invalidated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       },
@@ -2269,9 +1945,7 @@
                 "const": "pending"
               }
             },
-            "required": [
-              "status"
-            ]
+            "required": ["status"]
           },
           "then": {
             "properties": {
@@ -2300,9 +1974,7 @@
                 "const": "passed"
               }
             },
-            "required": [
-              "status"
-            ]
+            "required": ["status"]
           },
           "then": {
             "properties": {
@@ -2329,9 +2001,7 @@
                 "const": "failed"
               }
             },
-            "required": [
-              "status"
-            ]
+            "required": ["status"]
           },
           "then": {
             "properties": {
@@ -2358,9 +2028,7 @@
                 "const": "inconclusive"
               }
             },
-            "required": [
-              "status"
-            ]
+            "required": ["status"]
           },
           "then": {
             "properties": {
@@ -2387,9 +2055,7 @@
                 "const": "invalidated"
               }
             },
-            "required": [
-              "status"
-            ]
+            "required": ["status"]
           },
           "then": {
             "properties": {
@@ -2437,17 +2103,10 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "valid",
-            "invalidated",
-            "rejected"
-          ]
+          "enum": ["valid", "invalidated", "rejected"]
         },
         "invalidated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       }
@@ -2455,11 +2114,7 @@
     "SemanticTestReport": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "cases",
-        "plans",
-        "acceptance"
-      ],
+      "required": ["cases", "plans", "acceptance"],
       "properties": {
         "cases": {
           "type": "array",
@@ -2524,20 +2179,14 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "valid",
-            "invalidated"
-          ]
+          "enum": ["valid", "invalidated"]
         },
         "frozen_at": {
           "type": "string",
           "format": "date-time"
         },
         "invalidated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       }
@@ -2609,11 +2258,7 @@
         },
         "risk_level": {
           "type": "string",
-          "enum": [
-            "normal",
-            "high",
-            "critical"
-          ]
+          "enum": ["normal", "high", "critical"]
         },
         "unique_semantics": {
           "type": "boolean"
@@ -2634,12 +2279,7 @@
     "SemanticBoundaryCoverageGroup": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "boundary_ids",
-        "test_ids",
-        "rationale"
-      ],
+      "required": ["id", "boundary_ids", "test_ids", "rationale"],
       "properties": {
         "id": {
           "$ref": "#/$defs/NonEmptyString"
@@ -2668,12 +2308,7 @@
     "SemanticRelationCoverageGroup": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "relation_ids",
-        "test_ids",
-        "rationale"
-      ],
+      "required": ["id", "relation_ids", "test_ids", "rationale"],
       "properties": {
         "id": {
           "$ref": "#/$defs/NonEmptyString"
@@ -2702,12 +2337,7 @@
     "ApplicationVerification": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "plans",
-        "attempts",
-        "observations",
-        "receipts"
-      ],
+      "required": ["plans", "attempts", "observations", "receipts"],
       "properties": {
         "plans": {
           "type": "array",
@@ -2864,37 +2494,25 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "valid",
-            "invalidated",
-            "superseded"
-          ]
+          "enum": ["valid", "invalidated", "superseded"]
         },
         "frozen_at": {
           "type": "string",
           "format": "date-time"
         },
         "invalidated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         },
         "superseded_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       },
       "allOf": [
         {
           "if": {
-            "required": [
-              "verification_contract"
-            ]
+            "required": ["verification_contract"]
           },
           "then": {
             "required": [
@@ -2914,18 +2532,11 @@
     "ApplicationRepetitionPolicy": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "claim",
-        "repetitions",
-        "task_ids"
-      ],
+      "required": ["claim", "repetitions", "task_ids"],
       "properties": {
         "claim": {
           "type": "string",
-          "enum": [
-            "none",
-            "stability"
-          ]
+          "enum": ["none", "stability"]
         },
         "repetitions": {
           "type": "integer",
@@ -2948,11 +2559,7 @@
       "properties": {
         "classification": {
           "type": "string",
-          "enum": [
-            "low",
-            "elevated",
-            "critical"
-          ]
+          "enum": ["low", "elevated", "critical"]
         },
         "external_actions": {
           "type": "boolean"
@@ -2968,11 +2575,7 @@
     "ApplicationSigningIdentity": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "public_key",
-        "fingerprint"
-      ],
+      "required": ["id", "public_key", "fingerprint"],
       "properties": {
         "id": {
           "$ref": "#/$defs/NonEmptyString"
@@ -3053,49 +2656,28 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "open",
-            "consumed",
-            "abandoned",
-            "invalidated",
-            "superseded"
-          ]
+          "enum": ["open", "consumed", "abandoned", "invalidated", "superseded"]
         },
         "issued_at": {
           "type": "string",
           "format": "date-time"
         },
         "consumed_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         },
         "receipt_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "invalidated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         },
         "abandonment_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "superseded_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       }
@@ -3150,10 +2732,7 @@
         },
         "authorization_outcome": {
           "type": "string",
-          "enum": [
-            "not-required",
-            "authorized"
-          ]
+          "enum": ["not-required", "authorized"]
         }
       }
     },
@@ -3239,43 +2818,25 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "open",
-            "consumed",
-            "abandoned",
-            "invalidated",
-            "superseded"
-          ]
+          "enum": ["open", "consumed", "abandoned", "invalidated", "superseded"]
         },
         "observed_at": {
           "type": "string",
           "format": "date-time"
         },
         "consumed_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         },
         "receipt_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "invalidated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         },
         "abandonment_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       }
     },
@@ -3431,11 +2992,7 @@
         },
         "risk_level": {
           "type": "string",
-          "enum": [
-            "normal",
-            "high",
-            "critical"
-          ]
+          "enum": ["normal", "high", "critical"]
         },
         "unit_ids": {
           "$ref": "#/$defs/StringList"
@@ -3447,26 +3004,17 @@
           "$ref": "#/$defs/StringList"
         },
         "semantic_test_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "perturbation_group": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "fork_id": {
           "$ref": "#/$defs/NonEmptyString"
         },
         "execution_mode": {
           "type": "string",
-          "enum": [
-            "with-only",
-            "paired-diagnostic"
-          ]
+          "enum": ["with-only", "paired-diagnostic"]
         },
         "verification_dimensions": {
           "type": "array",
@@ -3696,12 +3244,7 @@
         },
         "authorization_outcome": {
           "type": "string",
-          "enum": [
-            "not-required",
-            "authorized",
-            "denied",
-            "error"
-          ]
+          "enum": ["not-required", "authorized", "denied", "error"]
         },
         "output_digest": {
           "$ref": "#/$defs/Digest"
@@ -3746,89 +3289,49 @@
               "type": "boolean"
             },
             "direction_correct": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "scope_correct": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "boundary_correct": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "exception_correct": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "priority_correct": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "authority_precedence_correct": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "exit_correct": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "stable": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "stability_rate": {
-              "type": [
-                "number",
-                "null"
-              ],
+              "type": ["number", "null"],
               "minimum": 0,
               "maximum": 1
             },
             "critical_safety_error": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "permission_violation": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "external_action_violation": {
-              "type": [
-                "boolean",
-                "null"
-              ]
+              "type": ["boolean", "null"]
             },
             "over_application_error": {
               "type": "boolean"
             },
             "causal_difference": {
               "type": "string",
-              "enum": [
-                "observed",
-                "not-observed",
-                "not-evaluated"
-              ]
+              "enum": ["observed", "not-observed", "not-evaluated"]
             },
             "faithful_reason_digest": {
               "$ref": "#/$defs/Digest"
@@ -3973,10 +3476,7 @@
         },
         "comparison_contract": {
           "type": "string",
-          "enum": [
-            "selective-noninferiority",
-            "application-adoption-fidelity"
-          ]
+          "enum": ["selective-noninferiority", "application-adoption-fidelity"]
         },
         "stability_claimed": {
           "type": "boolean"
@@ -3986,10 +3486,7 @@
           "minimum": 0
         },
         "stability_rate": {
-          "type": [
-            "number",
-            "null"
-          ],
+          "type": ["number", "null"],
           "minimum": 0,
           "maximum": 1
         },
@@ -4148,9 +3645,7 @@
                 "const": "selective-noninferiority"
               }
             },
-            "required": [
-              "comparison_contract"
-            ]
+            "required": ["comparison_contract"]
           },
           "then": {
             "required": [
@@ -4341,33 +3836,18 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "verified",
-            "failed",
-            "invalidated",
-            "superseded"
-          ]
+          "enum": ["verified", "failed", "invalidated", "superseded"]
         },
         "failure_class": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "authorization-failed",
-            "application-failed",
-            null
-          ]
+          "type": ["string", "null"],
+          "enum": ["authorization-failed", "application-failed", null]
         },
         "recorded_at": {
           "type": "string",
           "format": "date-time"
         },
         "invalidated_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       }
@@ -4397,34 +3877,19 @@
         },
         "severity": {
           "type": "string",
-          "enum": [
-            "blocking",
-            "warning"
-          ]
+          "enum": ["blocking", "warning"]
         },
         "target": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "type",
-            "id"
-          ],
+          "required": ["type", "id"],
           "properties": {
             "type": {
               "type": "string",
-              "enum": [
-                "unit",
-                "relation",
-                "purpose",
-                "boundary",
-                "workspace"
-              ]
+              "enum": ["unit", "relation", "purpose", "boundary", "workspace"]
             },
             "id": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": ["string", "null"]
             }
           }
         },
@@ -4439,27 +3904,17 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "open",
-            "applied",
-            "dismissed"
-          ]
+          "enum": ["open", "applied", "dismissed"]
         },
         "resolution": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "created_at": {
           "type": "string",
           "format": "date-time"
         },
         "applied_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       }
@@ -4467,9 +3922,7 @@
     "RepairPlan": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "items"
-      ],
+      "required": ["items"],
       "properties": {
         "items": {
           "type": "array",
@@ -4502,18 +3955,11 @@
         },
         "access": {
           "type": "string",
-          "enum": [
-            "public",
-            "licensed",
-            "remote"
-          ]
+          "enum": ["public", "licensed", "remote"]
         },
         "publication_intent": {
           "type": "string",
-          "enum": [
-            "not-requested",
-            "public-distribution-requested"
-          ]
+          "enum": ["not-requested", "public-distribution-requested"]
         },
         "lineage": {
           "type": "object"
@@ -4532,16 +3978,10 @@
           ]
         },
         "last_built_version": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "last_built_judgment_version": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       }
     },
@@ -4589,10 +4029,7 @@
         "output": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "filename",
-            "artifact_sha256"
-          ],
+          "required": ["filename", "artifact_sha256"],
           "properties": {
             "filename": {
               "type": "string",
@@ -4607,10 +4044,7 @@
         "tool_coordinates": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "studio_core",
-            "core"
-          ],
+          "required": ["studio_core", "core"],
           "properties": {
             "studio_cli": {
               "$ref": "#/$defs/ToolCoordinate"
@@ -4661,10 +4095,7 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "verified",
-            "failed"
-          ]
+          "enum": ["verified", "failed"]
         },
         "recorded_at": {
           "type": "string",
@@ -4682,11 +4113,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "package",
-            "version",
-            "distribution"
-          ],
+          "required": ["package", "version", "distribution"],
           "properties": {
             "package": {
               "$ref": "#/$defs/NonEmptyString"
@@ -4696,10 +4123,7 @@
             },
             "distribution": {
               "type": "string",
-              "enum": [
-                "installed-package",
-                "source-checkout"
-              ]
+              "enum": ["installed-package", "source-checkout"]
             },
             "source_tree_digest": {
               "$ref": "#/$defs/Digest"
@@ -4716,24 +4140,16 @@
         },
         {
           "type": "string",
-          "enum": [
-            "pass",
-            "fail"
-          ]
+          "enum": ["pass", "fail"]
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "status"
-          ],
+          "required": ["status"],
           "properties": {
             "status": {
               "type": "string",
-              "enum": [
-                "pass",
-                "fail"
-              ]
+              "enum": ["pass", "fail"]
             },
             "outcome": {
               "type": "string",
@@ -4785,10 +4201,7 @@
           "$ref": "#/$defs/NonEmptyString"
         },
         "question_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "question": {
           "$ref": "#/$defs/NonEmptyString"
@@ -4872,11 +4285,7 @@
         },
         "status": {
           "type": "string",
-          "enum": [
-            "prepared",
-            "verified",
-            "completed"
-          ]
+          "enum": ["prepared", "verified", "completed"]
         },
         "before": {
           "$ref": "#/$defs/OperationCoordinate"
@@ -4906,31 +4315,19 @@
           ]
         },
         "output_reference": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "minLength": 1,
           "maxLength": 1024,
           "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.(?:/|$)).+$"
         },
         "output_filename": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "candidate_filename": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "backup_filename": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "prior_output_digest": {
           "oneOf": [
@@ -4951,10 +4348,7 @@
           "format": "date-time"
         },
         "completed_at": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "format": "date-time"
         }
       }
@@ -4991,12 +4385,7 @@
     "HistoryEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "revision",
-        "event",
-        "semantic_digest",
-        "at"
-      ],
+      "required": ["revision", "event", "semantic_digest", "at"],
       "properties": {
         "revision": {
           "type": "integer",

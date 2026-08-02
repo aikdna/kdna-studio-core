@@ -1,14 +1,15 @@
 #!/usr/bin/env node
-'use strict';
+"use strict";
 
-const { spawnSync } = require('node:child_process');
-const { acquire } = require('./acquire-trusted-npm-release');
-const { trustedTarballPath } = require('./trusted-npm-release');
-const { resolveTrustedNpmInvocation } = require('./runtime-candidate-binding');
+const { spawnSync } = require("node:child_process");
+const { acquire } = require("./acquire-trusted-npm-release");
+const { trustedTarballPath } = require("./trusted-npm-release");
+const { resolveTrustedNpmInvocation } = require("./runtime-candidate-binding");
 
 async function main() {
-  if (process.argv.length < 3) throw new Error('usage: run-trusted-npm.js <npm arguments...>');
-  const root = require('node:path').resolve(__dirname, '..');
+  if (process.argv.length < 3)
+    throw new Error("usage: run-trusted-npm.js <npm arguments...>");
+  const root = require("node:path").resolve(__dirname, "..");
   const tarball = trustedTarballPath();
   await acquire(tarball);
   const invocation = resolveTrustedNpmInvocation(root, {
@@ -21,12 +22,13 @@ async function main() {
       {
         cwd: root,
         env: invocation.environment,
-        stdio: 'inherit',
+        stdio: "inherit",
         shell: false,
       },
     );
     if (result.error) throw result.error;
-    if (result.signal) throw new Error(`trusted npm was interrupted by ${result.signal}`);
+    if (result.signal)
+      throw new Error(`trusted npm was interrupted by ${result.signal}`);
     process.exitCode = result.status;
   } finally {
     invocation.cleanup();

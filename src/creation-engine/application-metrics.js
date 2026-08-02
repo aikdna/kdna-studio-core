@@ -1,13 +1,8 @@
-'use strict';
+"use strict";
 
-function deterministicBootstrapLower(
-  deltas,
-  seedDigest,
-  options = {},
-) {
+function deterministicBootstrapLower(deltas, seedDigest, options = {}) {
   const replicates = options.replicates ?? 4000;
-  let state = options.seed ??
-    (Number.parseInt(seedDigest.slice(-8), 16) || 1);
+  let state = options.seed ?? (Number.parseInt(seedDigest.slice(-8), 16) || 1);
   const random = () => {
     state ^= state << 13;
     state ^= state >>> 17;
@@ -25,9 +20,10 @@ function deterministicBootstrapLower(
   means.sort((left, right) => left - right);
   const confidenceLevel = options.confidenceLevel ?? 0.95;
   const lowerTail = (1 - confidenceLevel) / 2;
-  const rank = options.legacyRank === true
-    ? Math.floor(lowerTail * means.length)
-    : Math.floor(lowerTail * (means.length - 1));
+  const rank =
+    options.legacyRank === true
+      ? Math.floor(lowerTail * means.length)
+      : Math.floor(lowerTail * (means.length - 1));
   return means[rank];
 }
 

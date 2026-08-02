@@ -92,12 +92,8 @@
   },
   "common": {
     "rationale": "This fixture proves the semantic unit survives project compile and Runtime projection.",
-    "applies_when": [
-      "The declared domain is active."
-    ],
-    "does_not_apply_when": [
-      "The task is outside the declared domain."
-    ],
+    "applies_when": ["The declared domain is active."],
+    "does_not_apply_when": ["The task is outside the declared domain."],
     "misuse_risk": "Applying the judgment outside its declared boundary.",
     "confidence": {
       "status": "high",

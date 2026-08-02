@@ -21,27 +21,34 @@
  * rename to land wins, so concurrent inits cannot overwrite each other.
  */
 
-const crypto = require('crypto');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+const crypto = require("crypto");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
-const CREATOR_ID_PREFIX = 'kdna:creator:ed25519:';
+const CREATOR_ID_PREFIX = "kdna:creator:ed25519:";
 
 function defaultIdentityDir() {
-  return process.env.KDNA_IDENTITY_DIR || path.join(os.homedir(), '.kdna', 'identity');
+  return (
+    process.env.KDNA_IDENTITY_DIR ||
+    path.join(os.homedir(), ".kdna", "identity")
+  );
 }
 
-const PRIVATE_KEY_FILE = 'kdna.key';
-const PUBLIC_KEY_FILE = 'kdna.pub';
-const IDENTITY_JSON_FILE = 'creator.json';
-const IDENTITY_FILE_NAMES = new Set([PRIVATE_KEY_FILE, PUBLIC_KEY_FILE, IDENTITY_JSON_FILE]);
+const PRIVATE_KEY_FILE = "kdna.key";
+const PUBLIC_KEY_FILE = "kdna.pub";
+const IDENTITY_JSON_FILE = "creator.json";
+const IDENTITY_FILE_NAMES = new Set([
+  PRIVATE_KEY_FILE,
+  PUBLIC_KEY_FILE,
+  IDENTITY_JSON_FILE,
+]);
 
 // Staging sibling directory naming. Only the identity transaction creates
 // directories with this shape, and it writes no other file names into them,
 // which is what makes a leftover staging directory provably transaction-owned.
-const STAGING_DIR_PREFIX = '.kdna-init-';
-const STAGING_DIR_SUFFIX = '.staging.d';
+const STAGING_DIR_PREFIX = ".kdna-init-";
+const STAGING_DIR_SUFFIX = ".staging.d";
 // A staging remnant is removed only when it is provably transaction-owned
 // AND its owner process is provably dead. Age is never evidence of death:
 // a remnant whose owner pid is still alive belongs to a live (concurrent or
@@ -59,9 +66,12 @@ const PBKDF2_ITERATIONS = 600000;
 // for arbitrary values: decryptPrivateKey() rejects every other iteration
 // count before the KDF runs.
 const PBKDF2_LEGACY_ITERATIONS = 100000;
-const PBKDF2_ACCEPTED_ITERATIONS = new Set([PBKDF2_LEGACY_ITERATIONS, PBKDF2_ITERATIONS]);
+const PBKDF2_ACCEPTED_ITERATIONS = new Set([
+  PBKDF2_LEGACY_ITERATIONS,
+  PBKDF2_ITERATIONS,
+]);
 
-const ENVELOPE_KDF = 'pbkdf2-sha256';
+const ENVELOPE_KDF = "pbkdf2-sha256";
 const ENVELOPE_SALT_BYTES = 16;
 const ENVELOPE_IV_BYTES = 12; // AES-256-GCM nonce
 const ENVELOPE_TAG_BYTES = 16; // GCM authentication tag
@@ -79,14 +89,24 @@ const ENVELOPE_MAX_CIPHERTEXT_BYTES = 64 * 1024;
 function fsyncDirectorySync(dir) {
   let fd;
   try {
-    fd = fs.openSync(dir, 'r');
+    fd = fs.openSync(dir, "r");
     fs.fsyncSync(fd);
   } catch (error) {
-    if (error && (error.code === 'EISDIR' || error.code === 'EINVAL' || error.code === 'EPERM')) return;
+    if (
+      error &&
+      (error.code === "EISDIR" ||
+        error.code === "EINVAL" ||
+        error.code === "EPERM")
+    )
+      return;
     throw error;
   } finally {
     if (fd !== undefined) {
-      try { fs.closeSync(fd); } catch { /* best effort */ }
+      try {
+        fs.closeSync(fd);
+      } catch {
+        /* best effort */
+      }
     }
   }
 }
@@ -98,7 +118,7 @@ function fsyncDirectorySync(dir) {
  * from the directory rename that publishes them together.
  */
 function writeStagedFileSync(stagingDir, name, data, mode) {
-  const fd = fs.openSync(path.join(stagingDir, name), 'wx', mode);
+  const fd = fs.openSync(path.join(stagingDir, name), "wx", mode);
   try {
     fs.writeFileSync(fd, data);
     fs.fsyncSync(fd);
@@ -108,12 +128,17 @@ function writeStagedFileSync(stagingDir, name, data, mode) {
 }
 
 function isStagingDirName(name) {
-  return name.startsWith(STAGING_DIR_PREFIX) && name.endsWith(STAGING_DIR_SUFFIX);
+  return (
+    name.startsWith(STAGING_DIR_PREFIX) && name.endsWith(STAGING_DIR_SUFFIX)
+  );
 }
 
 function stagingOwnerPid(name) {
-  const middle = name.slice(STAGING_DIR_PREFIX.length, -STAGING_DIR_SUFFIX.length);
-  const pid = Number(middle.split('-')[0]);
+  const middle = name.slice(
+    STAGING_DIR_PREFIX.length,
+    -STAGING_DIR_SUFFIX.length,
+  );
+  const pid = Number(middle.split("-")[0]);
   return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
 }
 
@@ -122,7 +147,7 @@ function processAlive(pid) {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return !!(error && error.code === 'EPERM');
+    return !!(error && error.code === "EPERM");
   }
 }
 
@@ -138,7 +163,9 @@ function isProvableStagingRemnant(absolute) {
   } catch {
     return false;
   }
-  return entries.every((entry) => entry.isFile() && IDENTITY_FILE_NAMES.has(entry.name));
+  return entries.every(
+    (entry) => entry.isFile() && IDENTITY_FILE_NAMES.has(entry.name),
+  );
 }
 
 /**
@@ -175,7 +202,7 @@ function cleanupStaleStagingDirs(parentDir) {
  * Compute the creator_id fingerprint from a normalized Ed25519 public key PEM.
  */
 function creatorFingerprint(publicKeyPem) {
-  const hash = crypto.createHash('sha256').update(publicKeyPem).digest('hex');
+  const hash = crypto.createHash("sha256").update(publicKeyPem).digest("hex");
   return `${CREATOR_ID_PREFIX}${hash}`;
 }
 
@@ -189,28 +216,30 @@ function normalizePublicKey(pem, source) {
   try {
     key = crypto.createPublicKey(pem);
   } catch {
-    throw new Error(`Public key from ${source} is not a parseable PEM public key — the identity is corrupt.`);
+    throw new Error(
+      `Public key from ${source} is not a parseable PEM public key — the identity is corrupt.`,
+    );
   }
-  if (key.asymmetricKeyType !== 'ed25519') {
+  if (key.asymmetricKeyType !== "ed25519") {
     throw new Error(
       `Public key from ${source} is ${key.asymmetricKeyType}, not ed25519 — the identity is corrupt.`,
     );
   }
-  return key.export({ type: 'spki', format: 'pem' });
+  return key.export({ type: "spki", format: "pem" });
 }
 
 function derivePublicKeyFromPrivate(privateKeyPem) {
   const key = crypto.createPrivateKey(privateKeyPem);
-  if (key.asymmetricKeyType !== 'ed25519') {
-    throw new Error('not an ed25519 private key');
+  if (key.asymmetricKeyType !== "ed25519") {
+    throw new Error("not an ed25519 private key");
   }
-  return crypto.createPublicKey(key).export({ type: 'spki', format: 'pem' });
+  return crypto.createPublicKey(key).export({ type: "spki", format: "pem" });
 }
 
-const IDENTITY_ALREADY_EXISTS = 'IDENTITY_ALREADY_EXISTS';
-const IDENTITY_INCOMPLETE = 'IDENTITY_INCOMPLETE';
-const IDENTITY_CORRUPT = 'IDENTITY_CORRUPT';
-const IDENTITY_KDF_FAILED = 'IDENTITY_KDF_FAILED';
+const IDENTITY_ALREADY_EXISTS = "IDENTITY_ALREADY_EXISTS";
+const IDENTITY_INCOMPLETE = "IDENTITY_INCOMPLETE";
+const IDENTITY_CORRUPT = "IDENTITY_CORRUPT";
+const IDENTITY_KDF_FAILED = "IDENTITY_KDF_FAILED";
 
 // Stable machine-readable result codes for post-commit failures:
 // the atomic rename already published the complete identity, but the
@@ -218,8 +247,9 @@ const IDENTITY_KDF_FAILED = 'IDENTITY_KDF_FAILED';
 // initialization failure and must never be reported as one — the identity
 // exists on disk, must not be deleted or rolled back, and a retry will (and
 // should) report that the identity already exists.
-const IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED = 'IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED';
-const IDENTITY_COMMITTED_INCONSISTENT = 'IDENTITY_COMMITTED_INCONSISTENT';
+const IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED =
+  "IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED";
+const IDENTITY_COMMITTED_INCONSISTENT = "IDENTITY_COMMITTED_INCONSISTENT";
 
 function identityStateError(code, message, fields = {}, cause = null) {
   const error = cause ? new Error(message, { cause }) : new Error(message);
@@ -240,14 +270,14 @@ function committedDurabilityError(dir, cause) {
   try {
     loaded = loadIdentity(dir);
   } catch (verificationError) {
-    const causeCode = cause && cause.code ? cause.code : 'unknown error';
+    const causeCode = cause && cause.code ? cause.code : "unknown error";
     return identityStateError(
       IDENTITY_COMMITTED_INCONSISTENT,
-      `Identity files were committed in ${dir}, but the identity failed consistency verification after `
-      + `the commit and parent-directory durability confirmation also failed (${causeCode}). `
-      + 'Do not sign with or otherwise use this identity. Preserve the directory without changing or '
-      + 'deleting it, restrict access to it, and recover from a trusted backup or have an administrator '
-      + 'inspect all three files before any further use. Do not re-run identity initialization.',
+      `Identity files were committed in ${dir}, but the identity failed consistency verification after ` +
+        `the commit and parent-directory durability confirmation also failed (${causeCode}). ` +
+        "Do not sign with or otherwise use this identity. Preserve the directory without changing or " +
+        "deleting it, restrict access to it, and recover from a trusted backup or have an administrator " +
+        "inspect all three files before any further use. Do not re-run identity initialization.",
       {
         committed: true,
         identityVerified: false,
@@ -257,15 +287,15 @@ function committedDurabilityError(dir, cause) {
       verificationError,
     );
   }
-  const causeCode = cause && cause.code ? cause.code : 'unknown error';
+  const causeCode = cause && cause.code ? cause.code : "unknown error";
   return identityStateError(
     IDENTITY_COMMITTED_DURABILITY_UNCONFIRMED,
-    `Identity in ${dir} is committed: the atomic rename published the complete three-file identity`
-    + ` (creator_id ${loaded.creator_id}) and it passed the three-file consistency verification`
-    + `, but confirming durability of the parent directory failed (${causeCode}). `
-    + 'The identity is on disk — do not treat this as "nothing was created", '
-    + 'do not delete the files, and do not retry as a fresh initialization; '
-    + 'use loadIdentity() to access the identity.',
+    `Identity in ${dir} is committed: the atomic rename published the complete three-file identity` +
+      ` (creator_id ${loaded.creator_id}) and it passed the three-file consistency verification` +
+      `, but confirming durability of the parent directory failed (${causeCode}). ` +
+      'The identity is on disk — do not treat this as "nothing was created", ' +
+      "do not delete the files, and do not retry as a fresh initialization; " +
+      "use loadIdentity() to access the identity.",
     {
       committed: true,
       identityVerified: true,
@@ -282,11 +312,21 @@ function readCanonicalState(dir) {
   try {
     entries = fs.readdirSync(dir);
   } catch (error) {
-    if (error && error.code === 'ENOENT') {
-      return { exists: false, notDirectory: false, entries: [], identityFiles: [] };
+    if (error && error.code === "ENOENT") {
+      return {
+        exists: false,
+        notDirectory: false,
+        entries: [],
+        identityFiles: [],
+      };
     }
-    if (error && error.code === 'ENOTDIR') {
-      return { exists: true, notDirectory: true, entries: [], identityFiles: [] };
+    if (error && error.code === "ENOTDIR") {
+      return {
+        exists: true,
+        notDirectory: true,
+        entries: [],
+        identityFiles: [],
+      };
     }
     throw error;
   }
@@ -308,11 +348,11 @@ function ensureParentDirectory(parentDir) {
     // ENOTDIR, while others report EEXIST for the blocking component. Inspect
     // the path as a filesystem fact and normalize only that exact condition;
     // unrelated EEXIST failures remain untouched.
-    if (!error || error.code !== 'EEXIST') throw error;
+    if (!error || error.code !== "EEXIST") throw error;
     try {
       if (fs.statSync(parentDir).isDirectory()) return;
     } catch (inspectionError) {
-      if (inspectionError && inspectionError.code === 'ENOTDIR') {
+      if (inspectionError && inspectionError.code === "ENOTDIR") {
         throw inspectionError;
       }
       throw error;
@@ -320,9 +360,9 @@ function ensureParentDirectory(parentDir) {
     const notDirectory = new Error(
       `Identity parent path ${parentDir} is not a directory — refusing to initialize.`,
     );
-    notDirectory.code = 'ENOTDIR';
+    notDirectory.code = "ENOTDIR";
     notDirectory.path = parentDir;
-    notDirectory.syscall = 'mkdir';
+    notDirectory.syscall = "mkdir";
     throw notDirectory;
   }
 }
@@ -346,9 +386,9 @@ function existingIdentityStateError(dir, state = readCanonicalState(dir)) {
   if (present.length !== IDENTITY_FILE_NAMES.size) {
     return identityStateError(
       IDENTITY_INCOMPLETE,
-      `Identity in ${dir} is incomplete: found ${present.join(', ') || 'no canonical identity files'}, `
-      + `but a valid identity requires ${PRIVATE_KEY_FILE}, ${PUBLIC_KEY_FILE}, and ${IDENTITY_JSON_FILE}. `
-      + 'The existing files were not changed or removed.',
+      `Identity in ${dir} is incomplete: found ${present.join(", ") || "no canonical identity files"}, ` +
+        `but a valid identity requires ${PRIVATE_KEY_FILE}, ${PUBLIC_KEY_FILE}, and ${IDENTITY_JSON_FILE}. ` +
+        "The existing files were not changed or removed.",
       { identityVerified: false, identity_dir: dir },
     );
   }
@@ -358,15 +398,15 @@ function existingIdentityStateError(dir, state = readCanonicalState(dir)) {
     if (!identity) {
       return identityStateError(
         IDENTITY_CORRUPT,
-        `Identity in ${dir} has all three canonical files but could not be verified. `
-        + 'The existing files were not changed or removed.',
+        `Identity in ${dir} has all three canonical files but could not be verified. ` +
+          "The existing files were not changed or removed.",
         { identityVerified: false, identity_dir: dir },
       );
     }
     return identityStateError(
       IDENTITY_ALREADY_EXISTS,
-      `Identity already exists in ${dir} and passed consistency verification. `
-      + 'Use loadIdentity() to access it; initialization never overwrites it.',
+      `Identity already exists in ${dir} and passed consistency verification. ` +
+        "Use loadIdentity() to access it; initialization never overwrites it.",
       {
         identityVerified: true,
         identity_dir: dir,
@@ -376,8 +416,8 @@ function existingIdentityStateError(dir, state = readCanonicalState(dir)) {
   } catch (cause) {
     return identityStateError(
       IDENTITY_CORRUPT,
-      `Identity in ${dir} has all three canonical files but failed consistency verification. `
-      + 'The existing files were not changed or removed; preserve them and recover manually.',
+      `Identity in ${dir} has all three canonical files but failed consistency verification. ` +
+        "The existing files were not changed or removed; preserve them and recover manually.",
       { identityVerified: false, identity_dir: dir },
       cause,
     );
@@ -402,21 +442,25 @@ function existingIdentityStateError(dir, state = readCanonicalState(dir)) {
 function publishStagingDir(stagingDir, targetDir) {
   const state = readCanonicalState(targetDir);
   if (state.notDirectory) {
-    throw new Error(`Identity path ${targetDir} exists and is not a directory — refusing to publish.`);
+    throw new Error(
+      `Identity path ${targetDir} exists and is not a directory — refusing to publish.`,
+    );
   }
-  if (state.identityFiles.length > 0) throw existingIdentityStateError(targetDir, state);
+  if (state.identityFiles.length > 0)
+    throw existingIdentityStateError(targetDir, state);
   if (state.entries.length > 0) {
     throw new Error(
-      `Identity directory ${targetDir} is not empty and holds no identity files. The identity is `
-      + 'published as one atomic directory, so init refuses to merge into a directory with foreign files.',
+      `Identity directory ${targetDir} is not empty and holds no identity files. The identity is ` +
+        "published as one atomic directory, so init refuses to merge into a directory with foreign files.",
     );
   }
   if (state.exists) {
     try {
       fs.rmdirSync(targetDir);
     } catch (error) {
-      if (!error || error.code !== 'ENOENT') {
-        if (hasIdentityFiles(targetDir)) throw existingIdentityStateError(targetDir);
+      if (!error || error.code !== "ENOENT") {
+        if (hasIdentityFiles(targetDir))
+          throw existingIdentityStateError(targetDir);
         throw error;
       }
     }
@@ -424,8 +468,11 @@ function publishStagingDir(stagingDir, targetDir) {
   try {
     fs.renameSync(stagingDir, targetDir);
   } catch (error) {
-    if (error && ['ENOTEMPTY', 'EEXIST', 'EPERM', 'ENOTDIR'].includes(error.code)
-        && hasIdentityFiles(targetDir)) {
+    if (
+      error &&
+      ["ENOTEMPTY", "EEXIST", "EPERM", "ENOTDIR"].includes(error.code) &&
+      hasIdentityFiles(targetDir)
+    ) {
       throw existingIdentityStateError(targetDir);
     }
     throw error;
@@ -472,8 +519,10 @@ function initIdentity(displayName, identityDir = null, passphrase = null) {
   // created by the rename, and the rename never replaces a non-empty target.
   const state = readCanonicalState(dir);
   if (state.notDirectory) {
-    const error = new Error(`Identity path ${dir} exists and is not a directory — refusing to initialize.`);
-    error.code = 'ENOTDIR';
+    const error = new Error(
+      `Identity path ${dir} exists and is not a directory — refusing to initialize.`,
+    );
+    error.code = "ENOTDIR";
     throw error;
   }
   if (state.identityFiles.length > 0) {
@@ -481,14 +530,14 @@ function initIdentity(displayName, identityDir = null, passphrase = null) {
   }
   if (state.entries.length > 0) {
     throw new Error(
-      `Identity directory ${dir} is not empty and holds no identity files. The identity is `
-      + 'published as one atomic directory, so init refuses to merge into a directory with foreign files.',
+      `Identity directory ${dir} is not empty and holds no identity files. The identity is ` +
+        "published as one atomic directory, so init refuses to merge into a directory with foreign files.",
     );
   }
 
-  const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519', {
-    publicKeyEncoding: { type: 'spki', format: 'pem' },
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519", {
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
   });
 
   const privateKeyData = passphrase
@@ -498,7 +547,7 @@ function initIdentity(displayName, identityDir = null, passphrase = null) {
   const creatorId = creatorFingerprint(publicKey);
   const identity = {
     creator_id: creatorId,
-    display_name: displayName || '',
+    display_name: displayName || "",
     public_key: publicKey,
     public_key_path: path.join(dir, PUBLIC_KEY_FILE),
     identity_dir: dir,
@@ -508,8 +557,9 @@ function initIdentity(displayName, identityDir = null, passphrase = null) {
   };
   const identityJson = JSON.stringify(identity, null, 2);
 
-  const stagingName = `${STAGING_DIR_PREFIX}${process.pid}-${Date.now().toString(36)}-`
-    + `${crypto.randomBytes(6).toString('hex')}${STAGING_DIR_SUFFIX}`;
+  const stagingName =
+    `${STAGING_DIR_PREFIX}${process.pid}-${Date.now().toString(36)}-` +
+    `${crypto.randomBytes(6).toString("hex")}${STAGING_DIR_SUFFIX}`;
   const stagingDir = path.join(parentDir, stagingName);
   fs.mkdirSync(stagingDir, { mode: 0o700 });
   try {
@@ -551,13 +601,17 @@ function loadIdentity(identityDir = null) {
 
   let identity;
   try {
-    identity = JSON.parse(fs.readFileSync(identityJsonPath, 'utf8'));
+    identity = JSON.parse(fs.readFileSync(identityJsonPath, "utf8"));
   } catch {
     throw new Error(
       `creator.json in ${dir} is not valid JSON — the identity is corrupt and is not loaded.`,
     );
   }
-  if (!identity || typeof identity !== 'object' || typeof identity.creator_id !== 'string') {
+  if (
+    !identity ||
+    typeof identity !== "object" ||
+    typeof identity.creator_id !== "string"
+  ) {
     throw new Error(
       `creator.json in ${dir} does not describe an identity (missing creator_id) — not loaded.`,
     );
@@ -565,29 +619,33 @@ function loadIdentity(identityDir = null) {
 
   if (!fs.existsSync(publicKeyPath)) {
     throw new Error(
-      `Identity in ${dir} is incomplete: ${PUBLIC_KEY_FILE} is missing. The canonical identity `
-      + `requires ${PRIVATE_KEY_FILE}, ${PUBLIC_KEY_FILE}, and ${IDENTITY_JSON_FILE}.`,
+      `Identity in ${dir} is incomplete: ${PUBLIC_KEY_FILE} is missing. The canonical identity ` +
+        `requires ${PRIVATE_KEY_FILE}, ${PUBLIC_KEY_FILE}, and ${IDENTITY_JSON_FILE}.`,
     );
   }
   if (!fs.existsSync(privateKeyFilePath)) {
     throw new Error(
-      `Identity in ${dir} is incomplete: ${PRIVATE_KEY_FILE} is missing. The canonical identity `
-      + `requires ${PRIVATE_KEY_FILE}, ${PUBLIC_KEY_FILE}, and ${IDENTITY_JSON_FILE}.`,
+      `Identity in ${dir} is incomplete: ${PRIVATE_KEY_FILE} is missing. The canonical identity ` +
+        `requires ${PRIVATE_KEY_FILE}, ${PUBLIC_KEY_FILE}, and ${IDENTITY_JSON_FILE}.`,
     );
   }
 
   const diskPublicKey = normalizePublicKey(
-    fs.readFileSync(publicKeyPath, 'utf8'), `${PUBLIC_KEY_FILE} in ${dir}`,
+    fs.readFileSync(publicKeyPath, "utf8"),
+    `${PUBLIC_KEY_FILE} in ${dir}`,
   );
 
   // creator.json may carry the public key, but it must be the same Ed25519
   // key as kdna.pub — the directory may never present two different keys.
-  if (typeof identity.public_key === 'string' && identity.public_key) {
-    const jsonPublicKey = normalizePublicKey(identity.public_key, `public_key in ${dir}/creator.json`);
+  if (typeof identity.public_key === "string" && identity.public_key) {
+    const jsonPublicKey = normalizePublicKey(
+      identity.public_key,
+      `public_key in ${dir}/creator.json`,
+    );
     if (jsonPublicKey !== diskPublicKey) {
       throw new Error(
-        `public_key in ${dir}/creator.json is not the same Ed25519 public key as ${PUBLIC_KEY_FILE} — `
-        + 'refusing to load an inconsistent identity.',
+        `public_key in ${dir}/creator.json is not the same Ed25519 public key as ${PUBLIC_KEY_FILE} — ` +
+          "refusing to load an inconsistent identity.",
       );
     }
   }
@@ -595,14 +653,14 @@ function loadIdentity(identityDir = null) {
   const expectedId = creatorFingerprint(diskPublicKey);
   if (identity.creator_id !== expectedId) {
     throw new Error(
-      `creator_id in ${dir}/creator.json does not match the public key fingerprint `
-      + `(expected ${expectedId}, found ${identity.creator_id}) — refusing to load a mismatched identity.`,
+      `creator_id in ${dir}/creator.json does not match the public key fingerprint ` +
+        `(expected ${expectedId}, found ${identity.creator_id}) — refusing to load a mismatched identity.`,
     );
   }
 
   // A plaintext private key is checked against the public key eagerly; an
   // encrypted envelope can only be verified by signPayload after decryption.
-  const privateKeyContent = fs.readFileSync(privateKeyFilePath, 'utf8');
+  const privateKeyContent = fs.readFileSync(privateKeyFilePath, "utf8");
   if (!isEncryptedKey(privateKeyContent)) {
     let derived;
     try {
@@ -614,8 +672,8 @@ function loadIdentity(identityDir = null) {
     }
     if (derived !== diskPublicKey) {
       throw new Error(
-        `Private key in ${dir} does not match the public key in ${PUBLIC_KEY_FILE} — `
-        + 'refusing to load a mismatched identity.',
+        `Private key in ${dir} does not match the public key in ${PUBLIC_KEY_FILE} — ` +
+          "refusing to load a mismatched identity.",
       );
     }
   }
@@ -655,9 +713,12 @@ function signPayload(payload, identityDir = null, passphrase = null) {
     );
   }
 
-  let privateKeyPem = fs.readFileSync(privateKeyFilePath, 'utf8');
+  let privateKeyPem = fs.readFileSync(privateKeyFilePath, "utf8");
   if (isEncryptedKey(privateKeyPem)) {
-    if (!passphrase) throw new Error('Private key is encrypted. Provide --passphrase to sign.');
+    if (!passphrase)
+      throw new Error(
+        "Private key is encrypted. Provide --passphrase to sign.",
+      );
     privateKeyPem = decryptPrivateKey(privateKeyPem, passphrase);
   }
 
@@ -671,22 +732,30 @@ function signPayload(payload, identityDir = null, passphrase = null) {
   }
   if (derivedPublicKey !== identity.public_key) {
     throw new Error(
-      `Private key in ${dir} does not match the public key recorded in the identity — `
-      + 'refusing to sign with a mismatched identity.',
+      `Private key in ${dir} does not match the public key recorded in the identity — ` +
+        "refusing to sign with a mismatched identity.",
     );
   }
 
-  const data = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload));
+  const data = Buffer.isBuffer(payload)
+    ? payload
+    : Buffer.from(String(payload));
   const sig = crypto.sign(null, data, privateKeyPem);
-  return `ed25519:${sig.toString('hex')}`;
+  return `ed25519:${sig.toString("hex")}`;
 }
 
 /**
  * Sign a Human Lock payload.
  * If the key is encrypted, passphrase is required.
  */
-function signHumanLock(cardId, statement, judgmentFingerprint, identityDir = null, passphrase = null) {
-  const lockPayload = [cardId, statement, judgmentFingerprint].join('\n');
+function signHumanLock(
+  cardId,
+  statement,
+  judgmentFingerprint,
+  identityDir = null,
+  passphrase = null,
+) {
+  const lockPayload = [cardId, statement, judgmentFingerprint].join("\n");
   return signPayload(lockPayload, identityDir, passphrase);
 }
 
@@ -696,26 +765,29 @@ function encryptPrivateKey(pem, passphrase) {
   const salt = crypto.randomBytes(ENVELOPE_SALT_BYTES);
   let key;
   try {
-    key = crypto.pbkdf2Sync(passphrase, salt, PBKDF2_ITERATIONS, 32, 'sha256');
+    key = crypto.pbkdf2Sync(passphrase, salt, PBKDF2_ITERATIONS, 32, "sha256");
   } catch (cause) {
     throw identityStateError(
       IDENTITY_KDF_FAILED,
-      'Creator identity key derivation failed before any identity was committed.',
+      "Creator identity key derivation failed before any identity was committed.",
       { committed: false, identityVerified: false },
       cause,
     );
   }
   const iv = crypto.randomBytes(ENVELOPE_IV_BYTES);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const ciphertext = Buffer.concat([cipher.update(Buffer.from(pem)), cipher.final()]);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(Buffer.from(pem)),
+    cipher.final(),
+  ]);
   return JSON.stringify({
     encrypted: true,
     kdf: ENVELOPE_KDF,
     iterations: PBKDF2_ITERATIONS,
-    salt: salt.toString('base64'),
-    iv: iv.toString('base64'),
-    tag: cipher.getAuthTag().toString('base64'),
-    ciphertext: ciphertext.toString('base64'),
+    salt: salt.toString("base64"),
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    ciphertext: ciphertext.toString("base64"),
   });
 }
 
@@ -727,14 +799,16 @@ function encryptPrivateKey(pem, passphrase) {
  * `expectedBytes` is given, the decoded length must match exactly.
  */
 function decodeEnvelopeField(value, name, expectedBytes) {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`Invalid key envelope: ${name} must be a non-empty base64 string.`);
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(
+      `Invalid key envelope: ${name} must be a non-empty base64 string.`,
+    );
   }
   if (value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
     throw new Error(`Invalid key envelope: ${name} is not well-formed base64.`);
   }
-  const decoded = Buffer.from(value, 'base64');
-  if (decoded.toString('base64') !== value) {
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.toString("base64") !== value) {
     throw new Error(`Invalid key envelope: ${name} is not canonical base64.`);
   }
   if (expectedBytes != null && decoded.length !== expectedBytes) {
@@ -759,56 +833,72 @@ function decodeEnvelopeField(value, name, expectedBytes) {
  */
 function decryptPrivateKey(envelope, passphrase) {
   let env = envelope;
-  if (typeof envelope === 'string') {
+  if (typeof envelope === "string") {
     try {
       env = JSON.parse(envelope);
     } catch {
-      throw new Error('Invalid key envelope: not valid JSON.');
+      throw new Error("Invalid key envelope: not valid JSON.");
     }
   }
-  if (!env || typeof env !== 'object' || Array.isArray(env)) {
-    throw new Error('Invalid key envelope: expected a plain object.');
+  if (!env || typeof env !== "object" || Array.isArray(env)) {
+    throw new Error("Invalid key envelope: expected a plain object.");
   }
-  if (env.encrypted !== true) throw new Error('Private key is not encrypted');
+  if (env.encrypted !== true) throw new Error("Private key is not encrypted");
   if (env.kdf !== ENVELOPE_KDF) {
-    const seen = typeof env.kdf === 'string' ? `'${env.kdf}'` : typeof env.kdf;
+    const seen = typeof env.kdf === "string" ? `'${env.kdf}'` : typeof env.kdf;
     throw new Error(
       `Unsupported key envelope KDF: ${seen}. Only '${ENVELOPE_KDF}' is accepted.`,
     );
   }
-  if (!Number.isSafeInteger(env.iterations) || !PBKDF2_ACCEPTED_ITERATIONS.has(env.iterations)) {
+  if (
+    !Number.isSafeInteger(env.iterations) ||
+    !PBKDF2_ACCEPTED_ITERATIONS.has(env.iterations)
+  ) {
     throw new Error(
-      `Invalid key envelope: iterations must be exactly ${PBKDF2_LEGACY_ITERATIONS} (legacy) or `
-      + `${PBKDF2_ITERATIONS} (current), got ${String(env.iterations)}.`,
+      `Invalid key envelope: iterations must be exactly ${PBKDF2_LEGACY_ITERATIONS} (legacy) or ` +
+        `${PBKDF2_ITERATIONS} (current), got ${String(env.iterations)}.`,
     );
   }
-  const salt = decodeEnvelopeField(env.salt, 'salt', ENVELOPE_SALT_BYTES);
-  const iv = decodeEnvelopeField(env.iv, 'iv', ENVELOPE_IV_BYTES);
-  const tag = decodeEnvelopeField(env.tag, 'tag', ENVELOPE_TAG_BYTES);
-  const ciphertext = decodeEnvelopeField(env.ciphertext, 'ciphertext', null);
-  if (ciphertext.length === 0 || ciphertext.length > ENVELOPE_MAX_CIPHERTEXT_BYTES) {
+  const salt = decodeEnvelopeField(env.salt, "salt", ENVELOPE_SALT_BYTES);
+  const iv = decodeEnvelopeField(env.iv, "iv", ENVELOPE_IV_BYTES);
+  const tag = decodeEnvelopeField(env.tag, "tag", ENVELOPE_TAG_BYTES);
+  const ciphertext = decodeEnvelopeField(env.ciphertext, "ciphertext", null);
+  if (
+    ciphertext.length === 0 ||
+    ciphertext.length > ENVELOPE_MAX_CIPHERTEXT_BYTES
+  ) {
     throw new Error(
-      `Invalid key envelope: ciphertext must decode to between 1 and ${ENVELOPE_MAX_CIPHERTEXT_BYTES} bytes, `
-      + `got ${ciphertext.length}.`,
+      `Invalid key envelope: ciphertext must decode to between 1 and ${ENVELOPE_MAX_CIPHERTEXT_BYTES} bytes, ` +
+        `got ${ciphertext.length}.`,
     );
   }
 
-  const key = crypto.pbkdf2Sync(passphrase, salt, env.iterations, 32, 'sha256');
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  const key = crypto.pbkdf2Sync(passphrase, salt, env.iterations, 32, "sha256");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(tag);
   try {
-    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+    return Buffer.concat([
+      decipher.update(ciphertext),
+      decipher.final(),
+    ]).toString("utf8");
   } catch (e) {
-    if (e.code === 'ERR_OSSL_EVP_BAD_DECRYPT' || e.message.includes('bad decrypt')) {
-      throw new Error('Wrong passphrase — cannot decrypt private key.');
+    if (
+      e.code === "ERR_OSSL_EVP_BAD_DECRYPT" ||
+      e.message.includes("bad decrypt")
+    ) {
+      throw new Error("Wrong passphrase — cannot decrypt private key.");
     }
     throw e;
   }
 }
 
 function isEncryptedKey(content) {
-  try { const o = JSON.parse(content); return o.encrypted === true; }
-  catch { return false; }
+  try {
+    const o = JSON.parse(content);
+    return o.encrypted === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -820,14 +910,17 @@ function isEncryptedKey(content) {
  */
 function loadPublicKey(identityDir = null) {
   const dir = identityDir || defaultIdentityDir();
-  const anyIdentityFile = [PRIVATE_KEY_FILE, PUBLIC_KEY_FILE, IDENTITY_JSON_FILE]
-    .some((name) => fs.existsSync(path.join(dir, name)));
+  const anyIdentityFile = [
+    PRIVATE_KEY_FILE,
+    PUBLIC_KEY_FILE,
+    IDENTITY_JSON_FILE,
+  ].some((name) => fs.existsSync(path.join(dir, name)));
   if (!anyIdentityFile) return null;
   const identity = loadIdentity(dir);
   if (!identity) {
     throw new Error(
-      `Identity in ${dir} is incomplete: ${IDENTITY_JSON_FILE} is missing, so ${PUBLIC_KEY_FILE} `
-      + 'is not part of a verified identity — refusing to return it.',
+      `Identity in ${dir} is incomplete: ${IDENTITY_JSON_FILE} is missing, so ${PUBLIC_KEY_FILE} ` +
+        "is not part of a verified identity — refusing to return it.",
     );
   }
   return identity.public_key;
