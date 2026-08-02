@@ -1843,6 +1843,58 @@ test('prompt-injection detection persists codes, never matched source text', () 
   }
 });
 
+test('confidence reason rejects unverifiable verbatim self-attestation (#14)', () => {
+  const workspace = creationEngine.createWorkspace(null, {
+    mode: 'agent-authored',
+    workflowMode: 'autonomous',
+    access: 'public',
+    createdBy: { type: 'agent', id: 'fixture-agent' },
+  });
+  const base = {
+    rationale: 'test',
+    applies_when: ['x'],
+    does_not_apply_when: ['not-x'],
+    misuse_risk: 'none',
+    counterexample_search: {
+      scope: 't',
+      method: 't',
+      result: 'none-found',
+      uncertainty: 'n',
+    },
+    source_refs: ['agent-inference:fixture-agent'],
+    agent_inference: true,
+    card_type: 'axiom',
+  };
+  for (const [id, reason] of [
+    ['c_verbatim_zh', '逐字来自五类清单'],
+    ['c_verbatim_en', 'Directly from the material'],
+    ['c_verbatim_word', 'verbatim from source'],
+  ]) {
+    assert.throws(
+      () =>
+        creationEngine.addCandidate(workspace, {
+          ...base,
+          id,
+          statement: `Statement ${id}`,
+          confidence: { status: 'high', reason },
+        }),
+      /must not claim verbatim fidelity to a source/,
+    );
+  }
+  for (const [id, reason] of [
+    ['c_ok_evidence', 'evidence-based'],
+    ['c_ok_summary', 'faithful summary of the source'],
+  ]) {
+    const out = creationEngine.addCandidate(workspace, {
+      ...base,
+      id,
+      statement: `Statement ${id}`,
+      confidence: { status: 'high', reason },
+    });
+    assert.ok(out.candidates.find((candidate) => candidate.id === id));
+  }
+});
+
 test('semantic/paraphrased prompt injection is detected without false positives', () => {
   const ingest = (content) => {
     const workspace = creationEngine.createWorkspace(null, {

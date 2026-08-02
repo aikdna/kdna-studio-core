@@ -5003,10 +5003,26 @@ function normalizeConfidence(value) {
   if (score !== null && (!Number.isFinite(score) || score < 0 || score > 1)) {
     throw new Error('confidence.score must be between 0 and 1');
   }
+  const reason = optionalString(value.reason);
+  // A confidence reason must not self-attest to a fidelity it cannot prove.
+  // The material body is intentionally not retained after ingest (content
+  // never leaks into the workspace), so a claim like "verbatim from the
+  // source" cannot be mechanically verified at compile time. Reject such
+  // claims so the asset never carries an unverifiable verbatim assertion.
+  if (
+    reason &&
+    /(?:逐字|原文|一字不差|verbatim|word[- ]?for[- ]?word|directly from|exactly as (?:in|stated))/iu.test(
+      reason,
+    )
+  ) {
+    throw new Error(
+      'confidence.reason must not claim verbatim fidelity to a source: the material body is not retained, so such a claim cannot be verified. Use a faithful-summary formulation instead.',
+    );
+  }
   return {
     status,
     score,
-    reason: optionalString(value.reason),
+    reason,
   };
 }
 
