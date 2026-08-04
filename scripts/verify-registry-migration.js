@@ -11,7 +11,7 @@ const { createRequire } = require('node:module');
 const LEGACY_NAME = '@aikdna/studio-core';
 const LEGACY_VERSION = '1.2.1';
 const CURRENT_NAME = '@aikdna/kdna-studio-core';
-const CURRENT_VERSION = '2.0.2';
+const CURRENT_VERSION = '3.0.0';
 const REGISTRY = 'https://registry.npmjs.org/';
 
 function installRegistryPackages(consumerRoot) {
@@ -160,7 +160,7 @@ function verifyInstalledMigration(consumerRoot) {
 
   assert.equal(legacyManifest.dependencies['@aikdna/kdna-core'], '^0.3.0');
   assert.equal(legacyManifest.peerDependencies['@aikdna/kdna-cli'], '>=0.16.0');
-  assert.equal(currentManifest.dependencies['@aikdna/kdna-core'], '0.20.0');
+  assert.equal(currentManifest.dependencies['@aikdna/kdna-core'], '0.21.0');
 
   verifyLockfile(consumerRoot);
   verifyLegacyMainFailure(consumerRequire);

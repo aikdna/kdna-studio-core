@@ -79,7 +79,7 @@ coordinates: the container uses `format_version: 0.1.0`, the payload declares
   evolution survive Runtime export without being reduced to a field
   allow-list. Human Lock fingerprints cover the complete authored field tree.
 - **Provenance** — content fingerprinting, build tracking, audit trail
-- **Creation Engine candidate** — an unreleased, UI-independent state machine that guides
+- **Creation Engine** — a UI-independent state machine that guides
   terminal Agents from purpose and untrusted source material through
   elicitation, confirmation, semantic tests, repair, and accepted project
   compile.
@@ -217,10 +217,10 @@ complete breaking-export and packaged-path inventory.
 npm install @aikdna/kdna-studio-core
 ```
 
-That command installs the published `3.0.0` from npm `latest`. The `3.0.0`
-contract removes the root exports and deep-import paths described above;
-consumers of the published `2.0.2` contract must follow the migration guide
-and must not silently move to 3.x.
+That command installs the published `3.0.0` from npm `latest`. Requires
+Node.js 18 or later. The `3.0.0` contract removes the root exports and
+deep-import paths described above; consumers of the published `2.0.2` contract
+must follow the migration guide and must not silently move to 3.x.
 
 Migrating from `@aikdna/studio-core@1.2.1` is a source migration, not a
 drop-in package rename. Follow the
@@ -242,7 +242,7 @@ kdna-studio target declare my_domain \
   --task "longform article review" \
   --include "argument structure,tone,revision" \
   --exclude "life habits,food preference"
-kdna-studio source classify my_domain
+kdna-studio source my_domain
 kdna-studio distill my_domain --candidates candidates.json
 kdna-studio candidate accept my_domain <candidate-id>
 kdna-studio candidate promote my_domain

@@ -8,7 +8,8 @@ The registry coordinates verified by this repository are:
 | Coordinate | Role | Runtime requirement |
 |---|---|---|
 | `@aikdna/studio-core@1.2.1` | Historical package | Node.js 18 or later; `@aikdna/kdna-core` `^0.3.0`; peer `@aikdna/kdna-cli` 0.16.0 or later |
-| `@aikdna/kdna-studio-core@2.0.2` | Maintained package | Node.js 18 or later; exact `@aikdna/kdna-core@0.20.0` |
+| `@aikdna/kdna-studio-core@2.0.2` | Superseded package | Node.js 18 or later; exact `@aikdna/kdna-core@0.20.0` |
+| `@aikdna/kdna-studio-core@3.0.0` | Maintained package | Node.js 18 or later; exact `@aikdna/kdna-core@0.21.0` |
 
 The old registry tarball does not contain
 `studio-schemas/studio.project.schema.json`, although its main entry point
@@ -17,13 +18,25 @@ requires that file. As a result, a clean install of
 must not be used as executable compatibility evidence for the maintained
 package.
 
+This guide documents the migration to the current maintained package
+(`3.0.0`). The `2.0.2` coordinate is kept for historical context and for
+consumers that have not yet completed the 2.x → 3.0.0 step; it is no longer
+the maintained coordinate and must not be installed from this guide.
+
 ## Install the maintained package
 
-Remove the old package and install the maintained coordinate explicitly:
+Remove the old package and install the current maintained coordinate:
 
 ```bash
 npm uninstall @aikdna/studio-core
-npm install @aikdna/kdna-studio-core@2.0.2
+npm install @aikdna/kdna-studio-core
+```
+
+`npm install @aikdna/kdna-studio-core` resolves to the published `3.0.0`
+`latest` tag. If you are already on `2.0.2`, upgrade in place with:
+
+```bash
+npm install @aikdna/kdna-studio-core@3.0.0
 ```
 
 Change CommonJS imports:
@@ -112,14 +125,21 @@ legacy compile JSON as the runtime distribution format.
 
 ## Surface comparison
 
-The maintained package keeps the top-level `project`, `cards`, `compile`,
-`quality`, `provenance`, `pipeline`, `governance`, and `i18n` responsibility
-names. That name overlap does not imply behavioral or serialized-output
-compatibility.
+The maintained `3.0.0` package exposes these top-level responsibilities:
+`authoring`, `project`, `cards`, `compile`, `provenance`, `exportRuntime`,
+`i18n`, `creator`, `distillation`, `evidence`, `protocolContract`, and
+`creationEngine`.
 
-The maintained package also exposes `exportRuntime`, `creator`, and
-`distillation` as stable top-level responsibilities. Experimental and internal
-exports may change independently and are not migration anchors.
+The `2.x` root exports `quality`, `pipeline`, and `governance` were removed in
+`3.0.0`. Test Lab, Feynman, Quality, and Governance workshop implementations
+remain in the repository for research and regression coverage, but they are
+not exported from the package root and are not included in the release
+tarball. Their code retention is not a compatibility promise.
+
+The `creationEngine` responsibility (the Creation Engine state machine) is new
+in `3.0.0`. Name overlap between `2.x` and `3.0.0` does not imply behavioral or
+serialized-output compatibility. Experimental and internal exports may change
+independently and are not migration anchors.
 
 ## What this migration does not promise
 
