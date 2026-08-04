@@ -1,8 +1,9 @@
 # Creation Engine source contracts
 
-Status: unreleased Studio Core source candidate. These contracts describe the
-checked-in candidate, not the currently published npm package and not a claim
-that every terminal Host supports Creation.
+Status: shipped in the published `3.0.0` Studio Core package as the
+`creationEngine` responsibility. These contracts describe that surface; they
+do not claim that every terminal Host supports Creation, and a checked-in
+Skill is not proof that a particular Host can complete the flow.
 
 ## Product boundary
 
@@ -151,7 +152,7 @@ The inventory:
   material-count limits;
 - advances a continuation past already ingested unchanged entries.
 
-This source candidate does not implement offset continuation inside a single
+This implementation does not implement offset continuation inside a single
 oversized text file. Inventory reports that capability gap explicitly; an
 approved split copy must preserve order and full coverage rather than silently
 dropping the remainder.
