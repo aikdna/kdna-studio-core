@@ -1,9 +1,8 @@
 # KDNA Studio Core
 
-> **Status:** The Creation Engine described below is an unreleased
-> dirty-source candidate. The npm `latest` package does not contain this
-> candidate API. Source tests and candidate tarballs are not publication,
-> clean-install or compatibility evidence.
+> **Status:** The Creation Engine described below is shipped in the published
+> `3.0.0` npm package. Source tests and candidate tarballs are not
+> clean-install or compatibility evidence beyond the published surface.
 
 **KDNA Studio Core is the JS authoring kernel for `.kdna` files.** It turns scattered notes, documents, works, and feedback into loadable judgment assets by distilling stable judgment patterns into a declared domain and loading scope.
 
@@ -215,12 +214,13 @@ complete breaking-export and packaged-path inventory.
 ## Install
 
 ```bash
-npm install @aikdna/kdna-studio-core@2.0.2
+npm install @aikdna/kdna-studio-core
 ```
 
-That command installs the published incumbent. The `3.0.0` contract described
-above is an unreleased source candidate and must not be inferred from the npm
-`latest` tag.
+That command installs the published `3.0.0` from npm `latest`. The `3.0.0`
+contract removes the root exports and deep-import paths described above;
+consumers of the published `2.0.2` contract must follow the migration guide
+and must not silently move to 3.x.
 
 Migrating from `@aikdna/studio-core@1.2.1` is a source migration, not a
 drop-in package rename. Follow the
@@ -232,7 +232,7 @@ for the verified registry boundary and required code changes.
 The command-line authoring entry is a separate package:
 
 ```bash
-npm install -g @aikdna/kdna-studio-cli@0.10.2
+npm install -g @aikdna/kdna-studio-cli
 kdna-studio create my_domain --name @yourscope/my_domain
 kdna-studio import my_domain ./notes.md
 kdna-studio target declare my_domain \
