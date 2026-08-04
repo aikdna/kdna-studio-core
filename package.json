@@ -70,5 +70,8 @@
     "release:generate-evidence": "node scripts/generate-release-evidence.js",
     "release:publish-verified": "node scripts/publish-verified-artifact.js",
     "prepublishOnly": "node scripts/run-test-all.js && node scripts/release-check.js"
+  },
+  "overrides": {
+    "fast-uri": "3.1.5"
   }
 }
