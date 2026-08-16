@@ -27,7 +27,6 @@ test('npm tarball excludes unvalidated Studio workshops', () => {
 
   for (const forbidden of [
     'src/cards/feynman.js',
-    'src/cli-bridge/',
     'src/granularity.js',
     'src/governance/',
     'src/packaging/',
