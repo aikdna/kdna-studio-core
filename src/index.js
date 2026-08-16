@@ -7,7 +7,6 @@
  * The package root exposes the supported source → review → confirm → export
  * path. Experimental workshops remain in the repository for research and
  * full regression coverage, but are not part of the public package contract.
- *   cli-bridge/   Adapter to kdna-cli subprocess calls
  */
 
 const cards = require('./cards');
