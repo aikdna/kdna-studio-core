@@ -237,7 +237,7 @@ test('candidate CI pins immutable actions, exact Node runtimes, and verified npm
     'utf8',
   );
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
-  assert.match(workflow, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
+  assert.match(workflow, /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/);
   assert.equal(
     workflow.match(/actions\/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38/g)?.length,
     3,
@@ -252,9 +252,9 @@ test('candidate CI pins immutable actions, exact Node runtimes, and verified npm
   assert.match(workflow, /node-version:\s*22\.23\.1/);
   assert.match(workflow, /node-version:\s*\$\{\{ matrix\.node \}\}/);
   assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node)@v[0-9]+/);
-  assert.match(codeql, /actions\/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0/);
+  assert.match(codeql, /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/);
   assert.equal(
-    codeql.match(/github\/codeql-action\/(?:init|autobuild|analyze)@99df26d4f13ea111d4ec1a7dddef6063f76b97e9/g)?.length,
+    codeql.match(/github\/codeql-action\/(?:init|autobuild|analyze)@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd/g)?.length,
     3,
   );
   assert.doesNotMatch(codeql, /@v[0-9]+/);
