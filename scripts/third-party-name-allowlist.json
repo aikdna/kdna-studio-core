@@ -1,8 +1,1 @@
-[
-  {
-    "file": ".github/workflows/stale.yml",
-    "text": "actions/stale@v10",
-    "count": 1,
-    "reason": "GitHub Actions release selector owned by actions/stale."
-  }
-]
+[]
