@@ -248,7 +248,7 @@ test('candidate CI pins immutable actions, exact Node runtimes, and verified npm
     workflow,
     /node --test tests\/creator-identity\.test\.js tests\/creator-identity-envelope\.test\.js/,
   );
-  assert.match(workflow, /node:\s*\[18\.20\.8, 22\.23\.1\]/);
+  assert.match(workflow, /node:\s*\['22\.23\.1', '24\.18\.0'\]/);
   assert.match(workflow, /node-version:\s*22\.23\.1/);
   assert.match(workflow, /node-version:\s*\$\{\{ matrix\.node \}\}/);
   assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node)@v[0-9]+/);
@@ -264,8 +264,7 @@ test('candidate CI pins immutable actions, exact Node runtimes, and verified npm
   assert.match(workflow, /run-trusted-npm\.js ci --ignore-scripts/);
   assert.match(workflow, /run-trusted-npm\.js run verify:candidate-sources\s*$/m);
   assert.match(workflow, /node scripts\/run-test-all\.js/);
-  assert.match(workflow, /if: matrix\.node == '18\.20\.8'/);
-  assert.match(workflow, /node --test "\$\{tests\[@\]\}"/);
+  assert.doesNotMatch(workflow, /if: matrix\.node == '18\.20\.8'/);
   assert.match(workflow, /candidate_source="\$runner_temp\/kdna-core-candidate"/);
   assert.match(
     workflow,
