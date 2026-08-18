@@ -56,7 +56,7 @@
     "cbor-x": "^1.6.5"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "lint": "node scripts/run-lint.js",
