@@ -217,8 +217,9 @@ complete breaking-export and packaged-path inventory.
 npm install @aikdna/kdna-studio-core
 ```
 
-That command installs the published `3.0.0` from npm `latest`. Requires
-Node.js 18 or later. The `3.0.0` contract removes the root exports and
+That command installs the published `3.0.0` from npm `latest` (the last
+Node 18-compatible release). The current source requires Node.js 22 or
+later. The `3.0.0` contract removes the root exports and
 deep-import paths described above; consumers of the published `2.0.2` contract
 must follow the migration guide and must not silently move to 3.x.
 
