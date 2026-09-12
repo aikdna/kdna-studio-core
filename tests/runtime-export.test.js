@@ -5,9 +5,9 @@ const os = require('os');
 const path = require('path');
 const cbor = require('cbor-x');
 
-const { createProject } = require('../../src/project');
-const { createCard, lockCard, transitionCard } = require('../../src/cards');
-const { exportRuntimeAsset, buildManifest } = require('../../src/export-runtime');
+const { createProject } = require('../src/project');
+const { createCard, lockCard, transitionCard } = require('../src/cards');
+const { exportRuntimeAsset, buildManifest } = require('../src/export-runtime');
 const kdnaCore = require('@aikdna/kdna-core');
 
 function makeLockedCard(type, fields, id) {

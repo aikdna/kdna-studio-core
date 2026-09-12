@@ -10,6 +10,12 @@ jobs:
         node: ['22.23.1', '24.18.0']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # The retirement-registry gate reads the object store: criterion (e)
+          # compares the registered bytes with the bytes the file carried at its
+          # original path in the commit before the retirement, so the checkout
+          # cannot be shallow.
+          fetch-depth: 0
       - name: Check out the exact Core candidate outside the Studio workspace
         env:
           KDNA_CORE_CANDIDATE_REPOSITORY: aikdna/kdna

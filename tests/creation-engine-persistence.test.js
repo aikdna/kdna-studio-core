@@ -9,17 +9,17 @@ const path = require('node:path');
 const Ajv2020 = require('ajv/dist/2020');
 const addFormats = require('ajv-formats');
 
-const creationEngine = require('../../src/creation-engine');
-const { exportRuntimeAsset } = require('../../src/export-runtime');
+const creationEngine = require('../src/creation-engine');
+const { exportRuntimeAsset } = require('../src/export-runtime');
 const {
   createPromotedWorkspace,
   acceptWorkspace,
   passingBuildReceipt,
   exactBuildFixture,
   recordExactBuildReceipt,
-} = require('../creation-engine-helpers');
+} = require('./creation-engine-helpers');
 
-const schema = require('../../schemas/creation-workspace.schema.json');
+const schema = require('../schemas/creation-workspace.schema.json');
 
 function rewriteArtifact(target, name, mutate) {
   const artifactPath = path.join(target, name);

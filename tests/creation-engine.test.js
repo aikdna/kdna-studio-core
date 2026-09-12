@@ -7,11 +7,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const creationEngine = require('../../src/creation-engine');
-const { exportRuntimeAsset } = require('../../src/export-runtime');
+const creationEngine = require('../src/creation-engine');
+const { exportRuntimeAsset } = require('../src/export-runtime');
 const kdnaCore = require('@aikdna/kdna-core');
 const creationModesFixture =
-  require('../../fixtures/creation-engine/creation-modes.json');
+  require('../fixtures/creation-engine/creation-modes.json');
 const {
   candidateFor,
   purposeFor,
@@ -22,7 +22,7 @@ const {
   freezeSemanticCases,
   passingBuildReceipt,
   exactBuildFixture,
-} = require('../creation-engine-helpers');
+} = require('./creation-engine-helpers');
 
 function testDigest(value) {
   return `sha256:${crypto
@@ -224,7 +224,7 @@ function packedRuntimeBytes(workspace, options = {}) {
 }
 
 test('Creation Engine is public, immutable, and models all eight first-class objects', () => {
-  const root = require('../../src');
+  const root = require('../src');
   assert.equal(root.creationEngine, creationEngine);
   for (const name of [
     'createWorkspace',
@@ -2135,7 +2135,7 @@ test('interpretive and representational modes cannot be accepted from pure Agent
       access: 'public',
       createdBy: { type: 'agent', id: 'fixture-agent' },
     });
-    const { purposeFor } = require('../creation-engine-helpers');
+    const { purposeFor } = require('./creation-engine-helpers');
     workspace = creationEngine.setPurpose(workspace, purposeFor(mode));
     workspace = creationEngine.addCandidate(workspace, candidateFor({
       agentInference: true,
@@ -4921,3 +4921,4 @@ test('conflict repair is an Agent decision in interpretive and authored modes bu
     );
   }
 });
+
