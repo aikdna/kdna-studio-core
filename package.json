@@ -1,35 +1,27 @@
 {
   "name": "@aikdna/kdna-studio-core",
-  "version": "3.0.0",
-  "description": "Official KDNA Studio Core SDK for authoring, reviewing, compiling, and exporting .kdna judgment assets through the KDNA toolchain.",
+  "version": "4.0.0-rc.components.1",
+  "description": "Current ordinary and component Creation with actual role-specific adoption and one-use saved-byte context.",
   "type": "commonjs",
   "main": "src/index.js",
   "files": [
     "src/index.js",
-    "src/authoring/",
-    "src/cards/index.js",
-    "src/creation-engine/",
-    "src/compile/",
-    "src/creator-identity.js",
-    "src/distillation/",
-    "src/evidence/",
-    "src/export-runtime/",
-    "src/i18n/",
-    "src/judgment-core.js",
-    "src/judgment-fields.js",
-    "src/project/",
-    "src/project-schema.js",
-    "src/protocol-contract.js",
-    "src/provenance/",
-    "docs/creation-contracts.md",
-    "schemas/human-lock-report.schema.json",
-    "schemas/creation-workspace.schema.json",
-    "schemas/studio-build-receipt.schema.json",
-    "schemas/studio-build-report.schema.json",
-    "schemas/studio.project.schema.json",
+    "src/index.d.ts",
+    "src/creation-engine/component-input.js",
+    "src/creation-engine/component-session.js",
+    "src/creation-engine/creation-context.js",
+    "src/creation-engine/component-runtime-binding.js",
+    "src/creation-engine/component-runtime-binding.json",
+    "src/compile/component-materialization.js",
+    "src/compile/component-encoding.js",
+    "src/compile/component-compiler.js",
+    "src/evidence/component-json.js",
+    "src/evidence/component-evidence.js",
+    "src/evidence/component-audit.js",
+    "docs/CURRENT-CREATION-CONTRACT.md",
+    "README.md",
     "LICENSE",
-    "NOTICE",
-    "README.md"
+    "NOTICE"
   ],
   "license": "Apache-2.0",
   "repository": {
@@ -42,36 +34,33 @@
   "homepage": "https://github.com/aikdna/kdna-studio-core#readme",
   "keywords": [
     "kdna",
-    "domain-judgment",
-    "authoring",
-    "judgment-cards",
-    "provenance",
-    "compile",
-    "validate"
+    "agent-native",
+    "creation",
+    "judgment",
+    "compile"
   ],
   "dependencies": {
-    "@aikdna/kdna-core": "0.21.0",
-    "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1",
-    "cbor-x": "^1.6.5"
+    "cbor-x": "1.6.5",
+    "@aikdna/kdna-core": "0.24.0-rc.component-semantics.2",
+    "@aikdna/kdna-read": "0.3.0-rc.component-semantics.2"
   },
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "lint": "node scripts/run-lint.js",
-    "pretest": "node scripts/acquire-trusted-npm-release.js",
-    "test": "node --test tests/*.test.js",
-    "test:all": "node scripts/run-test-all.js",
-    "test:migration:registry": "node scripts/verify-registry-migration.js",
-    "check:protocol-names": "node scripts/check-current-protocol-names.js",
-    "verify:candidate-sources": "node scripts/verify-runtime-candidate-sources.js",
-    "release:check": "node scripts/release-check.js",
-    "release:generate-evidence": "node scripts/generate-release-evidence.js",
-    "release:publish-verified": "node scripts/publish-verified-artifact.js",
-    "prepublishOnly": "node scripts/run-test-all.js && node scripts/release-check.js"
+    "test": "node --test test/component-lifecycle.test.js test/component-source-adoption.test.js"
   },
   "overrides": {
-    "fast-uri": "3.1.5"
-  }
+    "fast-uri": "3.1.7"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "require": "./src/index.js",
+      "default": "./src/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "private": true,
+  "types": "src/index.d.ts"
 }

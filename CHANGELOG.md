@@ -1,3 +1,16 @@
+## 4.0.0-rc.components.1
+
+Current typed ordinary/component authoring requires distinct alternatives, actual role-specific adoption, complete pre-compiler mapping and one-use saved-byte readback. Format 2 binds the current public component graph; legacy evidence is explicitly noncurrent. No identity or action authority is inferred.
+
+## 3.1.0-rc.cross-provider.1 — unpublished candidate
+
+- Emit the shared Studio creation evidence format with explicit reference and
+  declared implementation coordinates; preserve original 3.0.0 evidence digests.
+- Verify supported JavaScript/Swift declarations while retaining real local Core
+  admission and private binding/material/history/final-decision checks.
+- Bind the source's offline graph to current exact Core and Read archives.
+- Keep public entry points unchanged and report unproven legacy pins as UNKNOWN.
+
 # Changelog
 
 ## Unreleased

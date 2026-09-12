@@ -1,0 +1,90 @@
+{
+  "format": "kdna.studio-creation-evidence/1",
+  "supplements": "STUDIO-EVIDENCE-FORMAT.md and FORMAT.json; original pins retained",
+  "numericRules": {
+    "newEvidenceAllNumbers": "Every numeric JSON value anywhere in format1 evidence is a nonnegative safe integer. The generic canonical serializer vectors may independently contain other finite binary64 values; those are not evidence payload examples.",
+    "reservedNumericKeys": "Every present object member named revision, sequence or bytes must have a nonnegative safe-integer value. No numeric strings are coerced.",
+    "required": [
+      "evidence.revision",
+      "evidence.artifact.bytes",
+      "evidence.final_decision.revision",
+      "evidence.candidates[*].revision",
+      "evidence.human_messages[*].revision",
+      "evidence.human_messages[*].review.revision",
+      "evidence.human_messages[*].review.candidates[*].revision",
+      "evidence.human_messages[*].review.compiled.revision when compiled is non-null",
+      "evidence.history[*].sequence",
+      "evidence.history[*].revision"
+    ],
+    "historyDetailRequiredByEvent": {
+      "candidate_proposed": [
+        "detail.revision"
+      ],
+      "candidate_revised": [
+        "detail.previous.revision",
+        "detail.replacement.revision"
+      ],
+      "human_reply": [
+        "detail.revision",
+        "detail.review.revision",
+        "detail.review.candidates[*].revision",
+        "detail.review.compiled.revision when compiled is non-null"
+      ],
+      "compiler_preview": [
+        "detail.revision"
+      ],
+      "human_final_decision": [
+        "detail.revision"
+      ],
+      "brief_recorded": [],
+      "material_recorded": [],
+      "human_reply_rejected": []
+    },
+    "legacy": "No added depth/count/safeinteger restrictions or canonicalization changes in explicit legacy branch."
+  },
+  "consistentResultAdditions": {
+    "evidence_format": {
+      "new": "kdna.studio-creation-evidence/1",
+      "legacy": "studio-blank-material-evidence/legacy"
+    },
+    "provider_assertion": "declared_not_authenticated",
+    "implementation_artifact_sha256": {
+      "new": "core.implementation.artifact.sha256",
+      "legacy": "UNKNOWN"
+    },
+    "compiler_artifact_sha256": {
+      "new": "compiler.artifact_sha256 (may be UNKNOWN)",
+      "legacy": "UNKNOWN"
+    },
+    "reference_contract": {
+      "new": "declared_supported_exact",
+      "legacy": "UNKNOWN"
+    }
+  },
+  "reasons": {
+    "unknownFormat": "CREATION_EVIDENCE_FORMAT_UNSUPPORTED",
+    "mixedLegacyNewShape": "CREATION_EVIDENCE_FORMAT_AMBIGUOUS",
+    "malformedNewShapeOrNumericOrDepth": "CREATION_EVIDENCE_MALFORMED",
+    "unsupportedReferenceContract": "CREATION_CORE_CONTRACT_UNSUPPORTED",
+    "unsupportedOrMismatchedImplementationCompilerProvider": "CREATION_PROVIDER_DECLARATION_UNSUPPORTED"
+  },
+  "verificationOrder": [
+    "Actual local public Core admission; original missing-evidence handling",
+    "Discriminate own format field. Unknown format rejected. New format validates safe JSON domain and field/numeric shapes before digesting; legacy digest/acceptance semantics unchanged",
+    "Original trusted external binding comparison (unbound ordinary mutations yield CREATION_BINDING_MISMATCH)",
+    "Check legacy/new shape ambiguity and reference/provider semantic support, then original Core digest/material/review/history/final/authority checks",
+    "On consistent result retain all previous result fields and add the five declaration/UNKNOWN fields above. Rejection result shape remains the prior rejection shape."
+  ],
+  "publicAPI": {
+    "exports": [
+      "createSession",
+      "verifyCreationEvidence"
+    ],
+    "createSession": "Existing options and methods unchanged; new producer emits format1 by default",
+    "verifyCreationEvidence": "verifyCreationEvidence(bytes, evidence, expectedBinding), synchronous; no filesystem/module selection from evidence",
+    "packageExports": [
+      ".",
+      "./package.json"
+    ]
+  }
+}

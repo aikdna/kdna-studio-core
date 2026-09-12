@@ -1,0 +1,6 @@
+{
+  "applies": "format 1 only; legacy checks unchanged",
+  "compilerPreview": "Every history compiler_preview.detail.compiler must equal top compiler exactly. Difference yields CREATION_PROVIDER_DECLARATION_UNSUPPORTED after trusted binding.",
+  "mixedCore": "Preflight permits known legacy package/version keys (even if replacing new keys) through to binding; after binding any such mixed new core yields CREATION_EVIDENCE_FORMAT_AMBIGUOUS. Other unknown new core/compiler keys remain MALFORMED.",
+  "canonicalDepth": "Root depth 0; every visited value including root and containers counts; object keys are Unicode-checked but are not additional values."
+}
