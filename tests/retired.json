@@ -1,77 +1,168 @@
 {
   "schema": "kdna.retired-test-registry",
   "schema_version": "1.0.0",
-  "note": "Every entry is retired from the current verification surface. The gate (scripts/run-test-all.js) prints one KDNA-CI-NOT-RUN receipt per entry and never runs the file. Entries are only re-activated by re-pointing the file at current objects.",
+  "note": "Every entry is retired from the current verification surface. scripts/verify-retirement-registry.js checks in both directions that the registry and tests/legacy/ agree, evaluates each object_absence probe against the committed bytes (a token probe only counts when the token also occurs in the retired file), and runs every registered file: a retired file must be red on the committed graph, so a test that still passes cannot be retired silently.",
   "entries": [
     {
       "file": "tests/legacy/authoring-path.test.js",
       "retired_object": "retired Core API kdnaCore.createProject",
       "reason": "The authoring path drives the retired project/card authoring API; the current graph exposes createSession/verifyCreationEvidence.",
       "observed_on_committed_graph": "0 passing / 4 failing assertions",
-      "coverage_inherited_by": "test/component-lifecycle.test.js, test/component-source-adoption.test.js"
+      "coverage_inherited_by": "test/component-lifecycle.test.js, test/component-source-adoption.test.js",
+      "object_absence": [
+        {
+          "kind": "not_exported",
+          "module": "src/index.js",
+          "tokens": [
+            "createProject"
+          ]
+        }
+      ]
     },
     {
       "file": "tests/legacy/creation-engine-persistence.test.js",
       "retired_object": "retired Core API kdnaCore.pack",
       "reason": "Every failing assertion packs or reloads through the retired Core pack surface; the surviving assertions belong to the retired engine generation.",
       "observed_on_committed_graph": "11 passing / 4 failing assertions",
-      "coverage_inherited_by": "test/component-source-adoption.test.js (one-use saved-byte context)"
+      "coverage_inherited_by": "test/component-source-adoption.test.js (one-use saved-byte context)",
+      "object_absence": [
+        {
+          "kind": "not_exported",
+          "module": "src/index.js",
+          "tokens": [
+            "ARTIFACT_FILES"
+          ]
+        }
+      ]
     },
     {
       "file": "tests/legacy/creation-engine.test.js",
       "retired_object": "retired Core API kdnaCore.pack and the retired artifact bundle manifest",
       "reason": "Four assertions require the retired pack surface / retired ARTIFACT_FILES manifest; the file cannot be made green without re-pointing at retired objects.",
       "observed_on_committed_graph": "39 passing / 4 failing assertions",
-      "coverage_inherited_by": "test/component-lifecycle.test.js"
+      "coverage_inherited_by": "test/component-lifecycle.test.js",
+      "object_absence": [
+        {
+          "kind": "not_exported",
+          "module": "src/index.js",
+          "tokens": [
+            "pack"
+          ]
+        }
+      ]
     },
     {
       "file": "tests/legacy/e2e.test.js",
       "retired_object": "retired Core API kdnaCore.pack on the project/card pipeline",
       "reason": "The end-to-end path builds containers through the retired pack surface.",
       "observed_on_committed_graph": "4 passing / 2 failing assertions",
-      "coverage_inherited_by": "test/component-lifecycle.test.js"
+      "coverage_inherited_by": "test/component-lifecycle.test.js",
+      "object_absence": [
+        {
+          "kind": "not_exported",
+          "module": "src/index.js",
+          "tokens": [
+            "createProject",
+            "pack"
+          ]
+        }
+      ]
     },
     {
       "file": "tests/legacy/golden-single-asset.test.js",
       "retired_object": "retired Core API kdnaCore.validate",
       "reason": "The golden single-asset vector validates through the retired public Core validate entry.",
       "observed_on_committed_graph": "3 passing / 1 failing assertion",
-      "coverage_inherited_by": "test/component-lifecycle.test.js"
+      "coverage_inherited_by": "test/component-lifecycle.test.js",
+      "object_absence": [
+        {
+          "kind": "not_exported",
+          "module": "src/index.js",
+          "tokens": [
+            "validate"
+          ]
+        }
+      ]
     },
     {
       "file": "tests/legacy/public-package-surface.test.js",
       "retired_object": "retired packed member list (src/authoring/index.js)",
       "reason": "The packed surface is the files[] list in package.json; the guarded authoring primitive no longer ships.",
       "observed_on_committed_graph": "0 passing / 1 failing assertion",
-      "coverage_inherited_by": ".github/workflows/*.yml pack steps and package.json files[]"
+      "coverage_inherited_by": ".github/workflows/*.yml pack steps and package.json files[]",
+      "object_absence": [
+        {
+          "kind": "not_packed",
+          "path": "src/authoring/index.js"
+        }
+      ]
     },
     {
       "file": "tests/legacy/runtime-candidate-binding-completeness.test.js",
       "retired_object": "runtime-candidate authority binding for the 3.0.0 / 0.21.0 graph",
       "reason": "scripts/runtime-candidate-binding.js rejects the current lock ('unbound file lock package: node_modules/@aikdna/kdna-read'); admitting the current graph would weaken a supply-chain gate.",
       "observed_on_committed_graph": "0 passing / 1 failing assertion",
-      "coverage_inherited_by": "the ci.yml candidate-source leg receipt (scripts/ci-leg-receipt.js)"
+      "coverage_inherited_by": "the ci.yml candidate-source leg receipt (scripts/ci-leg-receipt.js)",
+      "object_absence": [
+        {
+          "kind": "token_absent",
+          "path": "package-lock.json",
+          "token": "0.21.0"
+        }
+      ]
     },
     {
       "file": "tests/legacy/runtime-candidate-hardening.test.js",
       "retired_object": "runtime-candidate authority binding and the exact-SemVer direct-dependency policy",
       "reason": "Its candidate assertions stop on the retired authority. Its 'direct dependency must use exact SemVer' assertion is superseded by the F-INSTALL-1 file:vendor coordinate policy, and that intent is carried forward - extended, not deleted - by the active tests/dependency-range-policy.test.js, which requires an exact SemVer or a file: pin whose lockfile resolved matches and whose integrity is a complete sha512 digest.",
       "observed_on_committed_graph": "39 passing / 14 failing assertions",
-      "coverage_inherited_by": "tests/publish-hardening.test.js (workflow pinning), tests/dependency-range-policy.test.js (direct-dependency coordinate policy), the ci.yml candidate-source leg receipt"
+      "coverage_inherited_by": "tests/publish-hardening.test.js (workflow pinning), tests/dependency-range-policy.test.js (direct-dependency coordinate policy), the ci.yml candidate-source leg receipt",
+      "object_absence": [
+        {
+          "kind": "token_absent",
+          "path": "package-lock.json",
+          "token": "0.21.0"
+        }
+      ]
     },
     {
       "file": "tests/legacy/runtime-export.test.js",
       "retired_object": "retired Core API kdnaCore.validate and core.encryptProtectedEntry",
       "reason": "The export path validates and encrypts through retired Core entries.",
       "observed_on_committed_graph": "12 passing / 3 failing assertions",
-      "coverage_inherited_by": "test/component-source-adoption.test.js"
+      "coverage_inherited_by": "test/component-source-adoption.test.js",
+      "object_absence": [
+        {
+          "kind": "not_exported",
+          "module": "src/index.js",
+          "tokens": [
+            "validate",
+            "pack"
+          ]
+        }
+      ]
     },
     {
       "file": "tests/legacy/runtime-release-pair.test.js",
       "retired_object": "retired Core API kdnaCore.pack and the retired release pair coordinate",
       "reason": "The release pair assertion pins graph coordinates that the component-semantics upgrade replaced.",
       "observed_on_committed_graph": "0 passing / 2 failing assertions",
-      "coverage_inherited_by": "tests/publish-hardening.test.js"
+      "coverage_inherited_by": "tests/publish-hardening.test.js",
+      "object_absence": [
+        {
+          "kind": "not_exported",
+          "module": "src/index.js",
+          "tokens": [
+            "pack",
+            "validate"
+          ]
+        },
+        {
+          "kind": "token_absent",
+          "path": "package-lock.json",
+          "token": "0.21.0"
+        }
+      ]
     }
   ]
 }
