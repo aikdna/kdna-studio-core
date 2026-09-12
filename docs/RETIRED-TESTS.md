@@ -5,35 +5,42 @@ themselves live under `tests/legacy/`. None of it runs in `npm test`,
 `npm run test:all`, `.github/workflows/ci.yml`, or
 `.github/workflows/publish.yml`.
 
-**The registry is empty.** Nine suites were registered here; all nine are current
-tests again, byte for byte:
+**Every registered copy is the pre-retirement file, byte for byte.** Criterion
+(e) below checks that against the object store, and it is the point of a
+retirement: the repository keeps *that* test, not a version of it that was
+adapted to its new home. Nothing under `tests/legacy/` is ever run, so a retired
+copy does not need its relative requires to resolve from the new depth - and a
+retirement that rewrites them to make the new location loadable is refused,
+because the bytes it preserved are then no longer the bytes the original path
+carried. A file that would only fit `tests/legacy/` after being adapted is not
+retired at all.
 
-- `tests/authoring-path.test.js`
-- `tests/creation-engine-persistence.test.js`
-- `tests/creation-engine.test.js`
-- `tests/e2e.test.js`
-- `tests/golden-single-asset.test.js`
-- `tests/public-package-surface.test.js`
-- `tests/runtime-candidate-hardening.test.js`
-- `tests/runtime-export.test.js`
-- `tests/runtime-release-pair.test.js`
+Nine suites are registered:
 
-They exercise objects the committed graph no longer ships - the retired public
-Core API surface (`createProject`, `validate`, `pack`, `encryptProtectedEntry`)
-that belonged to the pre-component-semantics graph, the retired packed member
-list (e.g. `src/authoring/index.js`), the retired runtime-candidate authority
-binding for the 3.0.0 / 0.21.0 graph (whose verifier now stops on
-`unbound file lock package: node_modules/@aikdna/kdna-read`), and the retired
-stable-release coordinate policy - but "this suite is red" is not what retires a
-suite. A retirement is a byte-preserving move, and the move that put these nine
-under `tests/legacy/` re-pointed their relative requires to the new depth.
-Criterion (e) below refuses exactly that, so the retirement does not hold: the
-files go back to the paths they were retired from, unchanged, as current tests. A
-suite that only fits the retired directory after being adapted is not retired at
-all.
+- `tests/legacy/authoring-path.test.js`
+- `tests/legacy/creation-engine-persistence.test.js`
+- `tests/legacy/creation-engine.test.js`
+- `tests/legacy/e2e.test.js`
+- `tests/legacy/golden-single-asset.test.js`
+- `tests/legacy/public-package-surface.test.js`
+- `tests/legacy/runtime-candidate-hardening.test.js`
+- `tests/legacy/runtime-export.test.js`
+- `tests/legacy/runtime-release-pair.test.js`
 
-The completeness suite that was once here is **not** retired either: it was
-re-pointed at the committed candidate fixture and moved back to
+They exercise objects the committed graph no longer ships: the retired public
+Core API surface (`createProject`, `validate`, `pack`,
+`encryptProtectedEntry`) that belonged to the pre-component-semantics graph, the
+retired packed member list (e.g. `src/authoring/index.js`), the retired
+runtime-candidate authority binding for the 3.0.0 / 0.21.0 graph (whose verifier
+now stops on `unbound file lock package: node_modules/@aikdna/kdna-read`), and
+the retired stable-release coordinate policy. They are therefore red against the
+committed graph. That redness is the reason the retirement exists; the gate
+records it as an observation and never reads it - see the delivery report's
+section on why these suites are red, which is an observation rather than a
+verdict.
+
+The completeness suite that was once here is **not** retired: it was re-pointed
+at the committed candidate fixture and moved back to
 `tests/runtime-candidate-binding-completeness.test.js`, because the coverage it
 carried (the binding rejects hostile lock graphs) still applies to the current
 script.
@@ -71,12 +78,11 @@ things from files, hashes and the object store:
   file carried at `original_path` in `retired_from_commit`, read out of the
   object store (`git rev-parse <commit>:<path>`, `git cat-file blob`, sha256 of
   those bytes) rather than out of the working tree, so editing the copy under
-  `tests/legacy/` after the fact cannot make the claim true. A move that rewrote
-  the file registers bytes that are not the test that was there, and the record
-  would describe a test that never ran. An entry that fails (e) is refused and
-  the file goes back to its original path, unchanged, as a current test. The
-  commit has to be an ancestor of `HEAD`, so an entry cannot name bytes that no
-  tree under `HEAD` ever carried.
+  `tests/legacy/` - or rewriting it while moving it - cannot make the claim
+  true. An entry that fails (e) is refused and the file goes back to its
+  original path, unchanged, as a current test; a file that would only retire
+  after adaptation is not retired at all. The commit has to be an ancestor of
+  `HEAD`, so an entry cannot name bytes that no tree under `HEAD` ever carried.
 
 The exit code is about (a)-(c) and (e). (e) reads git history, so the checkout
 that runs the gate has to carry it: `.github/workflows/ci.yml` fetches the full

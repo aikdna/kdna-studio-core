@@ -1,6 +1,106 @@
 {
   "schema": "kdna.retired-test-registry",
   "schema_version": "3.0.0",
-  "note": "A retirement is a preservation claim, not a story about a red run. Every entry registers the retired path (file), the original path it was retired from (original_path), the sha256 of the preserved bytes (the retirement's retired_sha256), the commit those bytes are claimed to come from (retired_from_commit), a free-text reason, the registration date (retired_on) and the review that accepted the retirement (review_reference). scripts/verify-retirement-registry.js reads no test output. It checks five things from files, hashes and the object store: (a) preserved - the file at the registered path hashes to the registered sha256; (b) complete - every file under tests/legacy/ is registered; (c) not a fake retirement - the original path does not still carry the registered bytes; (d) re-evaluable - the registered bytes are put back at the original path and run, and a passing run is named as a receipt (KDNA-RETIREMENT-RESTORABLE) because the entry is not stale; (e) zero rewrite - the registered sha256 is the sha256 of the bytes at original_path in retired_from_commit, read from the object store, so a move that rewrote the file on the way into tests/legacy/ cannot be registered as a retirement. Only (a)-(c) and (e) decide the exit code. This registry is empty. Every file registered here before criterion (e) existed had been rewritten by the move - each one had its relative requires re-pointed to the new depth - so not one of them recorded the bytes its original path carried. Criterion (e) refuses all of them, and the disposition is the one it names: the file, byte for byte, is a current test again.",
-  "entries": []
+  "note": "A retirement is a preservation claim, not a story about a red run. Every entry registers the retired path (file), the original path it was retired from (original_path), the sha256 of the preserved bytes (the retirement's retired_sha256), the commit those bytes are claimed to come from (retired_from_commit), a free-text reason, the registration date (retired_on) and the review that accepted the retirement (review_reference). scripts/verify-retirement-registry.js reads no test output. It checks five things from files, hashes and the object store: (a) preserved - the file at the registered path hashes to the registered sha256; (b) complete - every file under tests/legacy/ is registered; (c) not a fake retirement - the original path does not still carry the registered bytes; (d) re-evaluable - the registered bytes are put back at the original path and run, and a passing run is named as a receipt (KDNA-RETIREMENT-RESTORABLE) because the entry is not stale; (e) zero rewrite - the registered sha256 is the sha256 of the bytes at original_path in retired_from_commit, read from the object store, so the copy under tests/legacy/ is byte for byte the file that was at the original path. Only (a)-(c) and (e) decide the exit code. Each retired copy here is the pre-retirement file itself: the move into tests/legacy/ changed nothing, not even a relative require, because nothing under tests/legacy/ is ever run. The suites are red against the committed graph because the objects they exercise are gone from it; that is recorded as an independent observation in the delivery report, and a file that would only fit tests/legacy/ after being adapted is not retired at all.",
+  "entries": [
+    {
+      "file": "tests/legacy/authoring-path.test.js",
+      "original_path": "tests/authoring-path.test.js",
+      "retired_from_commit": "a9b40ea75e177bf814f7bc50b43d86ab3cc12f26",
+      "sha256": "cd393d81c5f774fb12e390344bb6bf4b7567ea2118921b845e128ee5d4fe2bd7",
+      "retired_object": "retired Core API kdnaCore.createProject",
+      "reason": "Drives the retired project/card authoring path. The current graph exposes createSession and verifyCreationEvidence instead, so the authoring API this suite is written against is not part of the committed surface.",
+      "retired_on": "2026-09-12",
+      "review_reference": "review:open-retirement/2026-09-12",
+      "coverage_inherited_by": "test/component-lifecycle.test.js, test/component-source-adoption.test.js"
+    },
+    {
+      "file": "tests/legacy/creation-engine-persistence.test.js",
+      "original_path": "tests/creation-engine-persistence.test.js",
+      "retired_from_commit": "a9b40ea75e177bf814f7bc50b43d86ab3cc12f26",
+      "sha256": "2d54d1f67a87c2150a7c33852d76f7ddb6f30a08645e03fb770046268970e03b",
+      "retired_object": "retired Core API kdnaCore.pack and the retired artifact manifest",
+      "reason": "Every assertion in this suite packs or reloads through the retired Core pack surface; the surviving assertions belong to the retired engine generation, which the component-semantics graph replaced.",
+      "retired_on": "2026-09-12",
+      "review_reference": "review:open-retirement/2026-09-12",
+      "coverage_inherited_by": "test/component-source-adoption.test.js (one-use saved-byte context)"
+    },
+    {
+      "file": "tests/legacy/creation-engine.test.js",
+      "original_path": "tests/creation-engine.test.js",
+      "retired_from_commit": "a9b40ea75e177bf814f7bc50b43d86ab3cc12f26",
+      "sha256": "cddede259aaa8d2525531753c8f24b3efb4c3c9c1e95ade8292a7db82d1e108f",
+      "retired_object": "retired Core API kdnaCore.pack and the retired artifact bundle manifest",
+      "reason": "Four assertions require the retired pack surface and the retired ARTIFACT_FILES manifest; the file cannot be made green without re-pointing it at retired objects. The rest of the file belongs to the same retired engine generation.",
+      "retired_on": "2026-09-12",
+      "review_reference": "review:open-retirement/2026-09-12",
+      "coverage_inherited_by": "test/component-lifecycle.test.js"
+    },
+    {
+      "file": "tests/legacy/e2e.test.js",
+      "original_path": "tests/e2e.test.js",
+      "retired_from_commit": "a9b40ea75e177bf814f7bc50b43d86ab3cc12f26",
+      "sha256": "b5e866c420e6f97b92971725ab9f9936218a4c0d6c7ae682d052aba59b9b176d",
+      "retired_object": "retired Core API kdnaCore.pack on the project/card pipeline",
+      "reason": "The end-to-end path this file drives builds containers through the retired pack surface, which the component-semantics graph replaced.",
+      "retired_on": "2026-09-12",
+      "review_reference": "review:open-retirement/2026-09-12",
+      "coverage_inherited_by": "test/component-lifecycle.test.js"
+    },
+    {
+      "file": "tests/legacy/golden-single-asset.test.js",
+      "original_path": "tests/golden-single-asset.test.js",
+      "retired_from_commit": "a9b40ea75e177bf814f7bc50b43d86ab3cc12f26",
+      "sha256": "a15831415f71f6591b640cd70bbe2d41a7fc39e8eb1815fdee35534107a93a56",
+      "retired_object": "retired Core API kdnaCore.validate",
+      "reason": "The golden single-asset vector validates through the retired public Core validate entry, which the current graph does not expose.",
+      "retired_on": "2026-09-12",
+      "review_reference": "review:open-retirement/2026-09-12",
+      "coverage_inherited_by": "test/component-lifecycle.test.js"
+    },
+    {
+      "file": "tests/legacy/public-package-surface.test.js",
+      "original_path": "tests/public-package-surface.test.js",
+      "retired_from_commit": "a9b40ea75e177bf814f7bc50b43d86ab3cc12f26",
+      "sha256": "70b98f6b87b1db09e4b01490e95985acfe45bd208f9976e0551936a246400a24",
+      "retired_object": "retired packed member list (src/authoring/index.js)",
+      "reason": "The packed surface is the files[] list in package.json, and the guarded authoring primitive this suite requires no longer ships.",
+      "retired_on": "2026-09-12",
+      "review_reference": "review:open-retirement/2026-09-12",
+      "coverage_inherited_by": ".github/workflows/*.yml pack steps and package.json files[]"
+    },
+    {
+      "file": "tests/legacy/runtime-candidate-hardening.test.js",
+      "original_path": "tests/runtime-candidate-hardening.test.js",
+      "retired_from_commit": "a9b40ea75e177bf814f7bc50b43d86ab3cc12f26",
+      "sha256": "2640a21ce8539fe3e00a3aa631d5e8e770ad89db68054584b553c3d98e6ca367",
+      "retired_object": "runtime-candidate authority binding and the retired exact-SemVer direct-dependency policy",
+      "reason": "Its candidate assertions bind the retired 3.0.0 candidate authority and the candidate-source verification step that generation pinned in .github/workflows/ci.yml. The direct-dependency intent is carried forward by the active tests/dependency-range-policy.test.js, which requires an exact SemVer or a file: pin whose lockfile resolution matches and whose integrity is a complete sha512 digest.",
+      "retired_on": "2026-09-12",
+      "review_reference": "review:open-retirement/2026-09-12",
+      "coverage_inherited_by": "tests/publish-hardening.test.js (workflow pinning), tests/dependency-range-policy.test.js (direct-dependency coordinate policy), the ci.yml candidate-source leg receipt"
+    },
+    {
+      "file": "tests/legacy/runtime-export.test.js",
+      "original_path": "tests/runtime-export.test.js",
+      "retired_from_commit": "a9b40ea75e177bf814f7bc50b43d86ab3cc12f26",
+      "sha256": "0c0a9595dbb49978a3bba015b5d78cd6ffdca5a657061e0a7a67aa2012b9910a",
+      "retired_object": "retired Core API kdnaCore.validate and core.encryptProtectedEntry",
+      "reason": "The export path this file drives validates and encrypts through retired Core entries that the committed graph does not expose.",
+      "retired_on": "2026-09-12",
+      "review_reference": "review:open-retirement/2026-09-12",
+      "coverage_inherited_by": "test/component-source-adoption.test.js"
+    },
+    {
+      "file": "tests/legacy/runtime-release-pair.test.js",
+      "original_path": "tests/runtime-release-pair.test.js",
+      "retired_from_commit": "a9b40ea75e177bf814f7bc50b43d86ab3cc12f26",
+      "sha256": "de27e9273c8650b77c513f0242f892309db384aaa78e2ae0c28aecf89d5ec388",
+      "retired_object": "retired Core API kdnaCore.pack and the retired release pair coordinate",
+      "reason": "The release pair assertion pins graph coordinates (0.21.0 and the 3.0.0 candidate) that the component-semantics upgrade replaced.",
+      "retired_on": "2026-09-12",
+      "review_reference": "review:open-retirement/2026-09-12",
+      "coverage_inherited_by": "tests/publish-hardening.test.js"
+    }
+  ]
 }
