@@ -1,0 +1,85 @@
+{
+  "format": "kdna.studio-creation-evidence/1",
+  "kind": "studio-blank-material-evidence",
+  "reference_contract": {
+    "core": {
+      "package": "@aikdna/kdna-core",
+      "version": "0.23.0",
+      "artifact_sha256": "b2cecb761e599d8711114d7288d6caf627b1aa01620699ecb1fca49ac3bb6ba0"
+    },
+    "read": {
+      "package": "@aikdna/kdna-read",
+      "version": "0.2.0",
+      "artifact_sha256": "1595075677dc1359c2df751ec54a706b55ffff6bfc77d117e16464fb16a5c96e"
+    },
+    "tuple": {
+      "container": "0.2.0",
+      "core": "kdna.core/0.2.0",
+      "host": "kdna.agent-host/0.2.0",
+      "ir": "kdna.canonical-ir/0.1.0",
+      "payload_profile": "kdna.payload.judgment",
+      "payload_version": "0.2.0",
+      "plan": "kdna.consumption-plan/0.2.0",
+      "read": "kdna.read/0.1.0",
+      "runtime": "kdna.runtime-capsule/0.2.0",
+      "trace": "kdna.judgment-trace/0.2.0"
+    }
+  },
+  "implementations": {
+    "javascript": {
+      "provider": "javascript",
+      "name": "@aikdna/kdna-core",
+      "version": "0.23.0",
+      "artifact": {
+        "kind": "npm-tgz",
+        "sha256": "b2cecb761e599d8711114d7288d6caf627b1aa01620699ecb1fca49ac3bb6ba0"
+      }
+    },
+    "swift": {
+      "provider": "swift",
+      "name": "KDNACore",
+      "version": "0.3.1",
+      "artifact": {
+        "kind": "source-tar-gz",
+        "sha256": "fc0bbb87af1b418aeea3700a0d63e72fbec3af692838e1eefa68d77359c981a3"
+      }
+    }
+  },
+  "compiler_fields": [
+    "name",
+    "version",
+    "provider",
+    "artifact_sha256"
+  ],
+  "core_fields": [
+    "status",
+    "reference_contract",
+    "implementation",
+    "digests"
+  ],
+  "evidence_fields": [
+    "format",
+    "kind",
+    "session_id",
+    "synthetic_fixture",
+    "agent",
+    "compiler",
+    "revision",
+    "materials",
+    "candidates",
+    "human_messages",
+    "history",
+    "final_decision",
+    "artifact",
+    "core",
+    "creation",
+    "confirmation",
+    "identity",
+    "read_permission",
+    "action_authorization"
+  ],
+  "unknown_compiler_artifact": "UNKNOWN",
+  "legacy_format_member": "absent",
+  "provider_assertion": "declared_not_authenticated",
+  "canonicalization": "studio-sorted-json-utf16-ecmascript-binary64/1"
+}

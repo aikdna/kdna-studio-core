@@ -4,3 +4,16 @@ DerivedData/
 xcuserdata/
 Package.resolved
 node_modules/
+
+# The vendored offline dependency graph must travel with the repository so a
+# clean clone installs these exact pinned KDNA/Read bytes; every other *.tgz
+# stays ignored.
+*.tgz
+!vendor/*.tgz
+
+# Internal Open-line evidence and progress material: kept in the working tree,
+# never part of the public repository surface.
+docs/audits/
+
+# Current public creation test artifacts
+/test/.artifacts/

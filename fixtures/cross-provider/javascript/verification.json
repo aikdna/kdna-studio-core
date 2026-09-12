@@ -1,0 +1,17 @@
+{
+  "status": "consistent",
+  "core": "valid",
+  "requiredness": "satisfied",
+  "creation_accepted": "not_evaluated",
+  "confirmation": "claimed_unverified",
+  "identity": "not_verified",
+  "read_permission": "not_evaluated",
+  "action_authorization": "not_evaluated",
+  "asset_digest": "sha256:dff8c8163bc5bca49570a6ee7b0a931d86fa75ce7aaac7230a722d490eff2fe7",
+  "evidence_digest": "sha256:83ccfd448b2f211c9baba0c7aea1abbc523168370028df69388cb3c90569c213",
+  "evidence_format": "kdna.studio-creation-evidence/1",
+  "provider_assertion": "declared_not_authenticated",
+  "implementation_artifact_sha256": "b2cecb761e599d8711114d7288d6caf627b1aa01620699ecb1fca49ac3bb6ba0",
+  "compiler_artifact_sha256": "UNKNOWN",
+  "reference_contract": "declared_supported_exact"
+}
