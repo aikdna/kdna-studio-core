@@ -22,7 +22,7 @@ const {
   freezeSemanticCases,
   passingBuildReceipt,
   exactBuildFixture,
-} = require('./creation-engine-helpers');
+} = require('../creation-engine-helpers');
 
 function testDigest(value) {
   return `sha256:${crypto
@@ -2135,7 +2135,7 @@ test('interpretive and representational modes cannot be accepted from pure Agent
       access: 'public',
       createdBy: { type: 'agent', id: 'fixture-agent' },
     });
-    const { purposeFor } = require('./creation-engine-helpers');
+    const { purposeFor } = require('../creation-engine-helpers');
     workspace = creationEngine.setPurpose(workspace, purposeFor(mode));
     workspace = creationEngine.addCandidate(workspace, candidateFor({
       agentInference: true,
@@ -4921,4 +4921,3 @@ test('conflict repair is an Agent decision in interpretive and authored modes bu
     );
   }
 });
-
