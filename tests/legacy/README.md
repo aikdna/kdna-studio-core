@@ -26,12 +26,21 @@ one `KDNA-CI-NOT-RUN:` receipt line per registered entry. Re-activating an entry
 starts by re-pointing the file at current objects, not by deleting the receipt.
 
 Being red is not by itself a reason to be here. The gate accepts an entry only
-while its failure output explicitly names an object the entry declares absent.
-That is the criterion's only sufficient leg, and it is checked against the run
-in the file's registered location. A match counts only when the run printed it
-about the failure: not on a passing test's line, not inside the specifier of a
-`Cannot find module` failure, and not inside a file path - a path is the judged
-artifact naming itself.
+while the run says, about the failure, that an object the entry declares absent
+is missing - an error or assertion message, or one half of an assertion diff.
+That statement is checked against the run in the file's registered location. A
+match counts only when the run printed it about the failure: never on a failing
+test's own title (a title is static text that can name any object at all), never
+on a passing test's line, never inside the specifier of a `Cannot find module`
+failure, and never inside a file path - a path is the judged artifact naming
+itself.
+
+A **diagnostic line** - output the judged artifact printed rather than a
+statement the run makes about the failure - is a reason only together with its
+**differential contrast**, and the gate re-runs the contrast rather than
+trusting a recorded one: with the declared object made present, the file must
+not be red and the diagnostic must not appear. A diagnostic line that survives
+the object being made present is not about the object, so the entry is refused.
 
 Re-running the retired bytes from the path they were retired from is still
 reported, but only as an **auxiliary** observation that never accepts an entry
