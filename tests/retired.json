@@ -23,7 +23,7 @@
       "file": "tests/legacy/creation-engine-persistence.test.js",
       "retired_object": "retired Core API kdnaCore.pack",
       "reason": "Every failing assertion packs or reloads through the retired Core pack surface; the surviving assertions belong to the retired engine generation.",
-      "observed_on_committed_graph": "11 passing / 4 failing assertions",
+      "observed_on_committed_graph": "0 passing / 1 failing assertion",
       "coverage_inherited_by": "test/component-source-adoption.test.js (one-use saved-byte context)",
       "object_absence": [
         {
@@ -39,7 +39,7 @@
       "file": "tests/legacy/creation-engine.test.js",
       "retired_object": "retired Core API kdnaCore.pack and the retired artifact bundle manifest",
       "reason": "Four assertions require the retired pack surface / retired ARTIFACT_FILES manifest; the file cannot be made green without re-pointing at retired objects.",
-      "observed_on_committed_graph": "39 passing / 4 failing assertions",
+      "observed_on_committed_graph": "0 passing / 1 failing assertion",
       "coverage_inherited_by": "test/component-lifecycle.test.js",
       "object_absence": [
         {
@@ -72,7 +72,7 @@
       "file": "tests/legacy/golden-single-asset.test.js",
       "retired_object": "retired Core API kdnaCore.validate",
       "reason": "The golden single-asset vector validates through the retired public Core validate entry.",
-      "observed_on_committed_graph": "3 passing / 1 failing assertion",
+      "observed_on_committed_graph": "0 passing / 4 failing assertions",
       "coverage_inherited_by": "test/component-lifecycle.test.js",
       "object_absence": [
         {
@@ -115,7 +115,7 @@
       "file": "tests/legacy/runtime-candidate-hardening.test.js",
       "retired_object": "runtime-candidate authority binding and the exact-SemVer direct-dependency policy",
       "reason": "Its candidate assertions stop on the retired authority. Its 'direct dependency must use exact SemVer' assertion is superseded by the F-INSTALL-1 file:vendor coordinate policy, and that intent is carried forward - extended, not deleted - by the active tests/dependency-range-policy.test.js, which requires an exact SemVer or a file: pin whose lockfile resolved matches and whose integrity is a complete sha512 digest.",
-      "observed_on_committed_graph": "39 passing / 14 failing assertions",
+      "observed_on_committed_graph": "40 passing / 13 failing assertions",
       "coverage_inherited_by": "tests/publish-hardening.test.js (workflow pinning), tests/dependency-range-policy.test.js (direct-dependency coordinate policy), the ci.yml candidate-source leg receipt",
       "object_absence": [
         {
