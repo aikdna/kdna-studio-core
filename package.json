@@ -52,7 +52,6 @@
     "test": "node --test test/component-lifecycle.test.js test/component-source-adoption.test.js",
     "test:all": "node scripts/run-test-all.js",
     "test:migration:registry": "node scripts/verify-registry-migration.js",
-    "record:retirement-observations": "node scripts/record-retirement-observations.js",
     "verify:candidate-sources": "node scripts/verify-runtime-candidate-sources.js",
     "check:protocol-names": "node scripts/check-current-protocol-names.js",
     "check:publish-coordinates": "node scripts/check-publish-coordinates.js",
