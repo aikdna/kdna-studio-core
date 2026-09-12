@@ -10,7 +10,7 @@ const zlib = require('node:zlib');
 const {
   acquire,
   destinationFromArguments,
-} = require('../scripts/acquire-trusted-npm-release');
+} = require('../../scripts/acquire-trusted-npm-release');
 const {
   BINDING_PATH,
   STRICT_PACKAGE_INSTALL_EQUIVALENCE,
@@ -19,23 +19,23 @@ const {
   strictRegistryLookup,
   verifyCandidateBinding,
   verifyInstalledAikdnaGraph,
-} = require('../scripts/runtime-candidate-binding');
+} = require('../../scripts/runtime-candidate-binding');
 const {
   CANDIDATE_AUTHORITIES,
   CANDIDATE_WORKFLOW_PATH,
-} = require('../scripts/runtime-candidate-authority');
+} = require('../../scripts/runtime-candidate-authority');
 const {
   assertCleanPinnedRepository,
   main: verifyCandidateSourcesMain,
   materializeCommitPackage,
   packOnce,
-} = require('../scripts/verify-runtime-candidate-sources');
+} = require('../../scripts/verify-runtime-candidate-sources');
 const {
   trustedTarballPath,
   verifyTrustedNpmTarball,
-} = require('../scripts/trusted-npm-release');
+} = require('../../scripts/trusted-npm-release');
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = path.resolve(__dirname, '../..');
 const CORE = '@aikdna/kdna-core';
 
 function writeTarString(header, offset, length, value) {

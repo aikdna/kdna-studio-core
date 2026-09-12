@@ -7,11 +7,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const creationEngine = require('../src/creation-engine');
-const { exportRuntimeAsset } = require('../src/export-runtime');
+const creationEngine = require('../../src/creation-engine');
+const { exportRuntimeAsset } = require('../../src/export-runtime');
 const kdnaCore = require('@aikdna/kdna-core');
 const creationModesFixture =
-  require('../fixtures/creation-engine/creation-modes.json');
+  require('../../fixtures/creation-engine/creation-modes.json');
 const {
   candidateFor,
   purposeFor,
@@ -224,7 +224,7 @@ function packedRuntimeBytes(workspace, options = {}) {
 }
 
 test('Creation Engine is public, immutable, and models all eight first-class objects', () => {
-  const root = require('../src');
+  const root = require('../../src');
   assert.equal(root.creationEngine, creationEngine);
   for (const name of [
     'createWorkspace',
