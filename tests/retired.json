@@ -55,9 +55,9 @@
     {
       "file": "tests/legacy/runtime-candidate-hardening.test.js",
       "retired_object": "runtime-candidate authority binding and the exact-SemVer direct-dependency policy",
-      "reason": "Its candidate assertions stop on the retired authority, and its 'direct dependency must use exact SemVer' assertion is superseded by the F-INSTALL-1 file:vendor coordinate policy that this repository now follows.",
+      "reason": "Its candidate assertions stop on the retired authority. Its 'direct dependency must use exact SemVer' assertion is superseded by the F-INSTALL-1 file:vendor coordinate policy, and that intent is carried forward - extended, not deleted - by the active tests/dependency-range-policy.test.js, which requires an exact SemVer or a file: pin whose lockfile resolved matches and whose integrity is a complete sha512 digest.",
       "observed_on_committed_graph": "39 passing / 14 failing assertions",
-      "coverage_inherited_by": "tests/publish-hardening.test.js (workflow pinning), the ci.yml candidate-source leg receipt"
+      "coverage_inherited_by": "tests/publish-hardening.test.js (workflow pinning), tests/dependency-range-policy.test.js (direct-dependency coordinate policy), the ci.yml candidate-source leg receipt"
     },
     {
       "file": "tests/legacy/runtime-export.test.js",
