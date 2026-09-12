@@ -41,8 +41,8 @@
   ],
   "dependencies": {
     "cbor-x": "1.6.5",
-    "@aikdna/kdna-core": "0.24.0-rc.component-semantics.2",
-    "@aikdna/kdna-read": "0.3.0-rc.component-semantics.2"
+    "@aikdna/kdna-core": "file:vendor/aikdna-kdna-core-0.24.0-rc.component-semantics.2.tgz",
+    "@aikdna/kdna-read": "file:vendor/aikdna-kdna-read-0.3.0-rc.component-semantics.2.tgz"
   },
   "engines": {
     "node": ">=22"
