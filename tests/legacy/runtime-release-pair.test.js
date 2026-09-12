@@ -6,19 +6,19 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const studioPackage = require('../package.json');
-const packageLock = require('../package-lock.json');
+const studioPackage = require('../../package.json');
+const packageLock = require('../../package-lock.json');
 const corePackage = require('@aikdna/kdna-core/package.json');
 const kdnaCore = require('@aikdna/kdna-core');
 
-const { createProject } = require('../src/project');
-const { createCard } = require('../src/cards');
-const { compileDomain } = require('../src/compile');
-const { exportRuntimeAsset } = require('../src/export-runtime');
+const { createProject } = require('../../src/project');
+const { createCard } = require('../../src/cards');
+const { compileDomain } = require('../../src/compile');
+const { exportRuntimeAsset } = require('../../src/export-runtime');
 const {
   assertRegistryReleaseReady,
   verifyCandidateBinding,
-} = require('../scripts/runtime-candidate-binding');
+} = require('../../scripts/runtime-candidate-binding');
 
 function writeFiles(directory, files) {
   for (const [name, content] of Object.entries(files)) {
@@ -44,7 +44,7 @@ test('release dependency graph binds the exact Core candidate and has no Runtime
 
   assert.ok(fs.realpathSync(require.resolve('@aikdna/kdna-core/package.json')));
 
-  const evidence = verifyCandidateBinding(path.resolve(__dirname, '..'));
+  const evidence = verifyCandidateBinding(path.resolve(__dirname, '../..'));
   assert.deepEqual(
     evidence.packages.map((entry) => [entry.name, entry.version, entry.commit]),
     [[
@@ -53,7 +53,7 @@ test('release dependency graph binds the exact Core candidate and has no Runtime
       '32aa3ff8e633291d4bb9e01de5a70181c8415d93',
     ]],
   );
-  assert.doesNotThrow(() => assertRegistryReleaseReady(path.resolve(__dirname, '..')));
+  assert.doesNotThrow(() => assertRegistryReleaseReady(path.resolve(__dirname, '../..')));
 });
 
 test('blank authoring project reaches current Core LoadPlan and Runtime Capsule', (t) => {

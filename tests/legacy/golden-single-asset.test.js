@@ -6,9 +6,9 @@ const path = require('node:path');
 const cbor = require('cbor-x');
 const kdnaCore = require('@aikdna/kdna-core');
 
-const { loadProject, validateProject } = require('../src/project');
-const { compileDomain } = require('../src/compile');
-const { exportRuntimeAsset } = require('../src/export-runtime');
+const { loadProject, validateProject } = require('../../src/project');
+const { compileDomain } = require('../../src/compile');
+const { exportRuntimeAsset } = require('../../src/export-runtime');
 
 const FIXTURE_PATH = path.join(
   __dirname,
