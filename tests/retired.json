@@ -22,15 +22,16 @@
     {
       "file": "tests/legacy/creation-engine-persistence.test.js",
       "retired_object": "retired Core API kdnaCore.pack",
-      "reason": "Every failing assertion packs or reloads through the retired Core pack surface; the surviving assertions belong to the retired engine generation.",
-      "observed_on_committed_graph": "0 passing / 1 failing assertion",
+      "reason": "Every failing assertion packs or reloads through the retired Core pack surface (the failure output is \"TypeError: kdnaCore.pack is not a function\"); the surviving assertions belong to the retired engine generation. The retirement left the file unable to run at its registered depth - it still required its sibling helper as './creation-engine-helpers' - so the relocation is completed here before the entry is judged.",
+      "observed_on_committed_graph": "11 passing / 4 failing assertions",
       "coverage_inherited_by": "test/component-source-adoption.test.js (one-use saved-byte context)",
       "object_absence": [
         {
           "kind": "not_exported",
           "module": "src/index.js",
           "tokens": [
-            "ARTIFACT_FILES"
+            "ARTIFACT_FILES",
+            "pack"
           ]
         }
       ]
@@ -38,8 +39,8 @@
     {
       "file": "tests/legacy/creation-engine.test.js",
       "retired_object": "retired Core API kdnaCore.pack and the retired artifact bundle manifest",
-      "reason": "Four assertions require the retired pack surface / retired ARTIFACT_FILES manifest; the file cannot be made green without re-pointing at retired objects.",
-      "observed_on_committed_graph": "0 passing / 1 failing assertion",
+      "reason": "Four assertions require the retired pack surface / retired ARTIFACT_FILES manifest (the failure output is \"TypeError: kdnaCore.pack is not a function\"); the file cannot be made green without re-pointing at retired objects. The retirement left the file unable to run at its registered depth - it still required its sibling helper as './creation-engine-helpers' - so the relocation is completed here before the entry is judged.",
+      "observed_on_committed_graph": "39 passing / 4 failing assertions",
       "coverage_inherited_by": "test/component-lifecycle.test.js",
       "object_absence": [
         {
@@ -71,8 +72,8 @@
     {
       "file": "tests/legacy/golden-single-asset.test.js",
       "retired_object": "retired Core API kdnaCore.validate",
-      "reason": "The golden single-asset vector validates through the retired public Core validate entry.",
-      "observed_on_committed_graph": "0 passing / 4 failing assertions",
+      "reason": "The golden single-asset vector validates through the retired public Core validate entry (the failure output is \"TypeError: kdnaCore.validate is not a function\"). The retirement left the fixture path one level short, so the file read the wrong directory instead of running; the relocation is completed here before the entry is judged.",
+      "observed_on_committed_graph": "3 passing / 1 failing assertion",
       "coverage_inherited_by": "test/component-lifecycle.test.js",
       "object_absence": [
         {
@@ -98,23 +99,9 @@
       ]
     },
     {
-      "file": "tests/legacy/runtime-candidate-binding-completeness.test.js",
-      "retired_object": "runtime-candidate authority binding for the 3.0.0 / 0.21.0 graph",
-      "reason": "scripts/runtime-candidate-binding.js rejects the current lock ('unbound file lock package: node_modules/@aikdna/kdna-read'); admitting the current graph would weaken a supply-chain gate.",
-      "observed_on_committed_graph": "0 passing / 1 failing assertion",
-      "coverage_inherited_by": "the ci.yml candidate-source leg receipt (scripts/ci-leg-receipt.js)",
-      "object_absence": [
-        {
-          "kind": "token_absent",
-          "path": "package-lock.json",
-          "token": "0.21.0"
-        }
-      ]
-    },
-    {
       "file": "tests/legacy/runtime-candidate-hardening.test.js",
       "retired_object": "runtime-candidate authority binding and the exact-SemVer direct-dependency policy",
-      "reason": "Its candidate assertions stop on the retired authority. Its 'direct dependency must use exact SemVer' assertion is superseded by the F-INSTALL-1 file:vendor coordinate policy, and that intent is carried forward - extended, not deleted - by the active tests/dependency-range-policy.test.js, which requires an exact SemVer or a file: pin whose lockfile resolved matches and whose integrity is a complete sha512 digest.",
+      "reason": "Its candidate assertions stop on the retired authority - the failure output is \"the input did not match the regular expression /run-trusted-npm\\.js run verify:candidate-sources\\s*$/m\", because the candidate-source verification step this generation pinned is gone from .github/workflows/ci.yml. Its 'direct dependency must use exact SemVer' assertion is superseded by the F-INSTALL-1 file:vendor coordinate policy, and that intent is carried forward - extended, not deleted - by the active tests/dependency-range-policy.test.js, which requires an exact SemVer or a file: pin whose lockfile resolved matches and whose integrity is a complete sha512 digest.",
       "observed_on_committed_graph": "40 passing / 13 failing assertions",
       "coverage_inherited_by": "tests/publish-hardening.test.js (workflow pinning), tests/dependency-range-policy.test.js (direct-dependency coordinate policy), the ci.yml candidate-source leg receipt",
       "object_absence": [
@@ -122,6 +109,11 @@
           "kind": "token_absent",
           "path": "package-lock.json",
           "token": "0.21.0"
+        },
+        {
+          "kind": "token_absent",
+          "path": ".github/workflows/ci.yml",
+          "token": "run verify:candidate-sources"
         }
       ]
     },

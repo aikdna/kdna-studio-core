@@ -17,7 +17,7 @@ const {
   passingBuildReceipt,
   exactBuildFixture,
   recordExactBuildReceipt,
-} = require('./creation-engine-helpers');
+} = require('../creation-engine-helpers');
 
 const schema = require('../../schemas/creation-workspace.schema.json');
 

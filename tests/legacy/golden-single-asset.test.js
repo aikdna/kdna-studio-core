@@ -12,7 +12,7 @@ const { exportRuntimeAsset } = require('../../src/export-runtime');
 
 const FIXTURE_PATH = path.join(
   __dirname,
-  '..',
+  '..', '..',
   'fixtures',
   'golden-single-asset',
   'authoring-source.json',
