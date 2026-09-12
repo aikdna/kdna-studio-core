@@ -4,8 +4,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const cbor = require('cbor-x');
 
-const studio = require('../../src');
-const packageManifest = require('../../package.json');
+const studio = require('../src');
+const packageManifest = require('../package.json');
 
 function addJudgment(project, overrides = {}) {
   return studio.authoring.addSourceJudgment(project, {
