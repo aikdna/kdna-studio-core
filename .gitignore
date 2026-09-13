@@ -12,8 +12,12 @@ node_modules/
 !vendor/*.tgz
 
 # Internal Open-line evidence and progress material: kept in the working tree,
-# never part of the public repository surface.
-docs/audits/
+# not part of the public repository surface. One exception is retained and is
+# intentionally published: `pr-3-acceptance.md` is a 9-line public-safe
+# archival note that predates this boundary. Every other file here stays
+# untracked.
+docs/audits/*
+!docs/audits/pr-3-acceptance.md
 
 # Current public creation test artifacts
 /test/.artifacts/
