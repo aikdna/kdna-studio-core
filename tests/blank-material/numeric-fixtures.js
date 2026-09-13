@@ -111,9 +111,9 @@ function digests(entries, bytes) {
 
 function numericFixture(value, { minimum = 1, maximum = 1, manifestWhitespace = false } = {}) {
   const manifest = {
-    format_version: '0.2.0', asset_id: 'asset:synthetic-pd275',
+    format_version: '0.2.0', asset_id: 'asset:synthetic-numeric',
     asset_uid: 'urn:uuid:00000000-0000-4000-8000-000000000275', asset_type: 'fixture',
-    title: 'Synthetic PD275 numeric fixture', version: '0.1.0', judgment_version: '0.1.0',
+    title: 'Synthetic numeric fixture', version: '0.1.0', judgment_version: '0.1.0',
     created_at: '2026-09-07T00:00:00Z', updated_at: '2026-09-07T00:00:00Z',
     compatibility: { min_loader_version: '0.23.0', profile: 'kdna.payload.judgment', profile_version: '0.2.0' },
     payload: { path: 'payload.kdnab', encoding: 'cbor', encrypted: false }, runtime: { mandatory_entries: [] },

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const core = require('@aikdna/kdna-core');
-const { int64, float64, numericFixture, canonical, sha256 } = require('./pd275-fixtures');
+const { int64, float64, numericFixture, canonical, sha256 } = require('./numeric-fixtures');
 const observations = [];
 
 function admit(id, fixture) {
@@ -29,7 +29,7 @@ const integers = [
   9223372036854775808n, -9223372036854775808n, 18446744073709549568n, -18446744073709551616n,
 ];
 for (const integer of integers) {
-  test(`PD275 exact integer ${integer} and equal float have identical IR but distinct byte digests`, () => {
+  test(`exact integer ${integer} and equal float have identical IR but distinct byte digests`, () => {
     const value = Number(integer);
     assert.equal(BigInt(value), integer, 'The independent test value must be exactly representable.');
     const a = numericFixture(int64(integer)); const b = numericFixture(float64(value));
@@ -44,14 +44,14 @@ for (const integer of integers) {
 }
 
 for (const integer of [9007199254740993n, -9007199254740993n, -9007199254740995n, 18446744073709551615n, -18446744073709551615n]) {
-  test(`PD275 rejects inexact integer token ${integer} instead of rounding`, () => {
+  test(`rejects inexact integer token ${integer} instead of rounding`, () => {
     assert.notEqual(BigInt(Number(integer)), integer);
     const result = admit('inexact:' + integer, numericFixture(int64(integer)));
     assert.equal(result.status, 'rejected'); assert.equal(result.reason, 'READ_CORE_INVALID');
   });
 }
 
-test('PD275 UInt remains independently bounded at 0 through 2^53-1', () => {
+test('UInt remains independently bounded at 0 through 2^53-1', () => {
   for (const [label, minimum, maximum, accepted] of [
     ['zero-and-safe-max-int', 0, int64(9007199254740991n), true],
     ['zero-and-safe-max-float', 0, float64(9007199254740991), true],
@@ -67,7 +67,7 @@ test('PD275 UInt remains independently bounded at 0 through 2^53-1', () => {
   }
 });
 
-test('PD275 ordinary finite fractions and large finite floats remain distinct from UInt', () => {
+test('ordinary finite fractions and large finite floats remain distinct from UInt', () => {
   for (const value of [1.5, -1.5, Number.MAX_VALUE, -Number.MAX_VALUE]) {
     const fixture = numericFixture(float64(value)); const result = admit('finite:' + value, fixture);
     checkAccepted(result, fixture);
@@ -78,7 +78,7 @@ test('PD275 ordinary finite fractions and large finite floats remain distinct fr
   }
 });
 
-test('PD275 A and E retain JSON whitespace while C canonicalizes only JSON', () => {
+test('A and E retain JSON whitespace while C canonicalizes only JSON', () => {
   const a = numericFixture(int64(4294967296n));
   const b = numericFixture(int64(4294967296n), { manifestWhitespace: true });
   const left = admit('whitespace:compact', a); const right = admit('whitespace:pretty', b);
@@ -91,8 +91,8 @@ test('PD275 A and E retain JSON whitespace while C canonicalizes only JSON', () 
 });
 
 test.after(() => {
-  if (process.env.KDNA_PD275_EVIDENCE_DIR) {
-    const target = path.join(process.env.KDNA_PD275_EVIDENCE_DIR, 'numeric-observations.json');
+  if (process.env.KDNA_NUMERIC_EVIDENCE_DIR) {
+    const target = path.join(process.env.KDNA_NUMERIC_EVIDENCE_DIR, 'numeric-observations.json');
     fs.writeFileSync(target, JSON.stringify(observations, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   }
   console.log(JSON.stringify({ synthetic_numeric_observations: observations.length,
