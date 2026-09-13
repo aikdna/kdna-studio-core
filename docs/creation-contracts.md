@@ -1,5 +1,14 @@
 # Creation Engine source contracts
 
+> **Coordinate scope.** This guide describes the **published `3.0.0`**
+> `@aikdna/kdna-studio-core` package and its `creationEngine` surface. It is
+> retained as the reference for consumers still on that coordinate. The
+> repository's current release candidate is `4.0.0-rc.components.1`, which
+> exports `createSession`/`verifyCreationEvidence` and is **not** a compatible
+> update of `3.0.0`; see
+> [`CURRENT-CREATION-CONTRACT.md`](./CURRENT-CREATION-CONTRACT.md). Do not read
+> the two as one product line.
+
 Status: shipped in the published `3.0.0` Studio Core package as the
 `creationEngine` responsibility. These contracts describe that surface; they
 do not claim that every terminal Host supports Creation, and a checked-in

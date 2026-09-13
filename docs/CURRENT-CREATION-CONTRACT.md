@@ -2,6 +2,79 @@
 
 This release uses one current Core 0.24.0-rc.component-semantics.2 / Read 0.3.0-rc.component-semantics.2 graph. Component semantics is the public `/components` descriptor with D `sha256:3087cd19542e72322aec19b3015c916d2cfb074fa42e3fd76b3756bb4f097de3`. Studio provides authoring-to-wire mapping and a live creation lifecycle; Core alone interprets component content. No profile, public definition, native protocol ID, arbitrary module, trust provider or compiler callback is accepted from the authoring caller.
 
+## Publication coordinate
+
+| Item | Value |
+|---|---|
+| Local candidate version | `4.0.0-rc.components.1` |
+| Published `latest` of the same package | `3.0.0` |
+| Candidate publication state | Unpublished. `package.json` is `private`, and every `file:` coordinate must be replaced by an exact registry version before any release |
+| Bound peers | Core `0.24.0-rc.component-semantics.2`, Read `0.3.0-rc.component-semantics.2` |
+
+The candidate deliberately has its own coordinate. It is **not** a compatible
+update of `3.0.0`, and describing it as "Studio 3.x" would merge two
+incompatible products under one number.
+
+### Breaking changes against the published `3.0.0`
+
+- Root exports are `createSession` and `verifyCreationEvidence`. The published
+  `3.0.0` surface (`creationEngine`, Studio project, cards, `compile`) is a
+  different API and is documented separately in
+  [`creation-contracts.md`](./creation-contracts.md).
+- Creation evidence is format2 (`kdna.studio-creation-evidence/2`). Format1 and
+  unversioned evidence are rejected with `STUDIO_EVIDENCE_FORMAT_NOT_CURRENT`;
+  there is no automatic conversion, relabeling or fallback to an old Core.
+- At least two distinct semantic alternatives per judgment group are required,
+  and adoption arrives through a separately owned live channel rather than a
+  stored approval flag.
+- Static reopening cannot restore `accepted_with_live_context`; the saved-byte
+  read-back is the only path to that status.
+
+### Minimal example
+
+The callbacks below are owned by the embedding, not by this package. A test
+callback executing is synthetic provider execution, never proof of a real
+editorial decision.
+
+```js
+import { createSession, verifyCreationEvidence } from '@aikdna/kdna-studio-core';
+
+const session = createSession({
+  agent: { name: 'example-agent', version: '0.1.0' },
+  adoptionInput: {
+    kind: 'human_claim_unverified',
+    channel: 'terminal',
+    receive: askTheReviewer, // embedding-owned live channel
+  },
+  interpretReply: interpretNaturalLanguage, // embedding-owned
+});
+
+session.agent.setBrief({ title: 'Example judgment', scope: 'one bounded topic' });
+session.agent.recordMaterial({
+  kind: 'text',
+  title: 'notes',
+  content: '…',
+  coordinate: 'material:notes',
+});
+session.agent.propose({ localKey: 'group-1', alternatives: [/* >= 2 distinct */] });
+session.agent.compilePreview();
+await session.receiveAdoptionReply();
+
+const { bytes, evidence, binding } = session.exportAsset(); // pending save
+// the embedding saves bytes and reads them back, then:
+const saved = session.completeSave(readBackBytes); // accepted_with_live_context
+verifyCreationEvidence(bytes, evidence, binding);
+```
+
+### Support scope
+
+Supported: one current graph, ordinary prose and explicit mechanism authoring,
+role-separated adoption channels, export to a new private directory and
+saved-byte verification. Not supported in this candidate: the published `3.0.0`
+project/card API, importing or converting old evidence, persistent resume of a
+previous candidate's workspace, signing or identity services, and any claim of
+verified identity, action authorization or storage durability.
+
 Root exports remain `createSession` and `verifyCreationEvidence`. Both ordinary prose and explicit mechanism authoring use this current pipeline. Format1 and unversioned creation evidence receive `STUDIO_EVIDENCE_FORMAT_NOT_CURRENT`; there is no automatic relabeling, conversion or fallback to an old Core. Earlier accepted releases and evidence keep their historical scope separately.
 
 ## Typed authoring
