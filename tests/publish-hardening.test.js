@@ -16,6 +16,10 @@ const {
 const { parseTarFiles, validateArtifact, validatePackReport } = require('../scripts/release-evidence');
 const { STABLE_VERSION_RE, validateReleaseContext } = require('../scripts/release-policy');
 const {
+  registeredNotRunFor,
+  unavailabilityCodes,
+} = require('../scripts/ci-leg-definitions');
+const {
   assertReproduciblePackBytes,
   generateReleaseEvidence,
 } = require('../scripts/generate-release-evidence');
@@ -43,19 +47,22 @@ const ROOT = path.resolve(__dirname, '..');
 const HASH = 'a'.repeat(40);
 const CURRENT_PACKAGE = require('../package.json');
 
-// The release policy only accepts stable canonical SemVer
-// (scripts/release-policy.js:5,17). The committed graph is a release candidate,
-// so the two assertions that push the committed version through the release
-// coordinate are explicitly not run here instead of going red; they run for
-// real again the moment the committed version is stable.
-function releaseCoordinateNotRun(testContext, label) {
-  if (STABLE_VERSION_RE.test(CURRENT_PACKAGE.version)) return false;
+// A receipt is printed only when fixtures/runtime-candidates/leg-registry.json registers
+// this leg AND the unavailability codes recomputed from the committed bytes are exactly
+// the registered codes, compared in both directions. The test itself decides nothing:
+// scripts/verify-ci-leg-receipts.js re-derives the same codes and refuses a receipt whose
+// registration no longer holds, so this can never be a silent skip of a leg that could
+// run.
+function registeredReceipt(testContext, label) {
+  const { codes, detail } = unavailabilityCodes(ROOT, label);
+  const registration = registeredNotRunFor(ROOT, label, codes);
+  if (!registration) return false;
   console.log(
-    `KDNA-CI-NOT-RUN: ${label} reason=committed_version_is_prerelease ` +
-      `version=${CURRENT_PACKAGE.version} policy=scripts/release-policy.js:5 STABLE_VERSION_RE`,
+    `KDNA-CI-NOT-RUN: ${label} reason=${registration.reason} ` +
+      `object=${registration.object} unavailable=${codes.join(',')}`,
   );
   testContext.skip(
-    `committed version ${CURRENT_PACKAGE.version} is not a stable canonical SemVer release coordinate`,
+    `${label} is registered at not_run (${codes.join(', ')}); registry detail: ${JSON.stringify(detail)}`,
   );
   return true;
 }
@@ -487,7 +494,7 @@ test('release context binds package, changelog, event, tag ref, HEAD, and workfl
 });
 
 test('current package and changelog form one exact finalizable release coordinate', (t) => {
-  if (releaseCoordinateNotRun(t, 'release-coordinate')) return;
+  if (registeredReceipt(t, 'release-coordinate')) return;
   const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
   assert.deepEqual(
     validateReleaseContext(releaseInput({ pkg: CURRENT_PACKAGE, changelog })),
@@ -522,7 +529,7 @@ test('current binding rejects stale evidence before registry lookup', () => {
 });
 
 test('pack evidence independently parses a real npm tgz and rejects changed bytes', (t) => {
-  if (releaseCoordinateNotRun(t, 'release-pack-evidence')) return;
+  if (registeredReceipt(t, 'release-pack-evidence')) return;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-release-pack-test-'));
   t.after(() => fs.rmSync(temp, { recursive: true, force: true }));
   const npmInvocation = resolveTrustedNpmInvocation(ROOT);
