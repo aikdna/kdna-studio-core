@@ -140,3 +140,21 @@ by deleting the receipt.
 
 The current verification surface lives in `test/` (driven by `npm test`) and in
 the top-level `tests/*.test.js` suites (driven by `npm run test:all`).
+
+## Complete history traversal
+
+The registry retains all nine preserved suites and their original review notes.
+Each historical source commit must be reachable through the public main history
+and carry the exact registered bytes at the exact original path.
+
+The checker enumerates the complete commit DAG in topological order before
+looking up paths, so a normal merge cannot hide a retirement on another branch.
+The latest tree containing the original path supplies the required anchor, even
+if that commit changed an unrelated file. Tree entries retain their raw path,
+mode, type and object identity; a mode-only edit remains visible.
+
+Every original-bearing parent of the first retirement is compared. The window
+includes modifications and removals on all branches. A merge that selects an
+existing parent entry is not counted again, while a resolution different from
+every parent is counted once. The original content diffs, prior writes and
+review signatures remain disclosed; a successful exit does not erase them.

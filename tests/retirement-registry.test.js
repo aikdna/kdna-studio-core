@@ -121,6 +121,7 @@ function sandbox({
   withGate = false,
   fillCommit = true,
   fillCommitFrom = 'pre',
+  beforeMove = null,
 }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'core-retirement-registry-'));
   fs.mkdirSync(path.join(dir, 'tests', 'legacy'), { recursive: true });
@@ -158,9 +159,24 @@ function sandbox({
     git(dir, ['commit', '--quiet', '--message', 'probe: rewrite one byte, then move']);
   }
   const rewritten = git(dir, ['rev-parse', 'HEAD']);
+  if (beforeMove !== null) {
+    const branch = git(dir, ['branch', '--show-current']);
+    if (beforeMove === 'merge') git(dir, ['checkout', '--quiet', '-b', 'probe-side']);
+    writeFile(dir, 'unrelated.txt', 'unrelated change\n');
+    git(dir, ['add', 'unrelated.txt']);
+    git(dir, ['commit', '--quiet', '--message', 'probe: unrelated change']);
+    if (beforeMove === 'merge') {
+      git(dir, ['checkout', '--quiet', branch]);
+      writeFile(dir, 'another.txt', 'another change\n');
+      git(dir, ['add', 'another.txt']);
+      git(dir, ['commit', '--quiet', '--message', 'probe: another unrelated change']);
+      git(dir, ['merge', '--quiet', '--no-ff', 'probe-side', '--message', 'probe: merge before retirement']);
+    }
+  }
+  const latest = git(dir, ['rev-parse', 'HEAD']);
   const entries = registry.map((entry) =>
     fillCommit && entry.retired_from_commit === undefined
-      ? { ...entry, retired_from_commit: fillCommitFrom === 'rewrite' ? rewritten : preRetire }
+      ? { ...entry, retired_from_commit: fillCommitFrom === 'latest' ? latest : fillCommitFrom === 'rewrite' ? rewritten : preRetire }
       : entry,
   );
   // The move itself: a path the retirement did not leave at its original place
@@ -567,5 +583,201 @@ test('the gate still runs through an absolute symlinked invocation path', () => 
     } finally {
       fs.rmSync(linkDirectory, { recursive: true, force: true });
     }
+  });
+});
+
+function mutateRegistry(dir, mutate) {
+  const file = path.join(dir, 'tests', 'retired.json');
+  const registry = JSON.parse(fs.readFileSync(file, 'utf8'));
+  mutate(registry);
+  fs.writeFileSync(file, `${JSON.stringify(registry, null, 2)}\n`);
+}
+
+
+test('last appearance includes unrelated commits and merge trees', () => {
+  const entry = entryFor('tests/legacy/probe.test.js', RED_TEST);
+  for (const beforeMove of ['unrelated', 'merge']) {
+    for (const fillCommitFrom of ['latest', 'pre']) {
+      withSandbox({registry: [entry], files: {[entry.file]: RED_TEST}, beforeMove, fillCommitFrom}, (dir) => {
+        const result = runVerifier(dir);
+        assert.equal(result.status, fillCommitFrom === 'latest' ? 0 : 1, `${beforeMove}/${fillCommitFrom}: ${result.output}`);
+        if (fillCommitFrom === 'latest') assert.match(result.output, /KDNA-RETIREMENT-REGISTRY: ok/);
+        else assert.match(result.output, /retired_from_commit_is_not_the_last_appearance/);
+      });
+    }
+  }
+});
+
+function retirementResult(dir) {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'retirement-result-'));
+  const file = path.join(output, 'result.json');
+  try {
+    const result = spawnSync(process.execPath, ['-e',
+      "require(process.argv[1]).verify(process.argv[2]).then(result => require('node:fs').writeFileSync(process.argv[3], JSON.stringify(result))).catch(error => { console.error(error); process.exitCode = 1; });",
+      verifier, dir, file,
+    ], { encoding: 'utf8', maxBuffer: 1 << 24 });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } finally {
+    fs.rmSync(output, { recursive: true, force: true });
+  }
+}
+
+function commitRetiredBytes(dir, file, text, message) {
+  writeFile(dir, file, text);
+  mutateRegistry(dir, (registry) => { registry.entries[0].sha256 = digest(text); });
+  git(dir, ['add', '--all']);
+  git(dir, ['commit', '--quiet', '--message', message]);
+  return git(dir, ['rev-parse', 'HEAD']);
+}
+
+test('a same-tree merge preserves every retirement field, including files introduced only on the merged branch', () => {
+  const moved = RED_TEST.replace('assert.equal(1, 2)', 'assert.equal(1, 3)');
+  const later = RED_TEST.replace('assert.equal(1, 2)', 'assert.equal(1, 4)');
+  const entry = entryFor('tests/legacy/probe.test.js', moved);
+  for (const presentAtBase of [false, true]) {
+    withSandbox({
+      registry: [entry], files: { [entry.file]: moved },
+      history: { [entry.original_path]: RED_TEST },
+      earlier: { 'base.txt': 'base\n' },
+    }, (dir) => {
+      const first = git(dir, ['rev-parse', 'HEAD']);
+      const pre = git(dir, ['rev-parse', 'HEAD^']);
+      const base = git(dir, ['rev-parse', presentAtBase ? pre : `${pre}^`]);
+      const laterCommit = commitRetiredBytes(dir, entry.file, later, 'probe: later content edit');
+      const before = retirementResult(dir);
+      assert.deepEqual(before.findings, []);
+      assert.equal(before.rows[0].firstRetirement, first);
+      assert.equal(before.rows[0].retirementRewroteContent, true);
+      assert.equal(before.rows[0].retirementRewriteLines, 2);
+      assert.equal(before.rows[0].changedInWindow, 2);
+      assert.deepEqual(before.rows[0].windowCommits, [{ commit: laterCommit, subject: 'probe: later content edit' }]);
+      assert.equal(before.rows[0].signed, false);
+      const tree = git(dir, ['rev-parse', 'HEAD^{tree}']);
+      git(dir, ['branch', 'probe-retirement']);
+      git(dir, ['checkout', '--quiet', '-b', 'probe-main', base]);
+      git(dir, ['merge', '--quiet', '--no-ff', 'probe-retirement', '--message', 'probe: publish retirement']);
+      assert.equal(git(dir, ['rev-parse', 'HEAD^{tree}']), tree);
+      assert.equal(git(dir, ['show', '-s', '--format=%P', 'HEAD']).split(' ').length, 2);
+      const after = retirementResult(dir);
+      assert.deepEqual(after.findings, []);
+      assert.deepEqual(after.rows, before.rows);
+      assert.equal(runVerifier(dir).status, 0);
+    });
+  }
+});
+
+test('the window retains edits on both merge branches and counts only a new resolution once', () => {
+  const entry = entryFor('tests/legacy/probe.test.js', RED_TEST);
+  for (const newResolution of [false, true]) {
+    withSandbox({ registry: [entry], files: { [entry.file]: RED_TEST } }, (dir) => {
+      const first = git(dir, ['rev-parse', 'HEAD']);
+      const originalBranch = git(dir, ['branch', '--show-current']);
+      git(dir, ['checkout', '--quiet', '-b', 'probe-side']);
+      const side = commitRetiredBytes(dir, entry.file, `${RED_TEST}// side\n`, 'probe: side content edit');
+      git(dir, ['checkout', '--quiet', originalBranch]);
+      const main = commitRetiredBytes(dir, entry.file, `${RED_TEST}// main\n`, 'probe: main content edit');
+      git(dir, ['merge', '--quiet', '--no-ff', '--no-commit', '-s', 'ours', 'probe-side']);
+      if (newResolution) {
+        writeFile(dir, entry.file, `${RED_TEST}// resolution\n`);
+        mutateRegistry(dir, (registry) => { registry.entries[0].sha256 = digest(`${RED_TEST}// resolution\n`); });
+        git(dir, ['add', '--all']);
+      }
+      git(dir, ['commit', '--quiet', '--message', 'probe: merge content']);
+      const merged = git(dir, ['rev-parse', 'HEAD']);
+      const result = retirementResult(dir);
+      assert.deepEqual(result.findings, []);
+      const row = result.rows[0];
+      assert.equal(row.firstRetirement, first);
+      assert.equal(row.retirementRewroteContent, false);
+      assert.equal(row.changedInWindow, newResolution ? 3 : 2);
+      assert.deepEqual(new Set(row.windowCommits.map(({ commit }) => commit)), new Set(newResolution ? [main, side, merged] : [main, side]));
+      assert.equal(row.windowCommits.filter(({ commit }) => commit === merged).length, newResolution ? 1 : 0);
+      assert.equal(row.signed, false);
+    });
+  }
+});
+
+test('a first retirement in a merge exposes a rewrite against a later parent', () => {
+  const moved = RED_TEST.replace('assert.equal(1, 2)', 'assert.equal(1, 3)');
+  const entry = entryFor('tests/legacy/probe.test.js', moved);
+  withSandbox({
+    registry: [entry], files: { [entry.file]: moved },
+    history: { [entry.original_path]: RED_TEST }, earlier: { 'base.txt': 'base\n' },
+  }, (dir) => {
+    const registry = fs.readFileSync(path.join(dir, 'tests/retired.json'));
+    const pre = git(dir, ['rev-parse', 'HEAD^']);
+    git(dir, ['checkout', '--quiet', '-b', 'probe-main', `${pre}^`]);
+    git(dir, ['merge', '--quiet', '--no-ff', '--no-commit', '-s', 'ours', pre]);
+    writeFile(dir, entry.file, moved);
+    writeFile(dir, 'tests/retired.json', registry);
+    git(dir, ['add', '--all']);
+    git(dir, ['commit', '--quiet', '--message', 'probe: retire in merge']);
+    const merge = git(dir, ['rev-parse', 'HEAD']);
+    const result = retirementResult(dir);
+    assert.deepEqual(result.findings, []);
+    const row = result.rows[0];
+    assert.equal(row.firstRetirement, merge);
+    assert.equal(row.lastAppearance, pre);
+    assert.equal(row.retirementRewroteContent, true);
+    assert.equal(row.changedInWindow, 1);
+    assert.equal(row.retirementRewriteLines, 2);
+    assert.equal(row.retirementRewriteDiff[0], `--- ${merge.slice(0, 12)}^2:${entry.original_path}`);
+    assert.equal(row.signed, false);
+  });
+});
+
+test('a merge retirement compares every original-bearing parent even when its first parent already matches', () => {
+  const moved = RED_TEST.replace('assert.equal(1, 2)', 'assert.equal(1, 3)');
+  const entry = entryFor('tests/legacy/probe.test.js', moved);
+  withSandbox({
+    registry: [entry], files: { [entry.file]: moved },
+    history: { [entry.original_path]: RED_TEST }, earlier: { 'base.txt': 'base\n' },
+  }, (dir) => {
+    const registry = fs.readFileSync(path.join(dir, 'tests/retired.json'));
+    const side = git(dir, ['rev-parse', 'HEAD^']);
+    git(dir, ['checkout', '--quiet', '-b', 'probe-main', `${side}^`]);
+    writeFile(dir, entry.original_path, moved);
+    git(dir, ['add', '--all']);
+    git(dir, ['commit', '--quiet', '--message', 'probe: first-parent original']);
+    git(dir, ['merge', '--quiet', '--no-ff', '--no-commit', '-s', 'ours', side]);
+    fs.rmSync(path.join(dir, entry.original_path));
+    writeFile(dir, entry.file, moved);
+    writeFile(dir, 'tests/retired.json', registry);
+    git(dir, ['add', '--all']);
+    git(dir, ['commit', '--quiet', '--message', 'probe: retire both originals in merge']);
+    const merge = git(dir, ['rev-parse', 'HEAD']);
+    const last = git(dir, ['rev-list', '--topo-order', 'HEAD']).split('\n').find((commit) =>
+      spawnSync('git', ['-C', dir, 'cat-file', '-e', `${commit}:${entry.original_path}`]).status === 0,
+    );
+    mutateRegistry(dir, (current) => { current.entries[0].retired_from_commit = last; });
+    const result = retirementResult(dir);
+    assert.deepEqual(result.findings, []);
+    assert.equal(result.rows[0].firstRetirement, merge);
+    assert.equal(result.rows[0].retirementRewroteContent, true);
+    assert.equal(result.rows[0].retirementRewriteLines, 2);
+    assert.equal(result.rows[0].retirementRewriteDiff[0], `--- ${merge.slice(0, 12)}^2:${entry.original_path}`);
+  });
+});
+
+test('the retirement window preserves mode-only modifications even when the bytes return unchanged', () => {
+  const entry = entryFor('tests/legacy/probe.test.js', RED_TEST);
+  withSandbox({ registry: [entry], files: { [entry.file]: RED_TEST } }, (dir) => {
+    git(dir, ['config', 'core.filemode', 'true']);
+    const first = git(dir, ['rev-parse', 'HEAD']);
+    const changes = [];
+    for (const mode of [0o755, 0o644]) {
+      fs.chmodSync(path.join(dir, entry.file), mode);
+      git(dir, ['add', '--all']);
+      git(dir, ['commit', '--quiet', '--message', 'probe: change preserved mode']);
+      changes.push(git(dir, ['rev-parse', 'HEAD']));
+    }
+    const result = retirementResult(dir);
+    assert.deepEqual(result.findings, []);
+    assert.equal(result.rows[0].firstRetirement, first);
+    assert.equal(result.rows[0].retirementRewroteContent, false);
+    assert.equal(result.rows[0].changedInWindow, 2);
+    assert.deepEqual(result.rows[0].windowCommits.map(({ commit }) => commit), changes.reverse());
+    assert.equal(result.rows[0].signed, false);
   });
 });
