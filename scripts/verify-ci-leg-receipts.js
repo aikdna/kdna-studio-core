@@ -244,8 +244,14 @@ function checkTestReceipt(root, leg, definition, registration, computed, finding
   try {
     // One committed test file can carry more than one registered receipt, so the check is
     // "exactly one receipt line for this leg", not "one receipt line in the run".
+    // The default `node --test` reporter differs by Node major: 22 emits TAP, which
+    // prefixes the child test file's own stdout as `# ` comments, while 24/26 emit it
+    // raw. Strip that comment decoration before matching so the same committed receipt
+    // line is read identically on every matrix leg. Everything below - exactly one line
+    // for this leg, and the registered reason it must carry - is unchanged.
     const lines = result.stdout
       .split('\n')
+      .map((candidate) => candidate.replace(/^# ?/u, ''))
       .filter((candidate) => candidate.startsWith(`${NOT_RUN_PREFIX} ${leg} `));
     assert.equal(lines.length, 1, `expected exactly one ${leg} receipt line, got ${lines.length}`);
     [line] = lines;
