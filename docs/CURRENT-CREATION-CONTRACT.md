@@ -6,7 +6,7 @@ This release uses one current Core 0.36.0 / Read 0.11.0 graph. Component semanti
 
 | Item | Value |
 |---|---|
-| Local candidate version | `4.0.0-rc.components.1` |
+| Local candidate version | `4.0.0-rc.components.2` |
 | Published `latest` of the same package | `3.0.0` |
 | Candidate publication state | Unpublished. `package.json` is `private`, and every `file:` coordinate must be replaced by an exact registry version before any release |
 | Bound peers | Core `0.36.0`, Read `0.11.0` |
@@ -129,6 +129,6 @@ The closed envelope contains `format:{id:'kdna.studio-creation-evidence/2',versi
 
 The private context contains the original materials and their UTF-8 hashes, all proposal alternatives and revisions, complete selection history, author identity claims, channel kind/name, delegation record or null, complete asset identity/version and the fixed graph version. Decision binds context and preview digests, complete proposal set and actual reply plus Agent interpretation. The hash chain is replayed against the captured state; material, revision, selection, final review and final history consistency are checked independently of a claimed flag.
 
-`verifyCreationEvidence(bytes,evidence,expectedBinding)` requires the external `{session_id,asset_digest,evidence_digest}` binding. It compares actual Core admission and the complete public Canonical IR from the independently reconstructed plan, not ZIP/CBOR byte equality across providers. This allows genuine peer-provider encodings while binding exact actual A and exact private evidence hash externally. Current producer coordinates are JS `@aikdna/kdna-studio-core / 4.0.0-rc.components.1` and Swift `KDNAStudioCore / 0.6.0-rc.components.1`; artifact SHA UNKNOWN is explicitly unproved, not a trusted registry signature.
+`verifyCreationEvidence(bytes,evidence,expectedBinding)` requires the external `{session_id,asset_digest,evidence_digest}` binding. It compares actual Core admission and the complete public Canonical IR from the independently reconstructed plan, not ZIP/CBOR byte equality across providers. This allows genuine peer-provider encodings while binding exact actual A and exact private evidence hash externally. Current producer coordinates are JS `@aikdna/kdna-studio-core / 4.0.0-rc.components.2` and Swift `KDNAStudioCore / 0.6.0-rc.components.1`; artifact SHA UNKNOWN is explicitly unproved, not a trusted registry signature.
 
 Static consistent means external byte/evidence bindings, public observations and the private audit agree. It does not establish that a caller-supplied binding or transcript is authentic, replay a live capability, verify execution identity, or authorize an action. Static results always retain `creation_accepted:not_evaluated` and `live_context:unavailable`. Cross-provider tests, installed exact package checks and live saving are separate evidence layers.

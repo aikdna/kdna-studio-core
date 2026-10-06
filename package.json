@@ -1,6 +1,6 @@
 {
   "name": "@aikdna/kdna-studio-core",
-  "version": "4.0.0-rc.components.1",
+  "version": "4.0.0-rc.components.2",
   "description": "Current ordinary and component Creation with actual role-specific adoption and one-use saved-byte context.",
   "type": "commonjs",
   "main": "src/index.js",
@@ -18,6 +18,7 @@
     "src/evidence/component-json.js",
     "src/evidence/component-evidence.js",
     "src/evidence/component-audit.js",
+    "src/export-runtime/protected-export.js",
     "docs/CURRENT-CREATION-CONTRACT.md",
     "README.md",
     "LICENSE",
@@ -70,6 +71,10 @@
       "types": "./src/index.d.ts",
       "require": "./src/index.js",
       "default": "./src/index.js"
+    },
+    "./protected-export": {
+      "require": "./src/export-runtime/protected-export.js",
+      "default": "./src/export-runtime/protected-export.js"
     },
     "./package.json": "./package.json"
   },

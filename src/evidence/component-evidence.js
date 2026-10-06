@@ -17,7 +17,7 @@ function verifyCreationEvidence(bytes,evidence,expectedBinding){
     record(evidence.format,['id','version']);
     record(evidence.compiler,['name','version','provider','artifact_sha256']);
     const compiler=evidence.compiler;
-    const knownProvider=(compiler.provider==='javascript'&&compiler.name==='@aikdna/kdna-studio-core'&&compiler.version==='4.0.0-rc.components.1')||(compiler.provider==='swift'&&compiler.name==='KDNAStudioCore'&&compiler.version==='0.6.0-rc.components.1');
+    const knownProvider=(compiler.provider==='javascript'&&compiler.name==='@aikdna/kdna-studio-core'&&compiler.version==='4.0.0-rc.components.2')||(compiler.provider==='swift'&&compiler.name==='KDNAStudioCore'&&compiler.version==='0.6.0-rc.components.1');
     if(!knownProvider||compiler.artifact_sha256!=='UNKNOWN'||hash(evidence.reference_contract)!==hash(runtime.tuple)||evidence.component_definition!==runtime.descriptor.definition_digest)return reject('CREATION_PROVIDER_CONTRACT_NOT_CURRENT');
     record(evidence.artifact,['bytes','digest']);
     if(evidence.artifact.bytes!==captured.length||evidence.artifact.digest!==admission.snapshot.digests.A.observed)return reject('CREATION_ARTIFACT_BINDING_MISMATCH');
