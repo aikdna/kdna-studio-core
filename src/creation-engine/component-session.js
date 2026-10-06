@@ -35,7 +35,7 @@ function createComponentSession(options){
   const invalidate=()=>{contexts.abandonContext(token);token=null;preview=null;};
   const evolve=(event,detail,fn)=>{invalidate();fn();state.revision++;append(event,detail);};
   function inspect(){return freeze(clone({...state,phase,preview:preview?.review||null,authority:{identity:'not_verified',creation:'not_evaluated',action:'not_evaluated'}}));}
-  function setBrief(input){open();record(input,['title','scope']);text(input.title);text(input.scope);evolve('brief',input,()=>{state.brief=clone(input);state.choices=null;});return inspect();}
+  function setBrief(input){open();record(input,['title','scope','highest_question'],['title','scope']);if(!own(input,'highest_question'))fail('CREATION_HIGHEST_QUESTION_REQUIRED');text(input.title);text(input.scope);text(input.highest_question);evolve('brief',input,()=>{state.brief=clone(input);state.choices=null;});return inspect();}
   function recordMaterial(input){
     open();record(input,['kind','title','content','coordinate']);if(!['text','interview'].includes(input.kind))fail('CREATION_MATERIAL_KIND_UNSUPPORTED');
     for(const k of ['title','content','coordinate'])text(input[k]);
@@ -43,12 +43,12 @@ function createComponentSession(options){
     const m={id:'material:'+crypto.randomUUID(),...clone(input),content_digest:'sha256:'+crypto.createHash('sha256').update(input.content,'utf8').digest('hex'),recorded_at:new Date().toISOString()};
     evolve('material',m,()=>{state.materials.push(m);state.choices=null;});return freeze(clone(m));
   }
-  function propose(input){open();const g=group(input,state.materials);if(state.groups.some(x=>x.localKey===g.localKey))fail('CREATION_JUDGMENT_KEY_DUPLICATE');g.revision=1;evolve('proposal',g,()=>{state.groups.push(g);state.choices=null;});return freeze(clone(g));}
+  function propose(input){open();const g=group(input,state.materials,runtime.semantics);if(state.groups.some(x=>x.localKey===g.localKey))fail('CREATION_JUDGMENT_KEY_DUPLICATE');g.revision=1;evolve('proposal',g,()=>{state.groups.push(g);state.choices=null;});return freeze(clone(g));}
   function revise(key,input){
     open();record(input,['baseRevision','alternatives','explanation']);text(input.explanation);
     const index=state.groups.findIndex(g=>g.localKey===key);if(index<0)fail('CREATION_JUDGMENT_UNKNOWN');
     const prior=state.groups[index];if(input.baseRevision!==prior.revision)fail('CREATION_REVISION_BASE_STALE');
-    const next={...group({localKey:key,alternatives:input.alternatives},state.materials),revision:prior.revision+1};
+    const next={...group({localKey:key,alternatives:input.alternatives},state.materials,runtime.semantics),revision:prior.revision+1};
     evolve('revision',{prior,next,explanation:input.explanation},()=>{state.groups[index]=next;state.choices=null;});return freeze(clone(next));
   }
   function snapshot(){

@@ -21,10 +21,16 @@ function text(v) { if (typeof v !== 'string' || !v.trim() || !v.isWellFormed() |
 function local(v) { if (typeof v !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(v)) fail('COMPONENT_LOCAL_KEY_INVALID'); return v; }
 function array(v) { if (!Array.isArray(v)) fail('COMPONENT_ARRAY_INVALID'); return v; }
 function uniqueKeys(items) { const keys = items.map(x => local(x.localKey)); if (new Set(keys).size !== keys.length) fail('COMPONENT_LOCAL_KEY_DUPLICATE'); }
-function component(v) {
-  record(v, ['localKey','type','content','statement'], ['localKey','type','content']); local(v.localKey);
+function component(v, judgmentTerm, semantics) {
+  record(v, ['localKey','type','method','role','content','statement'], ['localKey','type','method','role','content','statement']); local(v.localKey);
   if (!['taxonomy','candidate-set','discriminator-set'].includes(v.type)) fail('COMPONENT_TYPE_UNSUPPORTED');
-  if (own(v,'statement')) text(v.statement);
+  // R2 method law: the component's declared basic method always equals the
+  // judgment term (base kinds); its role comes from that kind's role family.
+  // The statement is authored, never a mechanical representation (CS2).
+  record(v.method,['term'],['term']); text(v.method.term);
+  if (v.method.term !== judgmentTerm) fail('COMPONENT_METHOD_TERM_MISMATCH');
+  text(v.role);
+  text(v.statement);
   if (v.type === 'taxonomy') record(v.content,['items','broader']);
   if (v.type === 'candidate-set') record(v.content,['items']);
   if (v.type === 'discriminator-set') { record(v.content,['candidateSetLocalKey','items']); local(v.content.candidateSetLocalKey); }
@@ -33,25 +39,37 @@ function component(v) {
   // Item body, edges and contrast rules are checked by the pinned Core before Compiler.
   return clone(v);
 }
-function method(v) {
-  record(v,['method','components','bindings'],['method']);
+function method(v, semantics) {
+  record(v,['method','components'],['method']);
   record(v.method,['term','extension'],['term']); text(v.method.term);
-  if (own(v,'components')) { array(v.components).forEach(component); uniqueKeys(v.components); }
-  if (own(v,'bindings')) {
-    array(v.bindings).forEach(b => { record(b,['componentLocalKey','role']); local(b.componentLocalKey); text(b.role); });
-    const seen = v.bindings.map(b => hash(b)); if (new Set(seen).size !== seen.length) fail('COMPONENT_BINDING_DUPLICATE');
-    if (v.bindings.some(b => !(v.components || []).some(c => c.localKey === b.componentLocalKey))) fail('COMPONENT_BINDING_UNKNOWN');
-  }
-  for (const c of v.components || []) if (c.type === 'discriminator-set' && !(v.components || []).some(t => t.localKey === c.content.candidateSetLocalKey && t.type === 'candidate-set')) fail('COMPONENT_TARGET_UNKNOWN');
+  const spec = semantics.methodRoles[v.method.term];
+  if (!semantics.baseKinds.includes(v.method.term) || !spec) fail('COMPONENT_METHOD_TERM_UNSUPPORTED');
+  if (!own(v,'components')) fail('CREATION_METHOD_INCOMPLETE');
+  array(v.components).forEach(c => component(c, v.method.term, semantics));
+  uniqueKeys(v.components);
+  // Role family: unknown roles reject; every required role must be covered.
+  const family = [...spec.required, ...spec.optional];
+  if (v.components.some(c => !family.includes(c.role))) fail('COMPONENT_ROLE_UNKNOWN');
+  if (spec.required.some(role => !v.components.some(c => c.role === role))) fail('CREATION_METHOD_INCOMPLETE');
+  // A required role must carry actual typed content; an empty typed body is
+  // incomplete, not a declaration (R01: actual required roles).
+  if (v.components.some(c => spec.required.includes(c.role) && c.content.items.length === 0)) fail('CREATION_METHOD_INCOMPLETE');
+  for (const c of v.components) if (c.type === 'discriminator-set' && !v.components.some(t => t.localKey === c.content.candidateSetLocalKey && t.type === 'candidate-set')) fail('COMPONENT_TARGET_UNKNOWN');
   return clone(v); // Missing own fields remain missing; null was rejected above.
 }
-function alternative(v, materials) {
+function alternative(v, materials, semantics) {
   const required = ['localKey','title','subject','scope','statement','rationale','materialRefs'];
   record(v,[...required,'method','formationRule','publicSources','publicNotices'],required); local(v.localKey);
   for (const k of ['title','subject','scope','statement','rationale']) text(v[k]);
   array(v.materialRefs); if (!v.materialRefs.length || new Set(v.materialRefs).size !== v.materialRefs.length || v.materialRefs.some(id => !materials.some(m => m.id === id))) fail('COMPONENT_MATERIAL_REFERENCE_INVALID');
-  if (own(v,'method')) method(v.method);
-  if (own(v,'formationRule')) { record(v.formationRule,['conditions']); array(v.formationRule.conditions).forEach(x=>{record(x,['kind','statement']);if(x.kind!=='interpreted')fail('CREATION_CONDITION_KIND_UNSUPPORTED');text(x.statement);}); }
+  // The method is mandatory and complete: absence is a named rejection, never a default.
+  if (!own(v,'method')) fail('CREATION_METHOD_REQUIRED');
+  method(v.method, semantics);
+  if (own(v,'formationRule')) { record(v.formationRule,['conditions']); array(v.formationRule.conditions).forEach(x=>{record(x,['kind','statement']);if(x.kind!=='interpreted')fail('CREATION_CONDITION_KIND_UNSUPPORTED');text(x.statement);});
+    // R2 conditions are owned references on the payload; inline interpreted
+    // condition mapping is not part of this contract yet, so a non-empty set
+    // is a named rejection rather than a silent drop.
+    if (v.formationRule.conditions.length) fail('CREATION_FORMATION_CONDITIONS_UNSUPPORTED'); }
   if (own(v,'publicSources')) {
     uniqueKeys(array(v.publicSources));
     for (const s of v.publicSources) {
@@ -73,10 +91,10 @@ function alternative(v, materials) {
   }
   return clone(v);
 }
-function group(v, materials) {
+function group(v, materials, semantics) {
   record(v,['localKey','alternatives']); local(v.localKey); array(v.alternatives);
   if (v.alternatives.length < 2) fail('CREATION_TWO_ALTERNATIVES_REQUIRED');
-  uniqueKeys(v.alternatives); const alternatives = v.alternatives.map(a => alternative(a,materials));
+  uniqueKeys(v.alternatives); const alternatives = v.alternatives.map(a => alternative(a,materials,semantics));
   const meanings = alternatives.map(a => { const x = clone(a); for (const k of ['localKey','title','rationale','materialRefs']) delete x[k]; return hash(x); });
   if (new Set(meanings).size !== alternatives.length) fail('CREATION_ALTERNATIVES_NOT_DISTINCT');
   return {localKey:v.localKey,alternatives};

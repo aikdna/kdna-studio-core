@@ -62,7 +62,7 @@ test('floating ranges are rejected in every shape the retired assertion rejected
 });
 
 test('exact SemVer forms stay accepted', () => {
-  for (const spec of ['1.2.3', '0.24.0-rc.component-semantics.2', '1.2.3+build.1']) {
+  for (const spec of ['1.2.3', '1.2.3-rc.probe.1', '1.2.3+build.1']) {
     assert.deepEqual(findingsFor(spec), [], `spec ${spec} should be accepted`);
   }
 });

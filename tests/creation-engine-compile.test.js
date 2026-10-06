@@ -528,3 +528,13 @@ test('all sixteen card types preserve identities and type-specific fields throug
     );
   }
 });
+
+test('a password option redirects exportRuntimeAsset to pack and protectExportedContainer', () => {
+  let workspace = createPromotedWorkspace('agent-authored');
+  workspace = acceptWorkspace(workspace);
+  const { project } = creationEngine.compileProject(workspace);
+  assert.throws(
+    () => exportRuntimeAsset(project, { password: 'probe-password' }),
+    (error) => error.code === 'PROTECTED_EXPORT_REQUIRES_PACK',
+  );
+});
