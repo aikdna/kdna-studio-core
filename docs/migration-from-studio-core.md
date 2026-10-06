@@ -3,7 +3,7 @@
 > **Coordinate scope.** This guide migrates to the **published `3.0.0`**
 > coordinate and the top-level responsibilities that version exposes
 > (`authoring`, `project`, `cards`, `compile`, `creationEngine`, …). The
-> repository's current release candidate is `4.0.0-rc.components.1`, which is
+> repository's current release candidate is `4.0.0-rc.components.2`, which is
 > unpublished and exposes a different API; see
 > [`CURRENT-CREATION-CONTRACT.md`](./CURRENT-CREATION-CONTRACT.md). Nothing in
 > this guide is an upgrade path to that candidate.

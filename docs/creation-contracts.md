@@ -3,7 +3,7 @@
 > **Coordinate scope.** This guide describes the **published `3.0.0`**
 > `@aikdna/kdna-studio-core` package and its `creationEngine` surface. It is
 > retained as the reference for consumers still on that coordinate. The
-> repository's current release candidate is `4.0.0-rc.components.1`, which
+> repository's current release candidate is `4.0.0-rc.components.2`, which
 > exports `createSession`/`verifyCreationEvidence` and is **not** a compatible
 > update of `3.0.0`; see
 > [`CURRENT-CREATION-CONTRACT.md`](./CURRENT-CREATION-CONTRACT.md). Do not read

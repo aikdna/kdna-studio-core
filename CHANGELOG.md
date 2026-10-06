@@ -1,3 +1,7 @@
+## 4.0.0-rc.components.2
+
+The current creation line gains a narrow public entry `./protected-export` exposing `protectExportedContainer` (single-file closure) for the pack-then-protect flow, a dedicated CI gate for the live component suites, and the registered follow-ups for this line. The root and component surfaces are unchanged.
+
 ## 4.0.0-rc.components.1
 
 Current typed ordinary/component authoring requires distinct alternatives, actual role-specific adoption, complete pre-compiler mapping and one-use saved-byte readback. Format 2 binds the current public component graph; legacy evidence is explicitly noncurrent. No identity or action authority is inferred.
