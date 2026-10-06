@@ -1,13 +1,13 @@
 "use strict";
 const crypto=require('node:crypto');
 const {record,own,text,group,hash,clone,fail}=require('../creation-engine/component-input');
-function validateAudit(evidence,descriptor,buildMaterialization){
+function validateAudit(evidence,descriptor,buildMaterialization,semantics){
  const c=evidence.context,d=evidence.decision;
  record(c,['session_id','revision','agent','asset','createdAt','adoption_channel','corePackageVersion','synthetic_fixture','brief','materials','groups','history','authorization','selected']);
  record(c.agent,['name','version']);text(c.agent.name);text(c.agent.version);
  record(c.asset,['asset_id','asset_uid','version']);for(const x of Object.values(c.asset))text(x);
  record(c.adoption_channel,['kind','channel']);text(c.adoption_channel.channel);
- record(c.brief,['title','scope']);text(c.brief.title);text(c.brief.scope);
+ record(c.brief,['title','scope','highest_question']);text(c.brief.title);text(c.brief.scope);text(c.brief.highest_question);
  if(!Number.isSafeInteger(c.revision)||c.revision<1||typeof c.synthetic_fixture!=='boolean'||!Number.isFinite(Date.parse(c.createdAt)))fail('CREATION_CONTEXT_INVALID');
  record(d,['format','adoption_kind','session_id','revision','context_digest','preview_digest','proposal_digests','actual_reply','authorization']);
  if(d.format!=='kdna.studio-decision/2'||d.adoption_kind!==c.adoption_channel.kind)fail('CREATION_DECISION_INVALID');
@@ -29,10 +29,10 @@ function validateAudit(evidence,descriptor,buildMaterialization){
   if(event.sequence!==i+1||event.previous_digest!==previous||hash(body)!==digest||!Number.isFinite(Date.parse(event.at)))fail('CREATION_HISTORY_MISMATCH');previous=digest;
   const v=event.detail;
   if(event.event==='reply_rejected'){record(v,['code']);text(v.code);if(event.revision!==state.revision)fail('CREATION_HISTORY_REVISION_MISMATCH');continue;}
-  if(event.event==='brief'){record(v,['title','scope']);text(v.title);text(v.scope);state.brief=clone(v);state.choices=null;}
+  if(event.event==='brief'){record(v,['title','scope','highest_question']);text(v.title);text(v.scope);text(v.highest_question);state.brief=clone(v);state.choices=null;}
   else if(event.event==='material'){validateMaterial(v);state.materials.push(clone(v));state.choices=null;}
-  else if(event.event==='proposal'){record(v,['localKey','alternatives','revision']);if(v.revision!==1||state.groups.some(g=>g.localKey===v.localKey))fail('CREATION_AUDIT_PROPOSAL_INVALID');group({localKey:v.localKey,alternatives:v.alternatives},state.materials);state.groups.push(clone(v));state.choices=null;}
-  else if(event.event==='revision'){record(v,['prior','next','explanation']);text(v.explanation);const index=state.groups.findIndex(g=>g.localKey===v.prior.localKey);if(index<0||hash(state.groups[index])!==hash(v.prior)||v.next.localKey!==v.prior.localKey||v.next.revision!==v.prior.revision+1)fail('CREATION_AUDIT_REVISION_INVALID');record(v.next,['localKey','alternatives','revision']);group({localKey:v.next.localKey,alternatives:v.next.alternatives},state.materials);state.groups[index]=clone(v.next);state.choices=null;}
+  else if(event.event==='proposal'){record(v,['localKey','alternatives','revision']);if(v.revision!==1||state.groups.some(g=>g.localKey===v.localKey))fail('CREATION_AUDIT_PROPOSAL_INVALID');group({localKey:v.localKey,alternatives:v.alternatives},state.materials,semantics);state.groups.push(clone(v));state.choices=null;}
+  else if(event.event==='revision'){record(v,['prior','next','explanation']);text(v.explanation);const index=state.groups.findIndex(g=>g.localKey===v.prior.localKey);if(index<0||hash(state.groups[index])!==hash(v.prior)||v.next.localKey!==v.prior.localKey||v.next.revision!==v.prior.revision+1)fail('CREATION_AUDIT_REVISION_INVALID');record(v.next,['localKey','alternatives','revision']);group({localKey:v.next.localKey,alternatives:v.next.alternatives},state.materials,semantics);state.groups[index]=clone(v.next);state.choices=null;}
   else if(['selection','note','reject'].includes(event.event)){
    reply(v);if(v.review.revision!==state.revision||hash(v.review.groups)!==hash(state.groups))fail('CREATION_AUDIT_REVIEW_STALE');
    if(event.event==='selection'){if(v.interpretation.kind!=='select')fail('CREATION_AUDIT_INTENT_MISMATCH');state.choices=selection(v.interpretation);}

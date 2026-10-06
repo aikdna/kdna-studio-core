@@ -30,7 +30,7 @@ function verifyCreationEvidence(bytes,evidence,expectedBinding){
     if(decision.adoption_kind==='delegated_agent_editorial'){record(context.authorization,['coordinate','statement']);if(!context.authorization.coordinate||!context.authorization.statement)return reject('CREATION_AUTHORIZATION_RECORD_MISSING');}else if(context.authorization!==null)return reject('CREATION_AUTHORIZATION_RECORD_INVALID');
     if(context.corePackageVersion!==runtime.coreVersion)return reject('CREATION_CONTEXT_GRAPH_NOT_CURRENT');
     for(const m of context.materials){const digest='sha256:'+crypto.createHash('sha256').update(m.content,'utf8').digest('hex');if(m.content_digest!==digest)return reject('CREATION_MATERIAL_MISMATCH');}
-    for(const g of context.groups)group({localKey:g.localKey,alternatives:g.alternatives},context.materials);
+    for(const g of context.groups)group({localKey:g.localKey,alternatives:g.alternatives},context.materials,runtime.semantics);
     if(context.selected.length!==context.groups.length||new Set(context.selected.map(s=>s.judgmentLocalKey)).size!==context.selected.length)return reject('CREATION_SELECTION_INVALID');
     for(const s of context.selected){const g=context.groups.find(g=>g.localKey===s.judgmentLocalKey);if(!g||!g.alternatives.some(a=>hash(a)===hash(s.alternative)))return reject('CREATION_SELECTED_INPUT_MISMATCH');}
     const final=decision.actual_reply,response=final?.response,review=final?.review;
@@ -38,7 +38,7 @@ function verifyCreationEvidence(bytes,evidence,expectedBinding){
     let previous=null;
     for(let i=0;i<evidence.history.length;i++){const {digest,...entry}=evidence.history[i];if(entry.sequence!==i+1||entry.previous_digest!==previous||hash(entry)!==digest)return reject('CREATION_HISTORY_MISMATCH');previous=digest;}
     const finalEvent=evidence.history.at(-1);if(finalEvent?.event!=='final_adoption'||hash(finalEvent.detail)!==hash(decision))return reject('CREATION_FINAL_HISTORY_MISMATCH');
-    validateAudit(evidence,runtime.descriptor,buildMaterialization);
+    validateAudit(evidence,runtime.descriptor,buildMaterialization,runtime.semantics);
     const expected=buildMaterialization(context,runtime.descriptor,decision);
     const expectedAdmission=runtime.admitBytes(encodeComponentRuntime(expected));
     if(expectedAdmission.status!=='accepted'||hash(expectedAdmission.snapshot.ir)!==hash(admission.snapshot.ir)||hash(expected.expectedComponents)!==hash(evidence.expected_component_bindings)||hash(expected.presence)!==hash(evidence.presence)||hash(expected.adoption)!==hash(evidence.adoption))return reject('CREATION_STATIC_MATERIALIZATION_MISMATCH');

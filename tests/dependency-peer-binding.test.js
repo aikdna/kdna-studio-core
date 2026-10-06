@@ -45,7 +45,7 @@ test('an optional peer is not required to carry an override (npm does not look i
   const optionalHolder = {
     packages: {
       'node_modules/optional-holder': {
-        peerDependencies: { '@aikdna/kdna-core': '0.24.0-rc.component-semantics.2' },
+        peerDependencies: { '@aikdna/kdna-core': '0.36.0' },
         peerDependenciesMeta: { '@aikdna/kdna-core': { optional: true } },
       },
     },
@@ -56,7 +56,7 @@ test('an optional peer is not required to carry an override (npm does not look i
   const required = {
     packages: {
       'node_modules/required-holder': {
-        peerDependencies: { '@aikdna/kdna-core': '0.24.0-rc.component-semantics.2' },
+        peerDependencies: { '@aikdna/kdna-core': '0.36.0' },
       },
     },
   };
@@ -67,7 +67,7 @@ test('the peer binding gate goes red for every mutation that reopens a registry 
   const peerName = '@aikdna/kdna-core';
   const mutations = [
     ['override removed', (next) => { delete next.manifest.overrides[peerName]; }],
-    ['override replaced by the exact registry range', (next) => { next.manifest.overrides[peerName] = '0.24.0-rc.component-semantics.2'; }],
+    ['override replaced by the exact registry range', (next) => { next.manifest.overrides[peerName] = '0.36.0'; }],
     ['override replaced by a floating range', (next) => { next.manifest.overrides[peerName] = '^0.24.0'; }],
     ['override replaced by the bare range from the vendor declaration', (next) => { next.manifest.overrides[peerName] = '*'; }],
     ['override pointed at another repository', (next) => { next.manifest.overrides[peerName] = 'file:../elsewhere/aikdna-kdna-core.tgz'; }],

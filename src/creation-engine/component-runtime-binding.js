@@ -21,8 +21,18 @@ function getBoundRuntime(){
   for(const consumer of binding.packages){const resolved=require.resolve(pkg.name,{paths:[path.join(modules,...consumer.name.split('/'))]});if(!fs.realpathSync(resolved).startsWith(root+path.sep))fail('CREATION_DEPENDENCY_MULTIPLE_GRAPHS');}
  }
  const core=require('@aikdna/kdna-core'),components=require('@aikdna/kdna-core/components');
- if(hash(Object.keys(core).sort())!==hash(['admitBytes'])||hash(Object.keys(components).sort())!==hash(['getComponentSemanticsContract']))fail('CREATION_PUBLIC_API_MISMATCH');
+ if(hash(Object.keys(core).sort())!==hash(['admitBytes'])||hash(Object.keys(components).sort())!==hash(['getComponentSemanticsContract','getNativeMethodRequirements']))fail('CREATION_PUBLIC_API_MISMATCH');
+ const authoringNode=require('@aikdna/kdna-core/authoring-node'),protectionNode=require('@aikdna/kdna-core/protection-node');
+ if(!Object.hasOwn(authoringNode,'openSourceBytes')||!Object.hasOwn(protectionNode,'protectSourceBytes'))fail('CREATION_PUBLIC_API_MISMATCH');
  const descriptor=components.getComponentSemanticsContract();if(descriptor.definition_digest!==binding.definition_digest)fail('CREATION_COMPONENT_CONTRACT_MISMATCH');
- return Object.freeze({admitBytes:core.admitBytes,descriptor,tuple:freeze(clone(binding.tuple)),coreVersion:binding.core_package_version});
+ // Authoring vocabulary comes from the bound Core itself (r2_semantics in the
+ // shipped generated contract; integrity is covered by the member walk above).
+ // The judgment-side kinds include `composite`; component basic methods and the
+ // role families are the sixteen base kinds defined by method_roles.
+ const semanticsRaw=JSON.parse(fs.readFileSync(path.join(coreRoot,'src','public-contract','generated-contract.json'),'utf8')).r2_semantics;
+ const baseKinds=Array.isArray(semanticsRaw&&semanticsRaw.method_kinds)?semanticsRaw.method_kinds.filter(k=>k!=='composite'):null;
+ const methodRoles=semanticsRaw&&semanticsRaw.method_roles;
+ if(!baseKinds||baseKinds.length!==16||!methodRoles||Object.keys(methodRoles).length!==16||baseKinds.some(k=>!methodRoles[k]))fail('CREATION_SEMANTICS_INVALID');
+ return Object.freeze({admitBytes:core.admitBytes,descriptor,tuple:freeze(clone(binding.tuple)),coreVersion:binding.core_package_version,semantics:Object.freeze({baseKinds:Object.freeze(baseKinds),methodRoles:Object.freeze(methodRoles)})});
 }
 module.exports={getBoundRuntime};
