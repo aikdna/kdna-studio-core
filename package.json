@@ -42,8 +42,8 @@
   ],
   "dependencies": {
     "cbor-x": "1.6.5",
-    "@aikdna/kdna-core": "file:vendor/aikdna-kdna-core-0.36.0.tgz",
-    "@aikdna/kdna-read": "file:vendor/aikdna-kdna-read-0.11.0.tgz"
+    "@aikdna/kdna-core": "file:vendor/aikdna-kdna-core-0.37.1-rc.browser.1.tgz",
+    "@aikdna/kdna-read": "file:vendor/aikdna-kdna-read-0.11.2-rc.browser.1.tgz"
   },
   "engines": {
     "node": ">=22"
@@ -53,16 +53,18 @@
     "test": "node --test test/component-lifecycle.test.js test/component-source-adoption.test.js",
     "test:all": "node scripts/run-test-all.js",
     "test:migration:registry": "node scripts/verify-registry-migration.js",
-    "verify:candidate-sources": "node scripts/verify-runtime-candidate-sources.js",
+    "verify:candidate-sources": "node scripts/verify-current-candidate-sources.js",
     "check:protocol-names": "node scripts/check-current-protocol-names.js",
     "check:publish-coordinates": "node scripts/check-publish-coordinates.js",
     "release:check": "node scripts/release-check.js",
     "release:generate-evidence": "node scripts/generate-release-evidence.js",
     "release:publish-verified": "node scripts/publish-verified-artifact.js",
-    "prepublishOnly": "node scripts/run-test-all.js && node scripts/release-check.js"
+    "prepublishOnly": "node scripts/run-test-all.js && node scripts/release-check.js",
+    "check:current-bindings": "node scripts/generate-current-bindings.js",
+    "candidate:generate-evidence": "node scripts/generate-candidate-evidence.js"
   },
   "overrides": {
-    "fast-uri": "3.1.7",
+    "fast-uri": "3.1.8",
     "@aikdna/kdna-core": "$@aikdna/kdna-core",
     "@aikdna/kdna-read": "$@aikdna/kdna-read"
   },

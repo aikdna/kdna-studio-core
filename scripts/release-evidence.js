@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { COMMIT_RE, EXPECTED_PACKAGE_NAME, STABLE_VERSION_RE } = require('./release-policy');
+const { CANDIDATE_VERSION_RE, COMMIT_RE, EXPECTED_PACKAGE_NAME, STABLE_VERSION_RE } = require('./release-policy');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -179,10 +179,10 @@ function validateFiles(files) {
   return normalized;
 }
 
-function validatePackReport({ reportText, tarball, pkg, source }) {
+function validatePackReport({ reportText, tarball, pkg, source, candidate = false }) {
   assert(pkg.name === EXPECTED_PACKAGE_NAME, 'npm pack package name mismatch');
-  assert(STABLE_VERSION_RE.test(pkg.version || ''), 'npm pack package version is invalid');
-  assert(source.ref === `refs/tags/${pkg.version}`, 'npm pack source ref mismatch');
+  assert((candidate ? CANDIDATE_VERSION_RE : STABLE_VERSION_RE).test(pkg.version || ''), 'npm pack package version is invalid');
+  assert(source.ref === (candidate ? `candidate:${source.commit}` : `refs/tags/${pkg.version}`), 'npm pack source ref mismatch');
   assert(COMMIT_RE.test(source.commit || ''), 'npm pack source commit is invalid');
   const reports = parseJsonDocument(reportText, 'npm pack output');
   assert(Array.isArray(reports) && reports.length === 1, 'npm pack must report one artifact');
@@ -206,7 +206,7 @@ function validatePackReport({ reportText, tarball, pkg, source }) {
   assert(report.entryCount === files.length, 'npm pack entry count does not match the tarball');
   assert(report.unpackedSize === unpackedSize, 'npm pack unpacked size does not match the tarball');
   return {
-    schema: 'kdna.studio-core.release-evidence',
+    schema: candidate ? 'kdna.studio-core.candidate-evidence' : 'kdna.studio-core.release-evidence',
     version: '1.0',
     source: { ref: source.ref, commit: source.commit },
     package: { name: pkg.name, version: pkg.version },
@@ -222,12 +222,12 @@ function validatePackReport({ reportText, tarball, pkg, source }) {
   };
 }
 
-function validateEvidence(evidence) {
-  assert(evidence?.schema === 'kdna.studio-core.release-evidence', 'release evidence schema mismatch');
+function validateEvidence(evidence, { candidate = false } = {}) {
+  assert(evidence?.schema === (candidate ? 'kdna.studio-core.candidate-evidence' : 'kdna.studio-core.release-evidence'), 'release evidence schema mismatch');
   assert(evidence.version === '1.0', 'release evidence version mismatch');
   assert(evidence.package?.name === EXPECTED_PACKAGE_NAME, 'release evidence package mismatch');
-  assert(STABLE_VERSION_RE.test(evidence.package.version || ''), 'release evidence package version invalid');
-  assert(evidence.source?.ref === `refs/tags/${evidence.package.version}`, 'release evidence ref mismatch');
+  assert((candidate ? CANDIDATE_VERSION_RE : STABLE_VERSION_RE).test(evidence.package.version || ''), 'release evidence package version invalid');
+  assert(evidence.source?.ref === (candidate ? `candidate:${evidence.source.commit}` : `refs/tags/${evidence.package.version}`), 'release evidence ref mismatch');
   assert(COMMIT_RE.test(evidence.source.commit || ''), 'release evidence commit invalid');
   assert(
     evidence.artifact?.filename ===
@@ -252,8 +252,8 @@ function validateEvidence(evidence) {
   return evidence;
 }
 
-function validateArtifact(rawEvidence, tarball) {
-  const evidence = validateEvidence(rawEvidence);
+function validateArtifact(rawEvidence, tarball, options) {
+  const evidence = validateEvidence(rawEvidence, options);
   assert(Buffer.isBuffer(tarball) && tarball.length === evidence.artifact.packed_size, 'verified artifact size mismatch');
   assert(integrity(tarball) === evidence.artifact.integrity, 'verified artifact integrity mismatch');
   assert(sha1(tarball) === evidence.artifact.shasum, 'verified artifact shasum mismatch');
@@ -268,4 +268,6 @@ function validateArtifact(rawEvidence, tarball) {
   return evidence;
 }
 
-module.exports = { parseTarFiles, validateArtifact, validateEvidence, validatePackReport };
+module.exports = { parseTarFiles, validateArtifact, validateEvidence, validatePackReport,
+  validateCandidatePackReport: input => validatePackReport({ ...input, candidate: true }),
+  validateCandidateArtifact: (evidence, tarball) => validateArtifact(evidence, tarball, { candidate: true }) };

@@ -19,7 +19,7 @@ jobs:
       - name: Check out the exact Core candidate outside the Studio workspace
         env:
           KDNA_CORE_CANDIDATE_REPOSITORY: aikdna/kdna
-          KDNA_CORE_CANDIDATE_COMMIT: 7f523fde7f7db218ae7e74fc1dd908abc48937e6
+          KDNA_CORE_CANDIDATE_COMMIT: 32aa3ff8e633291d4bb9e01de5a70181c8415d93
         run: |
           set -euo pipefail
           runner_temp="$(realpath "$RUNNER_TEMP")"
@@ -59,7 +59,7 @@ jobs:
       # (src/creation-engine/component-runtime-binding.js) and the vendored lock
       # resolves every non-optional package to file:vendor/*.tgz.
       - run: node scripts/run-trusted-npm.js ci --ignore-scripts --omit=optional --no-audit --no-fund --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
-      - name: Reproduce both checked candidate artifacts from their exact clean sources
+      - name: Reproduce both checked candidate artifacts from their exact clean sources (gated legacy candidate leg)
         run: node scripts/ci-leg-receipt.js candidate-sources
       - name: Set up the tested Node runtime
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
