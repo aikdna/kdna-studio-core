@@ -16,7 +16,14 @@ function getBoundRuntime(){
   if(metadata.version!==pkg.version||metadata.name!==pkg.name)fail('CREATION_DEPENDENCY_VERSION_CHANGED');
   for(const optional of Object.keys(metadata.optionalDependencies||{})){
    if(binding.packages.some(p=>p.name===optional))continue;
-   try{require.resolve(optional,{paths:[root]});fail('CREATION_OPTIONAL_DEPENDENCY_UNBOUND');}catch(e){if(e.code!=='MODULE_NOT_FOUND')throw e;}
+   // Package managers install optional dependencies by default, so their
+   // presence is the normal case for a consumer that simply ran
+   // `npm install`. Every CBOR operation in this package and in the bound Core
+   // uses the pure-JS entry, so the bytes and the behaviour are the same either
+   // way and an installed accelerator must not turn a working install into a
+   // refusal. The resolution check is kept only to surface an unreadable
+   // optional entry instead of hiding a broken install.
+   try{require.resolve(optional,{paths:[root]});}catch(e){if(e.code!=='MODULE_NOT_FOUND')throw e;}
   }
   for(const consumer of binding.packages){const resolved=require.resolve(pkg.name,{paths:[path.join(modules,...consumer.name.split('/'))]});if(!fs.realpathSync(resolved).startsWith(root+path.sep))fail('CREATION_DEPENDENCY_MULTIPLE_GRAPHS');}
  }

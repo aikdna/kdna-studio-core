@@ -1,6 +1,8 @@
 'use strict';
 
-const { Encoder } = require('cbor-x');
+// Pure-JS CBOR entry: identical bytes whether or not the optional native
+// accelerator is installed. See component-runtime-binding.js.
+const { Encoder } = require('cbor-x/index-no-eval');
 const { admitBytes } = require('@aikdna/kdna-core');
 
 // Mechanical compilation of newly authored text judgments. Core alone checks
