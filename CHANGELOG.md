@@ -1,5 +1,10 @@
 ## 4.0.0-rc.components.2
 
+Current candidate preflight binds Core `0.37.1-rc.browser.1`, Read
+`0.11.2-rc.browser.1` and `fast-uri` `3.1.8`, with complete dependency member
+receipts. Exact-source and prerelease pack checks execute on this graph;
+candidate evidence remains separate from stable release publication.
+
 The current creation line gains a narrow public entry `./protected-export` exposing `protectExportedContainer` (single-file closure) for the pack-then-protect flow, a dedicated CI gate for the live component suites, and the registered follow-ups for this line. The root and component surfaces are unchanged.
 
 ## 4.0.0-rc.components.1

@@ -51,12 +51,7 @@ function copyFixtureRoot(t) {
     path.join(ROOT, '.github/workflows/ci.yml'),
     path.join(root, '.github/workflows/ci.yml'),
   );
-  for (const file of fs.readdirSync(path.join(ROOT, 'fixtures/runtime-candidates'))) {
-    fs.copyFileSync(
-      path.join(ROOT, 'fixtures/runtime-candidates', file),
-      path.join(root, 'fixtures/runtime-candidates', file),
-    );
-  }
+  fs.cpSync(path.join(ROOT, 'fixtures/runtime-candidates'), path.join(root, 'fixtures/runtime-candidates'), { recursive: true });
   return root;
 }
 
@@ -206,7 +201,7 @@ test('candidate binding completeness rejects omissions, duplicates, extras, and 
 // baseline comes from the fixture because of it. Pin the fact so that a silent
 // re-pin of the working graph cannot pass unnoticed - a deliberate re-pin has to
 // update this expectation and the retired registry entry at the same time.
-test('the working graph is not a bound candidate graph', () => {
+test('the working graph is not the preserved historical candidate graph', () => {
   assert.throws(
     () => verifyCandidateBinding(ROOT),
     /dependency spec mismatch|unbound file lock package/u,
