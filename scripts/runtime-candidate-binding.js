@@ -1133,6 +1133,16 @@ function verifyCurrentReleaseGraph(root) {
 }
 
 function assertRegistryReleaseReady(root, registryLookup = null) {
+  // Release gate coverage note (see the assertion mapping recorded with the
+  // release evidence): this gate validates the current graph from
+  // fixtures/runtime-candidates/current-sources.json. The historical
+  // 0.21.0-era fixture and its pinned commits, evidence files and pack
+  // equivalence stay with verifyCandidateBinding and
+  // verify-runtime-candidate-sources.js; the candidate pack reproducibility and
+  // install equivalence that the release still depends on are enforced on the
+  // same commit by the required `candidate-sources` CI leg, which runs
+  // verify-current-candidate-sources.js (materializeCommitTree, two byte-equal
+  // packs, assertPackageTarInstallEquivalent).
   const binding = verifyCurrentReleaseGraph(root);
   const packageLock = readJson(path.join(root, 'package-lock.json'));
   for (const entry of binding.packages) {
