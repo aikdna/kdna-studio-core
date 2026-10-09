@@ -59,6 +59,7 @@
     "release:check": "node scripts/release-check.js",
     "release:generate-evidence": "node scripts/generate-release-evidence.js",
     "release:publish-verified": "node scripts/publish-verified-artifact.js",
+    "candidate:publish-verified": "node scripts/publish-candidate-artifact.js",
     "prepublishOnly": "node scripts/run-test-all.js && node scripts/release-check.js",
     "check:current-bindings": "node scripts/generate-current-bindings.js",
     "candidate:generate-evidence": "node scripts/generate-candidate-evidence.js"
