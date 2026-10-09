@@ -1,6 +1,6 @@
 # Current Studio creation contract
 
-This release uses one current Core 0.36.0 / Read 0.11.0 graph. Component semantics is the public `/components` descriptor with D `sha256:37e857cc4e43f7283a51ee6abe1f6e8401803902e8dc47f6d14d712aa7d7b089`. Studio provides authoring-to-wire mapping and a live creation lifecycle; Core alone interprets component content. No profile, public definition, native protocol ID, arbitrary module, trust provider or compiler callback is accepted from the authoring caller.
+This release uses one current Core 0.37.1-rc.browser.1 / Read 0.11.2-rc.browser.1 graph. Component semantics is the public `/components` descriptor with D `sha256:37e857cc4e43f7283a51ee6abe1f6e8401803902e8dc47f6d14d712aa7d7b089`. Studio provides authoring-to-wire mapping and a live creation lifecycle; Core alone interprets component content. No profile, public definition, native protocol ID, arbitrary module, trust provider or compiler callback is accepted from the authoring caller.
 
 ## Publication coordinate
 
@@ -9,7 +9,7 @@ This release uses one current Core 0.36.0 / Read 0.11.0 graph. Component semanti
 | Local candidate version | `4.0.0-rc.components.2` |
 | Published `latest` of the same package | `3.0.0` |
 | Candidate publication state | Unpublished. `package.json` is `private`, and every `file:` coordinate must be replaced by an exact registry version before any release |
-| Bound peers | Core `0.36.0`, Read `0.11.0` |
+| Bound peers | Core `0.37.1-rc.browser.1`, Read `0.11.2-rc.browser.1` |
 
 The candidate deliberately has its own coordinate. It is **not** a compatible
 update of `3.0.0`, and describing it as "Studio 3.x" would merge two

@@ -13,8 +13,8 @@ const {
   readCurrentBinding,
   validateCurrentBinding,
 } = require('../scripts/current-release-binding');
-const { parseTarFiles, validateArtifact, validatePackReport } = require('../scripts/release-evidence');
-const { STABLE_VERSION_RE, validateReleaseContext } = require('../scripts/release-policy');
+const { parseTarFiles, validateArtifact, validatePackReport, validateCandidatePackReport, validateCandidateArtifact } = require('../scripts/release-evidence');
+const { STABLE_VERSION_RE, validateReleaseContext, validateCandidateCoordinate } = require('../scripts/release-policy');
 const {
   registeredNotRunFor,
   unavailabilityCodes,
@@ -493,19 +493,16 @@ test('release context binds package, changelog, event, tag ref, HEAD, and workfl
   }
 });
 
-test('current package and changelog form one exact finalizable release coordinate', (t) => {
-  if (registeredReceipt(t, 'release-coordinate')) return;
+test('current package and changelog form one exact finalizable release coordinate', () => {
   const changelog = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
-  assert.deepEqual(
-    validateReleaseContext(releaseInput({ pkg: CURRENT_PACKAGE, changelog })),
-    {
-      name: '@aikdna/kdna-studio-core',
-      version: '3.0.0',
-      tag: '3.0.0',
-      ref: 'refs/tags/3.0.0',
-      commit: HASH,
-    },
-  );
+  if (!STABLE_VERSION_RE.test(CURRENT_PACKAGE.version)) {
+    assert.deepEqual(validateCandidateCoordinate({ pkg: CURRENT_PACKAGE, changelog }), {
+      name: CURRENT_PACKAGE.name, version: CURRENT_PACKAGE.version, status: 'candidate_preflight_only',
+    });
+    assert.throws(() => validateReleaseContext(releaseInput({ pkg: CURRENT_PACKAGE, changelog })), /stable canonical SemVer/);
+    return;
+  }
+  assert.equal(validateReleaseContext(releaseInput({ pkg: CURRENT_PACKAGE, changelog })).version, CURRENT_PACKAGE.version);
 });
 
 test('current binding rejects stale evidence before registry lookup', () => {
@@ -557,24 +554,34 @@ test('pack evidence independently parses a real npm tgz and rejects changed byte
   assert.equal(packed.status, 0, packed.stderr);
   const [report] = JSON.parse(packed.stdout);
   const bytes = fs.readFileSync(path.join(temp, report.filename));
-  const evidence = validatePackReport({
+  const isStable = STABLE_VERSION_RE.test(require('../package.json').version);
+  const validateCurrentPack = isStable ? validatePackReport : validateCandidatePackReport;
+  const validateCurrentArtifact = isStable ? validateArtifact : validateCandidateArtifact;
+  const evidence = validateCurrentPack({
     reportText: packed.stdout,
     tarball: bytes,
     pkg: { name: CURRENT_PACKAGE.name, version: CURRENT_PACKAGE.version },
-    source: { ref: `refs/tags/${CURRENT_PACKAGE.version}`, commit: HASH },
+    source: { ref: STABLE_VERSION_RE.test(CURRENT_PACKAGE.version) ? `refs/tags/${CURRENT_PACKAGE.version}` : `candidate:${HASH}`, commit: HASH },
   });
-  assert.equal(validateArtifact(evidence, bytes), evidence);
-  assert.throws(() => validateArtifact(evidence, Buffer.from('changed')), /size|integrity|shasum/);
+  assert.equal(validateCurrentArtifact(evidence, bytes), evidence);
+  if (!isStable) {
+    let lookupCalls = 0, publishCalls = 0;
+    assert.throws(() => validateArtifact(evidence, bytes), /schema mismatch/);
+    assert.throws(() => publishCandidate({ evidence, tarball: bytes, artifactPath: path.join(temp, report.filename),
+      bindCurrent: () => evidence, lookup: () => { lookupCalls++; }, publish: () => { publishCalls++; } }), /schema mismatch/);
+    assert.equal(lookupCalls, 0); assert.equal(publishCalls, 0);
+  }
+  assert.throws(() => validateCurrentArtifact(evidence, Buffer.from('changed')), /size|integrity|shasum/);
   assert.throws(
     () =>
-      validateArtifact(
+      validateCurrentArtifact(
         { ...evidence, artifact: { ...evidence.artifact, unpacked_size: evidence.artifact.unpacked_size + 1 } },
         bytes,
       ),
     /unpacked size mismatch/,
   );
   assert.throws(
-    () => validateArtifact({ ...evidence, artifact: { ...evidence.artifact, filename: '../release.tgz' } }, bytes),
+    () => validateCurrentArtifact({ ...evidence, artifact: { ...evidence.artifact, filename: '../release.tgz' } }, bytes),
     /filename mismatch/,
   );
 });
@@ -744,4 +751,17 @@ test('registry lookup and publication use the official registry and the exact ta
     '--registry=https://registry.npmjs.org/',
     '--@aikdna:registry=https://registry.npmjs.org/',
   ]);
+});
+
+test('candidate coordinate preparation rejects malformed or misleading headings', () => {
+  const pkg = { name: require('../package.json').name, version: '1.2.3-rc.1' };
+  const changelog = '# Changelog\n\n## 1.2.3-rc.1 (2026-10-09)\n';
+  assert.equal(validateCandidateCoordinate({ pkg, changelog }).status, 'candidate_preflight_only');
+  for (const version of ['01.2.3-rc.1', '1.2.3-rc.01', '1.2.3', '1.2.3-rc..1']) {
+    assert.throws(() => validateCandidateCoordinate({ pkg: { ...pkg, version }, changelog }));
+  }
+  for (const invalid of [changelog + '## 1.2.3-rc.1\n', changelog.replace('rc.1 (', 'rc.10 ('),
+    '# Changelog\n## 1.2.3-rc.2\n## 1.2.3-rc.1\n', changelog.replace('2026-10-09', 'anything')]) {
+    assert.throws(() => validateCandidateCoordinate({ pkg, changelog: invalid }));
+  }
 });
