@@ -271,14 +271,25 @@ test('publish workflow is release-only, serialized, pinned, and publishes one ve
   assert.match(workflow, /acquire-trusted-npm-release\.js --out/);
   assert.match(workflow, /KDNA_TRUSTED_NPM_TARBALL=/);
   assert.match(workflow, /run-trusted-npm\.js ci --ignore-scripts/);
-  assert.match(workflow, /run-trusted-npm\.js run release:generate-evidence --/);
-  assert.match(workflow, /node scripts\/publish-verified-artifact\.js/);
+  // Each step names both channels and selects one from the release event, so a
+  // candidate release uses the candidate evidence generator and the candidate
+  // publisher while a stable release keeps the stable pair.
+  assert.match(
+    workflow,
+    /run-trusted-npm\.js run\s+\$\{\{ github\.event\.release\.prerelease && 'candidate:generate-evidence' \|\| 'release:generate-evidence' \}\} --/,
+  );
+  assert.match(
+    workflow,
+    /node \$\{\{ github\.event\.release\.prerelease && 'scripts\/publish-candidate-artifact\.js' \|\| 'scripts\/publish-verified-artifact\.js' \}\}/,
+  );
   assert.match(workflow, /--tag \$\{\{ github\.event\.release\.prerelease && 'components-preview' \|\| 'latest' \}\}/);
   assert.match(workflow, /github\.event\.release\.draft == false/);
   assert.doesNotMatch(workflow, /prerelease == false/);
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
   assert.equal(scripts['release:generate-evidence'], 'node scripts/generate-release-evidence.js');
   assert.equal(scripts['release:publish-verified'], 'node scripts/publish-verified-artifact.js');
+  assert.equal(scripts['candidate:generate-evidence'], 'node scripts/generate-candidate-evidence.js');
+  assert.equal(scripts['candidate:publish-verified'], 'node scripts/publish-candidate-artifact.js');
   assert.doesNotMatch(scripts['test:all'], /(?:^|\s)npm(?:\s|$)/);
   assert.doesNotMatch(scripts.prepublishOnly, /(?:^|\s)npm(?:\s|$)/);
   assert.equal(TRUSTED_NPM_VERSION, '11.17.0');
