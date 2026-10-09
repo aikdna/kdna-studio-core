@@ -19,7 +19,7 @@ const {
   extractTrustedNpmRelease,
   trustedTarballPath,
 } = require('./trusted-npm-release');
-const { CANDIDATE_VERSION_RE } = require('./release-policy');
+const { isCanonicalCandidateVersion } = require('./release-policy');
 
 const BINDING_PATH = 'fixtures/runtime-candidates/binding.json';
 const CURRENT_BINDING_PATH = 'fixtures/runtime-candidates/current-sources.json';
@@ -31,7 +31,7 @@ const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 // one precise shape, and every floating, wildcard, range or malformed form is
 // still rejected.
 function isExactDirectCoordinate(value) {
-  return typeof value === 'string' && (SEMVER_RE.test(value) || CANDIDATE_VERSION_RE.test(value));
+  return typeof value === 'string' && (SEMVER_RE.test(value) || isCanonicalCandidateVersion(value));
 }
 const INTEGRITY_RE = /^sha512-[A-Za-z0-9+/]{86}==$/;
 const CANDIDATE_ARTIFACT_RE = /^fixtures\/runtime-candidates\/[a-z0-9][a-z0-9._-]*\.tgz$/;
