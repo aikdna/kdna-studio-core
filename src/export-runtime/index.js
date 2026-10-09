@@ -1,5 +1,8 @@
 const crypto = require('crypto');
-const cbor = require('cbor-x');
+// Pure-JS CBOR entry: the exported container bytes must not depend on whether
+// the optional native accelerator from cbor-x's optionalDependencies is
+// installed next to this package. See component-runtime-binding.js.
+const cbor = require('cbor-x/index-no-eval');
 const { compileDomain } = require('../compile');
 const {
   assertJudgmentCorePreserved,

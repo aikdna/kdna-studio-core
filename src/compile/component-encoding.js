@@ -1,6 +1,9 @@
 'use strict';
 const {canonicalStringify}=require('../evidence/component-json');
-function encodeComponentRuntime(plan){const {Encoder}=require('cbor-x');const encoder=new Encoder({useRecords:false,structuredClone:false,mapsAsObjects:true});return storedZip([['mimetype',Buffer.from('application/vnd.kdna.asset')],['kdna.json',Buffer.from(canonicalStringify(plan.manifest),'utf8')],['payload.kdnab',Buffer.from(encoder.encode(JSON.parse(canonicalStringify(plan.payload))))]]);}
+// The pure-JS entry is required explicitly: the CBOR bytes must not depend on
+// whether a package manager happened to place the optional native accelerator
+// from cbor-x's optionalDependencies next to this graph.
+function encodeComponentRuntime(plan){const {Encoder}=require('cbor-x/index-no-eval');const encoder=new Encoder({useRecords:false,structuredClone:false,mapsAsObjects:true});return storedZip([['mimetype',Buffer.from('application/vnd.kdna.asset')],['kdna.json',Buffer.from(canonicalStringify(plan.manifest),'utf8')],['payload.kdnab',Buffer.from(encoder.encode(JSON.parse(canonicalStringify(plan.payload))))]]);}
 function storedZip(entries) {
   const local = [];
   const central = [];
