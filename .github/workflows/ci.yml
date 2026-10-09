@@ -19,7 +19,7 @@ jobs:
       - name: Check out the exact Core candidate outside the Studio workspace
         env:
           KDNA_CORE_CANDIDATE_REPOSITORY: aikdna/kdna
-          KDNA_CORE_CANDIDATE_COMMIT: 7f523fde7f7db218ae7e74fc1dd908abc48937e6
+          KDNA_CORE_CANDIDATE_COMMIT: 56a4d389f840aacee559e27aa9b29c950dd8cd23
         run: |
           set -euo pipefail
           runner_temp="$(realpath "$RUNNER_TEMP")"
@@ -56,8 +56,9 @@ jobs:
           echo "KDNA_TRUSTED_NPM_TARBALL=$RUNNER_TEMP/npm-11.17.0.tgz" >> "$GITHUB_ENV"
       # --omit=optional keeps the installed graph equal to the audited graph:
       # the component runtime refuses unbound optional addons
-      # (src/creation-engine/component-runtime-binding.js) and the vendored lock
-      # resolves every non-optional package to file:vendor/*.tgz.
+      # (src/creation-engine/component-runtime-binding.js). The lock resolves
+      # every non-optional package to its exact public registry coordinate, and
+      # vendor/ is kept as the byte anchors the dependency receipt hashes.
       - run: node scripts/run-trusted-npm.js ci --ignore-scripts --omit=optional --no-audit --no-fund --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
       - name: Reproduce both checked candidate artifacts from their exact clean sources
         run: node scripts/ci-leg-receipt.js candidate-sources
