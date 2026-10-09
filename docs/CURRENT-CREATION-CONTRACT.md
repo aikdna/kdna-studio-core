@@ -68,6 +68,14 @@ verifyCreationEvidence(bytes, evidence, binding);
 
 ### Support scope
 
+This Studio producer emits container `0.5.0` with Read grammar `0.6.4`.
+Its Core/Read package versions identify implementation bytes, not container
+interchangeability. They do not establish import, revision or reuse across tools
+that produce NativeSections container `0.6.0` / Read `0.7.0`. Such interchange
+requires a separately supported entry and its own actual saved-byte checks.
+This candidate supports revision within the live session; persistent import and
+resume remain outside the entry below.
+
 Supported: one current graph, ordinary prose and explicit mechanism authoring,
 role-separated adoption channels, export to a new private directory and
 saved-byte verification. Not supported in this candidate: the published `3.0.0`
