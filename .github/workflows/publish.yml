@@ -12,8 +12,7 @@ jobs:
   publish:
     if: >-
       github.event.action == 'published' &&
-      github.event.release.draft == false &&
-      github.event.release.prerelease == false
+      github.event.release.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -55,6 +54,7 @@ jobs:
           node scripts/publish-verified-artifact.js
           --evidence "$RUNNER_TEMP/kdna-studio-core-release-evidence.json"
           --artifact "$RUNNER_TEMP/kdna-studio-core-release.tgz"
+          --tag ${{ github.event.release.prerelease && 'components-preview' || 'latest' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Remove transient release artifacts

@@ -42,8 +42,8 @@
   ],
   "dependencies": {
     "cbor-x": "1.6.5",
-    "@aikdna/kdna-core": "file:vendor/aikdna-kdna-core-0.37.1-rc.browser.1.tgz",
-    "@aikdna/kdna-read": "file:vendor/aikdna-kdna-read-0.11.2-rc.browser.1.tgz"
+    "@aikdna/kdna-core": "0.37.1-rc.browser.1",
+    "@aikdna/kdna-read": "0.11.2-rc.browser.1"
   },
   "engines": {
     "node": ">=22"

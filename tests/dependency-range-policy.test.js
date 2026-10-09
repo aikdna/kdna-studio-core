@@ -20,8 +20,11 @@ const {
 const root = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
-const coordinate = manifest.dependencies['@aikdna/kdna-core'];
-const integrity = lock.packages['node_modules/@aikdna/kdna-core'].integrity;
+// The shipped graph now installs its candidates from the exact registry
+// coordinates, so the file: pin rules are exercised with a probe coordinate
+// that points at a committed vendored archive instead of the candidate graph.
+const coordinate = 'file:vendor/noble-hashes-1.8.0.tgz';
+const integrity = lock.packages['node_modules/@noble/hashes'].integrity;
 
 function findingsFor(spec, mutateLock) {
   const next = structuredClone(manifest);
@@ -90,15 +93,24 @@ test('a file: pin is only accepted with a matching lock coordinate and a full sh
   );
 });
 
-test('the standalone gate is red when a committed pin loses its integrity', () => {
+test('the standalone gate is red when a committed file: pin loses its integrity', () => {
   const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'core-range-policy-'));
   try {
-    for (const name of ['package.json', 'package-lock.json']) {
-      fs.copyFileSync(path.join(root, name), path.join(sandbox, name));
-    }
+    // The shipped graph installs its candidates from exact registry
+    // coordinates now, so the sandbox carries the committed graph plus one
+    // synthetic file: pin; losing that pin's integrity must still turn the
+    // standalone gate red.
+    const probeName = 'policy-probe';
+    const probeManifest = structuredClone(manifest);
+    probeManifest.dependencies[probeName] = coordinate;
+    fs.writeFileSync(path.join(sandbox, 'package.json'), `${JSON.stringify(probeManifest, null, 2)}\n`);
+    const probeLock = structuredClone(lock);
+    probeLock.packages[`node_modules/${probeName}`] = { version: '1.0.0', resolved: coordinate, integrity };
+    fs.writeFileSync(path.join(sandbox, 'package-lock.json'), `${JSON.stringify(probeLock, null, 2)}\n`);
     fs.mkdirSync(path.join(sandbox, 'vendor'), { recursive: true });
-    for (const [, spec] of Object.entries(manifest.dependencies ?? {})) {
+    for (const [, spec] of Object.entries(probeManifest.dependencies ?? {})) {
       if (!spec.startsWith('file:')) continue;
+      fs.mkdirSync(path.dirname(path.join(sandbox, spec.slice('file:'.length))), { recursive: true });
       fs.copyFileSync(path.join(root, spec.slice('file:'.length)), path.join(sandbox, spec.slice('file:'.length)));
     }
     const script = path.join(root, 'scripts', 'dependency-coordinate-policy.js');
@@ -106,7 +118,7 @@ test('the standalone gate is red when a committed pin loses its integrity', () =
     assert.equal(green.status, 0, green.stdout + green.stderr);
 
     const mutantLock = JSON.parse(fs.readFileSync(path.join(sandbox, 'package-lock.json'), 'utf8'));
-    delete mutantLock.packages['node_modules/@aikdna/kdna-core'].integrity;
+    delete mutantLock.packages[`node_modules/${probeName}`].integrity;
     fs.writeFileSync(path.join(sandbox, 'package-lock.json'), `${JSON.stringify(mutantLock, null, 2)}\n`);
     const red = spawnSync(process.execPath, [script, '--root', sandbox], { encoding: 'utf8' });
     assert.equal(red.status, 1, red.stdout + red.stderr);

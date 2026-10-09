@@ -14,7 +14,13 @@ const {
   validateCurrentBinding,
 } = require('../scripts/current-release-binding');
 const { parseTarFiles, validateArtifact, validatePackReport, validateCandidatePackReport, validateCandidateArtifact } = require('../scripts/release-evidence');
-const { STABLE_VERSION_RE, validateReleaseContext, validateCandidateCoordinate } = require('../scripts/release-policy');
+const {
+  CANDIDATE_TAG_PREFIX,
+  STABLE_VERSION_RE,
+  validateCandidateCoordinate,
+  validateCandidateReleaseContext,
+  validateReleaseContext,
+} = require('../scripts/release-policy');
 const {
   registeredNotRunFor,
   unavailabilityCodes,
@@ -40,6 +46,7 @@ const {
   lookupArguments,
   publishArguments,
   publishCandidate,
+  resolvePublishTag,
   releaseDecision,
 } = require('../scripts/publish-verified-artifact');
 
@@ -151,6 +158,27 @@ function releaseInput(overrides = {}) {
   };
 }
 
+const CANDIDATE_VERSION = '4.0.0-rc.components.2';
+function candidateReleaseInput(overrides = {}) {
+  const version = overrides.pkg?.version || CANDIDATE_VERSION;
+  const tag = `${CANDIDATE_TAG_PREFIX}${version}`;
+  return {
+    pkg: { name: '@aikdna/kdna-studio-core', version, ...overrides.pkg },
+    changelog: overrides.changelog ?? `# Changelog\n\n## ${version} (2026-10-09)\n`,
+    env: {
+      GITHUB_EVENT_NAME: 'release',
+      RELEASE_EVENT_ACTION: 'published',
+      RELEASE_TAG_NAME: tag,
+      RELEASE_IS_DRAFT: 'false',
+      RELEASE_IS_PRERELEASE: 'true',
+      GITHUB_REF: `refs/tags/${tag}`,
+      GITHUB_SHA: HASH,
+      ...overrides.env,
+    },
+    git: { status: '', head: HASH, tagCommit: HASH, ...overrides.git },
+  };
+}
+
 function git(repository, args) {
   const result = spawnSync('git', args, { cwd: repository, encoding: 'utf8', shell: false });
   assert.equal(result.error, undefined);
@@ -245,6 +273,9 @@ test('publish workflow is release-only, serialized, pinned, and publishes one ve
   assert.match(workflow, /run-trusted-npm\.js ci --ignore-scripts/);
   assert.match(workflow, /run-trusted-npm\.js run release:generate-evidence --/);
   assert.match(workflow, /node scripts\/publish-verified-artifact\.js/);
+  assert.match(workflow, /--tag \$\{\{ github\.event\.release\.prerelease && 'components-preview' \|\| 'latest' \}\}/);
+  assert.match(workflow, /github\.event\.release\.draft == false/);
+  assert.doesNotMatch(workflow, /prerelease == false/);
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
   assert.equal(scripts['release:generate-evidence'], 'node scripts/generate-release-evidence.js');
   assert.equal(scripts['release:publish-verified'], 'node scripts/publish-verified-artifact.js');
@@ -491,6 +522,36 @@ test('release context binds package, changelog, event, tag ref, HEAD, and workfl
   ]) {
     assert.throws(() => validateReleaseContext(input));
   }
+});
+
+test('candidate release context binds the same event, tag and commit as the stable channel', () => {
+  assert.deepEqual(validateCandidateReleaseContext(candidateReleaseInput()), {
+    channel: 'candidate',
+    name: '@aikdna/kdna-studio-core',
+    version: CANDIDATE_VERSION,
+    tag: `${CANDIDATE_TAG_PREFIX}${CANDIDATE_VERSION}`,
+    ref: `refs/tags/${CANDIDATE_TAG_PREFIX}${CANDIDATE_VERSION}`,
+    commit: HASH,
+  });
+  for (const input of [
+    candidateReleaseInput({ env: { RELEASE_IS_PRERELEASE: 'false' } }),
+    candidateReleaseInput({ env: { RELEASE_TAG_NAME: CANDIDATE_VERSION } }),
+    candidateReleaseInput({ env: { GITHUB_REF: 'refs/heads/main' } }),
+    candidateReleaseInput({ env: { GITHUB_SHA: 'b'.repeat(40) } }),
+    candidateReleaseInput({ env: { GITHUB_EVENT_NAME: 'workflow_dispatch' } }),
+    candidateReleaseInput({ env: { RELEASE_EVENT_ACTION: 'created' } }),
+    candidateReleaseInput({ env: { RELEASE_IS_DRAFT: 'true' } }),
+    candidateReleaseInput({ git: { status: ' M package.json' } }),
+    candidateReleaseInput({ git: { tagCommit: 'b'.repeat(40) } }),
+    candidateReleaseInput({ changelog: `# Changelog\n\n## ${CANDIDATE_VERSION}\n\n## ${CANDIDATE_VERSION}\n` }),
+    candidateReleaseInput({ changelog: `# Changelog\n\n## 4.0.0-rc.other.1\n` }),
+  ]) {
+    assert.throws(() => validateCandidateReleaseContext(input));
+  }
+  // The two channels are mutually exclusive: a candidate coordinate can never
+  // satisfy the stable gate and a stable coordinate can never satisfy this one.
+  assert.throws(() => validateReleaseContext(candidateReleaseInput()));
+  assert.throws(() => validateCandidateReleaseContext(releaseInput()));
 });
 
 test('current package and changelog form one exact finalizable release coordinate', () => {
@@ -741,16 +802,32 @@ test('registry lookup and publication use the official registry and the exact ta
     '--registry=https://registry.npmjs.org/',
     '--@aikdna:registry=https://registry.npmjs.org/',
   ]);
-  assert.deepEqual(publishArguments('/tmp/exact.tgz'), [
+  assert.deepEqual(publishArguments('/tmp/exact.tgz', 'components-preview'), [
     'publish',
     '/tmp/exact.tgz',
     '--ignore-scripts',
     '--provenance',
     '--access',
     'public',
+    '--tag=components-preview',
     '--registry=https://registry.npmjs.org/',
     '--@aikdna:registry=https://registry.npmjs.org/',
   ]);
+});
+
+test('the publish tag is required and a candidate never reaches latest', () => {
+  assert.throws(() => resolvePublishTag('', '4.0.0-rc.components.2'), /publish tag is required/u);
+  assert.throws(
+    () => resolvePublishTag('latest', '4.0.0-rc.components.2'),
+    /latest may only be published for a stable version/u,
+  );
+  assert.throws(
+    () => resolvePublishTag('components-preview', '4.0.0'),
+    /reserved for a candidate coordinate/u,
+  );
+  assert.throws(() => resolvePublishTag('next', '4.0.0-rc.components.2'), /unapproved publish tag/u);
+  assert.equal(resolvePublishTag('components-preview', '4.0.0-rc.components.2'), 'components-preview');
+  assert.equal(resolvePublishTag('latest', '4.0.0'), 'latest');
 });
 
 test('candidate coordinate preparation rejects malformed or misleading headings', () => {
