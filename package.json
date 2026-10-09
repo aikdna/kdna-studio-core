@@ -80,6 +80,5 @@
     },
     "./package.json": "./package.json"
   },
-  "private": true,
   "types": "src/index.d.ts"
 }
