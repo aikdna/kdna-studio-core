@@ -8,7 +8,7 @@ This release uses one current Core 0.37.1-rc.browser.1 / Read 0.11.2-rc.browser.
 |---|---|
 | Local candidate version | `4.0.0-rc.components.2` |
 | Published `latest` of the same package | `3.0.0` |
-| Candidate publication state | Unpublished. `package.json` is `private`, and every `file:` coordinate must be replaced by an exact registry version before any release |
+| Candidate publication state | **Published** on the candidate npm tag `components-preview`; `latest` remains `3.0.0`. The repository `package.json` carries no `private` field and no `file:` dependency coordinate. |
 | Bound peers | Core `0.37.1-rc.browser.1`, Read `0.11.2-rc.browser.1` |
 
 The candidate deliberately has its own coordinate. It is **not** a compatible

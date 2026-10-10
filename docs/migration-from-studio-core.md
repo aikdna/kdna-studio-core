@@ -4,7 +4,8 @@
 > coordinate and the top-level responsibilities that version exposes
 > (`authoring`, `project`, `cards`, `compile`, `creationEngine`, …). The
 > repository's current release candidate is `4.0.0-rc.components.2`, which is
-> unpublished and exposes a different API; see
+> published on the candidate npm tag `components-preview` (while `latest`
+> remains `3.0.0`) and exposes a different API; see
 > [`CURRENT-CREATION-CONTRACT.md`](./CURRENT-CREATION-CONTRACT.md). Nothing in
 > this guide is an upgrade path to that candidate.
 
