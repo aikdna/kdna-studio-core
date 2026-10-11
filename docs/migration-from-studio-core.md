@@ -3,11 +3,9 @@
 > **Coordinate scope.** This guide migrates to the **published `3.0.0`**
 > coordinate and the top-level responsibilities that version exposes
 > (`authoring`, `project`, `cards`, `compile`, `creationEngine`, …). The
-> repository's current release candidate is `4.0.0-rc.components.2`, which is
-> published on the candidate npm tag `components-preview` (while `latest`
-> remains `3.0.0`) and exposes a different API; see
+> repository's current source line is `4.0.0`, which exposes a different API; see
 > [`CURRENT-CREATION-CONTRACT.md`](./CURRENT-CREATION-CONTRACT.md). Nothing in
-> this guide is an upgrade path to that candidate.
+> this guide is an upgrade path to that line.
 
 The maintained package is `@aikdna/kdna-studio-core`. Migrating from the old
 package is a source migration, not a drop-in package rename.
@@ -27,21 +25,21 @@ requires that file. As a result, a clean install of
 must not be used as executable compatibility evidence for the maintained
 package.
 
-This guide documents the migration to the current maintained package
+This guide documents the historical migration to the maintained package
 (`3.0.0`). The `2.0.2` coordinate is kept for historical context and for
 consumers that have not yet completed the 2.x → 3.0.0 step; it is no longer
 the maintained coordinate and must not be installed from this guide.
 
 ## Install the maintained package
 
-Remove the old package and install the current maintained coordinate:
+Remove the old package and install this guide's exact coordinate:
 
 ```bash
 npm uninstall @aikdna/studio-core
-npm install @aikdna/kdna-studio-core
+npm install @aikdna/kdna-studio-core@3.0.0
 ```
 
-`npm install @aikdna/kdna-studio-core` resolves to the published `3.0.0`
+The explicit version preserves this guide's API regardless of the registry's
 `latest` tag. If you are already on `2.0.2`, upgrade in place with:
 
 ```bash

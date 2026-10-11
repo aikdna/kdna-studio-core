@@ -19,9 +19,9 @@ jobs:
       - name: Check out the exact Core candidate outside the Studio workspace
         env:
           KDNA_CORE_CANDIDATE_REPOSITORY: aikdna/kdna
-          KDNA_CORE_CANDIDATE_COMMIT: 56a4d389f840aacee559e27aa9b29c950dd8cd23
         run: |
           set -euo pipefail
+          KDNA_CORE_CANDIDATE_COMMIT="$(node -p 'require("./fixtures/runtime-candidates/current-sources.json").packages.find(p => p.name === "@aikdna/kdna-core").commit')"
           runner_temp="$(realpath "$RUNNER_TEMP")"
           workspace="$(realpath "$GITHUB_WORKSPACE")"
           candidate_source="$runner_temp/kdna-core-candidate"

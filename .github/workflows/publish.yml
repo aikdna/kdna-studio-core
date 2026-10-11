@@ -35,11 +35,41 @@ jobs:
           check-latest: false
           registry-url: 'https://registry.npmjs.org'
       - run: node --version | grep -Fx "$(printf 'v%s' '22.23.1')"
+      - name: Check out the exact Runtime source outside the Studio workspace
+        env:
+          KDNA_CORE_CANDIDATE_REPOSITORY: aikdna/kdna
+        run: |
+          set -euo pipefail
+          KDNA_CORE_CANDIDATE_COMMIT="$(node -p 'require("./fixtures/runtime-candidates/current-sources.json").packages.find(p => p.name === "@aikdna/kdna-core").commit')"
+          runner_temp="$(realpath "$RUNNER_TEMP")"
+          workspace="$(realpath "$GITHUB_WORKSPACE")"
+          candidate_source="$runner_temp/kdna-core-candidate"
+          test ! -e "$candidate_source"
+          git init --quiet "$candidate_source"
+          git -C "$candidate_source" remote add origin \
+            "https://github.com/$KDNA_CORE_CANDIDATE_REPOSITORY.git"
+          git -C "$candidate_source" fetch --quiet --no-tags --depth=1 origin \
+            "$KDNA_CORE_CANDIDATE_COMMIT"
+          git -C "$candidate_source" checkout --quiet --detach \
+            "$KDNA_CORE_CANDIDATE_COMMIT"
+          test "$(git -C "$candidate_source" rev-parse HEAD)" = \
+            "$KDNA_CORE_CANDIDATE_COMMIT"
+          candidate_source="$(realpath "$candidate_source")"
+          case "$candidate_source" in
+            "$runner_temp"/*) ;;
+            *) exit 1 ;;
+          esac
+          case "$candidate_source" in
+            "$workspace"/*) exit 1 ;;
+          esac
+          echo "KDNA_CORE_CANDIDATE_SOURCE=$candidate_source" >> "$GITHUB_ENV"
       - name: Acquire and verify the audited npm release bytes
         run: |
           node scripts/acquire-trusted-npm-release.js --out "$RUNNER_TEMP/npm-11.17.0.tgz"
           echo "KDNA_TRUSTED_NPM_TARBALL=$RUNNER_TEMP/npm-11.17.0.tgz" >> "$GITHUB_ENV"
       - run: node scripts/run-trusted-npm.js ci --ignore-scripts --omit=optional --no-audit --no-fund --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
+      - name: Reproduce both checked Runtime artifacts from their exact sources
+        run: node scripts/ci-leg-receipt.js candidate-sources
       - name: Verify release event, tag, commit, package, and changelog
         run: node scripts/run-trusted-npm.js run release:check
       - name: Run the complete release test suite
