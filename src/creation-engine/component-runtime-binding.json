@@ -6,7 +6,7 @@
     {
       "name": "@aikdna/kdna-core",
       "version": "0.37.2",
-      "archive_sha256": "6365329576ade98ca9cda78e39124b39cfe7da6bd56371a025bf6ed352fcc562",
+      "archive_sha256": "16234f84440252b0c449c529de71435630cc79816f88ff0d0a8a2b4d852c1274",
       "files": [
         {
           "path": "LICENSE",
@@ -20,8 +20,8 @@
         },
         {
           "path": "README.md",
-          "bytes": 17778,
-          "sha256": "db53e8ae85ff467b066ff995001ad550a0ee70f8422ce8996a7f8ec78404bd23"
+          "bytes": 17855,
+          "sha256": "a21d594030e1d903b7a313ce3194ea800f67c2be1f6a80b7f991de6b41cee1cd"
         },
         {
           "path": "package.json",
