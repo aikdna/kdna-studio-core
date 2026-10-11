@@ -1,3 +1,9 @@
+## 4.0.0
+
+Bind the current typed creation API to Core `0.37.2` and Read `0.11.3` with exact dependency archives and complete installed member checks. Version `4.0.0` exposes `createSession`, `verifyCreationEvidence` and `./protected-export`; the historical `3.0.0` project/card API and its evidence remain a separate compatibility line.
+
+Preserve distinct alternatives, channel-bound adoption, pre-compiler review, one-use saved-byte completion, static evidence limits and password/recovery export. The producer remains on container `0.5.0` / Read grammar `0.6.4`; this package coordinate does not add NativeSections interchange or live human acceptance.
+
 ## 4.0.0-rc.components.2
 
 Current candidate preflight binds Core `0.37.1-rc.browser.1`, Read

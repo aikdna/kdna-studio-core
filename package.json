@@ -1,6 +1,6 @@
 {
   "name": "@aikdna/kdna-studio-core",
-  "version": "4.0.0-rc.components.2",
+  "version": "4.0.0",
   "description": "Current ordinary and component Creation with actual role-specific adoption and one-use saved-byte context.",
   "type": "commonjs",
   "main": "src/index.js",
@@ -42,8 +42,8 @@
   ],
   "dependencies": {
     "cbor-x": "1.6.5",
-    "@aikdna/kdna-core": "0.37.1-rc.browser.1",
-    "@aikdna/kdna-read": "0.11.2-rc.browser.1"
+    "@aikdna/kdna-core": "0.37.2",
+    "@aikdna/kdna-read": "0.11.3"
   },
   "engines": {
     "node": ">=22"

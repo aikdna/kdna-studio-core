@@ -1,17 +1,17 @@
 # Current Studio creation contract
 
-This release uses one current Core 0.37.1-rc.browser.1 / Read 0.11.2-rc.browser.1 graph. Component semantics is the public `/components` descriptor with D `sha256:37e857cc4e43f7283a51ee6abe1f6e8401803902e8dc47f6d14d712aa7d7b089`. Studio provides authoring-to-wire mapping and a live creation lifecycle; Core alone interprets component content. No profile, public definition, native protocol ID, arbitrary module, trust provider or compiler callback is accepted from the authoring caller.
+Studio Core `4.0.0` uses one Core `0.37.2` / Read `0.11.3` graph. Component semantics is the public `/components` descriptor with D `sha256:37e857cc4e43f7283a51ee6abe1f6e8401803902e8dc47f6d14d712aa7d7b089`. Studio provides authoring-to-wire mapping and a live creation lifecycle; Core alone interprets component content. No profile, public definition, native protocol ID, arbitrary module, trust provider or compiler callback is accepted from the authoring caller.
 
 ## Publication coordinate
 
 | Item | Value |
 |---|---|
-| Local candidate version | `4.0.0-rc.components.2` |
-| Published `latest` of the same package | `3.0.0` |
-| Candidate publication state | **Published** on the candidate npm tag `components-preview`; `latest` remains `3.0.0`. The repository `package.json` carries no `private` field and no `file:` dependency coordinate. |
-| Bound peers | Core `0.37.1-rc.browser.1`, Read `0.11.2-rc.browser.1` |
+| Package coordinate | `4.0.0` |
+| Earlier stable API | `3.0.0` |
+| Dependency declarations | Exact registry versions; no `private` field or `file:` dependency coordinate. |
+| Bound peers | Core `0.37.2`, Read `0.11.3` |
 
-The candidate deliberately has its own coordinate. It is **not** a compatible
+This line has its own major coordinate. It is **not** a compatible
 update of `3.0.0`, and describing it as "Studio 3.x" would merge two
 incompatible products under one number.
 
@@ -78,7 +78,7 @@ resume remain outside the entry below.
 
 Supported: one current graph, ordinary prose and explicit mechanism authoring,
 role-separated adoption channels, export to a new private directory and
-saved-byte verification. Not supported in this candidate: the published `3.0.0`
+saved-byte verification. Not supported on this line: the historical `3.0.0`
 project/card API, importing or converting old evidence, persistent resume of a
 previous candidate's workspace, signing or identity services, and any claim of
 verified identity, action authorization or storage durability.
@@ -137,6 +137,6 @@ The closed envelope contains `format:{id:'kdna.studio-creation-evidence/2',versi
 
 The private context contains the original materials and their UTF-8 hashes, all proposal alternatives and revisions, complete selection history, author identity claims, channel kind/name, delegation record or null, complete asset identity/version and the fixed graph version. Decision binds context and preview digests, complete proposal set and actual reply plus Agent interpretation. The hash chain is replayed against the captured state; material, revision, selection, final review and final history consistency are checked independently of a claimed flag.
 
-`verifyCreationEvidence(bytes,evidence,expectedBinding)` requires the external `{session_id,asset_digest,evidence_digest}` binding. It compares actual Core admission and the complete public Canonical IR from the independently reconstructed plan, not ZIP/CBOR byte equality across providers. This allows genuine peer-provider encodings while binding exact actual A and exact private evidence hash externally. Current producer coordinates are JS `@aikdna/kdna-studio-core / 4.0.0-rc.components.2` and Swift `KDNAStudioCore / 0.6.0-rc.components.1`; artifact SHA UNKNOWN is explicitly unproved, not a trusted registry signature.
+`verifyCreationEvidence(bytes,evidence,expectedBinding)` requires the external `{session_id,asset_digest,evidence_digest}` binding. It compares actual Core admission and the complete public Canonical IR from the independently reconstructed plan, not ZIP/CBOR byte equality across providers. This allows genuine peer-provider encodings while binding exact actual A and exact private evidence hash externally. Recognized producer declarations are JS `@aikdna/kdna-studio-core / 4.0.0` and the existing Swift `KDNAStudioCore / 0.6.0-rc.components.1` coordinate. Recognition still requires the exact current graph, context and semantic checks; the label alone does not establish cross-provider interoperability for a new graph. Artifact SHA UNKNOWN is explicitly unproved, not a trusted registry signature.
 
 Static consistent means external byte/evidence bindings, public observations and the private audit agree. It does not establish that a caller-supplied binding or transcript is authentic, replay a live capability, verify execution identity, or authorize an action. Static results always retain `creation_accepted:not_evaluated` and `live_context:unavailable`. Cross-provider tests, installed exact package checks and live saving are separate evidence layers.
