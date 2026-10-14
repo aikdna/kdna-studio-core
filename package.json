@@ -50,7 +50,7 @@
   },
   "scripts": {
     "lint": "node scripts/run-lint.js",
-    "test": "node --test test/component-lifecycle.test.js test/component-source-adoption.test.js",
+    "test": "node --test test/component-lifecycle.test.js test/component-source-adoption.test.js test/component-system.test.js",
     "test:all": "node scripts/run-test-all.js",
     "test:migration:registry": "node scripts/verify-registry-migration.js",
     "verify:candidate-sources": "node scripts/verify-current-candidate-sources.js",

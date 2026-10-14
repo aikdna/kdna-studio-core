@@ -2,7 +2,7 @@
 
 // Current component creation uses one exact public dependency graph.
 const crypto=require('node:crypto');
-const {own,fail,hash,clone,freeze,record,hostRecord,text,group}=require('./component-input');
+const {own,fail,hash,clone,freeze,record,hostRecord,text,group,systemDeclaration}=require('./component-input');
 const {getBoundRuntime}=require('./component-runtime-binding');
 const {buildMaterialization}=require('../compile/component-materialization');
 const {encodeComponentRuntime}=require('../compile/component-encoding');
@@ -28,13 +28,15 @@ function createComponentSession(options){
   if(own(channel,'authorization'))channel.authorization=freeze(clone(channel.authorization));Object.freeze(channel);
   const sessionId='session:'+crypto.randomUUID(),createdAt=new Date().toISOString();
   const asset={asset_id:'asset:'+crypto.randomUUID(),asset_uid:'urn:uuid:'+crypto.randomUUID()};
-  let state={session_id:sessionId,revision:0,brief:null,materials:[],groups:[],choices:null,history:[]};
+  let state={session_id:sessionId,revision:0,brief:null,materials:[],groups:[],choices:null,system:null,history:[]};
   let preview=null,token=null,busy=false,phase='draft';const seen=new Set(),saveOwner={};
   const append=(event,detail)=>{const e={sequence:state.history.length+1,revision:state.revision,event,at:new Date().toISOString(),detail:clone(detail),previous_digest:state.history.at(-1)?.digest||null};state.history.push({...e,digest:hash(e)});};
   const open=()=>{if(busy)fail('CREATION_SESSION_BUSY');if(phase!=='draft')fail('CREATION_SESSION_SEALED');};
   const invalidate=()=>{contexts.abandonContext(token);token=null;preview=null;};
   const evolve=(event,detail,fn)=>{invalidate();fn();state.revision++;append(event,detail);};
-  function inspect(){return freeze(clone({...state,phase,preview:preview?.review||null,authority:{identity:'not_verified',creation:'not_evaluated',action:'not_evaluated'}}));}
+  // The declared system layer appears only once it exists; every earlier view
+  // keeps its exact previous shape.
+  function inspect(){const {system,...rest}=state;return freeze(clone({...rest,...(system?{system}:{}),phase,preview:preview?.review||null,authority:{identity:'not_verified',creation:'not_evaluated',action:'not_evaluated'}}));}
   function setBrief(input){open();record(input,['title','scope','highest_question'],['title','scope']);if(!own(input,'highest_question'))fail('CREATION_HIGHEST_QUESTION_REQUIRED');text(input.title);text(input.scope);text(input.highest_question);evolve('brief',input,()=>{state.brief=clone(input);state.choices=null;});return inspect();}
   function recordMaterial(input){
     open();record(input,['kind','title','content','coordinate']);if(!['text','interview'].includes(input.kind))fail('CREATION_MATERIAL_KIND_UNSUPPORTED');
@@ -53,12 +55,15 @@ function createComponentSession(options){
   }
   function snapshot(){
     if(!state.brief||!state.materials.length||!state.groups.length||!state.choices)fail('CREATION_REVIEW_INCOMPLETE');
-    return freeze(clone({session_id:sessionId,revision:state.revision,agent,asset:{...asset,version:'0.1.'+state.revision},createdAt,adoption_channel:{kind:channel.kind,channel:channel.channel},corePackageVersion:runtime.coreVersion,synthetic_fixture:syntheticFixture,brief:state.brief,materials:state.materials,groups:state.groups,history:state.history,authorization:channel.kind==='delegated_agent_editorial'?channel.authorization:null,selected:state.groups.map(g=>({judgmentLocalKey:g.localKey,alternative:g.alternatives.find(a=>a.localKey===state.choices[g.localKey])}))}));
+    const {system}=state;return freeze(clone({session_id:sessionId,revision:state.revision,agent,asset:{...asset,version:'0.1.'+state.revision},createdAt,adoption_channel:{kind:channel.kind,channel:channel.channel},corePackageVersion:runtime.coreVersion,synthetic_fixture:syntheticFixture,brief:state.brief,materials:state.materials,groups:state.groups,history:state.history,authorization:channel.kind==='delegated_agent_editorial'?channel.authorization:null,selected:state.groups.map(g=>({judgmentLocalKey:g.localKey,alternative:g.alternatives.find(a=>a.localKey===state.choices[g.localKey])})),...(system?{system}:{})}));
   }
+  // The system layer does not change the selected alternatives, so it never
+  // clears choices; any revision still forces a fresh preview and adoption.
+  function declareSystem(input){open();const normalized=systemDeclaration(input);evolve('system',normalized,()=>{state.system=normalized;});return inspect();}
   function compilePreview(){
     open();invalidate();const s=snapshot();
     const plan=buildMaterialization(s,runtime.descriptor,{adoption_kind:channel.kind,phase:'preview-only'});
-    const review={session_id:sessionId,revision:state.revision,kind:'pre_compiler_authoring_review',context_digest:hash(s),selected:clone(s.selected),expected_component_bindings:plan.expectedComponents,presence:plan.presence,proposal_digests:plan.proposalDigests,creation_accepted:'not_evaluated'};
+    const review={session_id:sessionId,revision:state.revision,kind:'pre_compiler_authoring_review',context_digest:hash(s),selected:clone(s.selected),...(s.system?{system:clone(s.system)}:{}),expected_component_bindings:plan.expectedComponents,presence:plan.presence,proposal_digests:plan.proposalDigests,creation_accepted:'not_evaluated'};
     preview={snapshot:s,review:freeze({...review,preview_digest:hash(review)})};return preview.review;
   }
   async function receiveAdoptionReply(){
@@ -102,6 +107,6 @@ function createComponentSession(options){
   }
   function completeSave(bytes){if(busy||phase!=='awaiting_saved_readback')fail('CREATION_SAVE_STATE_INVALID');phase='sealed';try{return contexts.completeSave(saveOwner,bytes,runtime.admitBytes);}catch(e){phase='failed';throw e;}}
   function abort(){invalidate();contexts.abandonSave(saveOwner);phase='aborted';return inspect();}
-  return Object.freeze({agent:Object.freeze({setBrief,recordMaterial,propose,revise,compilePreview}),receiveAdoptionReply,exportAsset,completeSave,inspect,abort});
+  return Object.freeze({agent:Object.freeze({setBrief,recordMaterial,propose,revise,declareSystem,compilePreview}),receiveAdoptionReply,exportAsset,completeSave,inspect,abort});
 }
 module.exports={createComponentSession};

@@ -4,6 +4,17 @@
 const {own,fail,hash,clone,freeze,local} = require('../creation-engine/component-input');
 const {canonicalStringify} = require('../evidence/component-json');
 const RULE = 'kdna.studio-materialization/2';
+// The four normative relation tuples exactly as the contract vocabulary lists
+// them (operator/effect terms and the ordered role pairs; create acceptance is
+// proven for every kind). Directed families read source-side first:
+// support supporter->claim, qualify qualifier->qualified, complement
+// supplement->base; conflict is undirected side_a/side_b.
+const RELATION_TUPLES = Object.freeze({
+  support: { roles: ['supporter', 'claim'], direction: 'directed', operator: 'supports', effect: 'offers_support' },
+  qualify: { roles: ['qualifier', 'qualified'], direction: 'directed', operator: 'qualifies', effect: 'limits_interpretation' },
+  complement: { roles: ['supplement', 'base'], direction: 'directed', operator: 'complements', effect: 'adds_perspective' },
+  conflict: { roles: ['side_a', 'side_b'], direction: 'undirected', operator: 'conflicts_with', effect: 'preserves_disagreement' },
+});
 const D = 'sha256:37e857cc4e43f7283a51ee6abe1f6e8401803902e8dc47f6d14d712aa7d7b089';
 const utf8 = (a,b) => Buffer.compare(Buffer.from(a,'utf8'),Buffer.from(b,'utf8'));
 function semantic(v) {
@@ -31,7 +42,7 @@ function buildMaterialization(input, descriptor, decision) {
     const carrier = descriptor.carriers[kind];
     return {id:carrier.id,critical:carrier.critical,definition:carrier.definition,value:semantic(value)};
   };
-  const judgments=[], reasons=[], sources=[], sourceUses=[], materials=[], declarations=[], presence=[], forms=new Set();
+  const judgments=[], reasons=[], sources=[], sourceUses=[], materials=[], declarations=[], presence=[], forms=new Set(), judgmentIds=new Map();
   const expectedComponents=[]; const groupKeys = new Set();
   for (const selected of s.selected) {
     const key=selected.judgmentLocalKey,a=selected.alternative;
@@ -91,12 +102,27 @@ function buildMaterialization(input, descriptor, decision) {
         materials.push({id,kind:'attachment',statement:notice.statement,source_refs:refs});
       }
     }
-    judgments.push(judgment);
+    judgments.push(judgment); judgmentIds.set(key, jid);
     forms.add(judgment.form);
   }
   declarations.sort((a,b)=>utf8(a.judgment_ref,b.judgment_ref)||utf8(a.component_ref,b.component_ref));
+  // The declared system layer maps here or not at all: absent declarations
+  // keep the exact previous empty arrays. Shared declarations carry empty
+  // actor lists (the contract's Subject allows them; actors stay the session's
+  // own stance). A reference that is unknown, or that names a proposed but
+  // unselected judgment, is a named refusal — never a silent drop. Boundaries
+  // are refused in the grammar until the actor model exists.
+  const sharedDeclarations=[], relationships=[];
+  if (s.system) {
+    for (const kind of ['worldview','value_order']) if (s.system[kind]) sharedDeclarations.push({id:mint('shared',kind==='value_order'?'value-order':kind),subject:{actor_ids:[],statement:clone(s.system[kind].statement)},applies_to:{kind:'asset'},kind,value:clone(s.system[kind].items)});
+    for (const relation of s.system.relations || []) {
+      const spec=RELATION_TUPLES[relation.kind];
+      const judged=key=>{ if(judgmentIds.has(key))return judgmentIds.get(key); if((s.groups||[]).some(g=>g.localKey===key))fail('CREATION_SYSTEM_JUDGMENT_UNSELECTED'); fail('CREATION_SYSTEM_JUDGMENT_UNKNOWN'); };
+      relationships.push({id:mint('relationship',relation.localKey),kind:{term:relation.kind},direction:spec.direction,operator:{term:spec.operator},effect:{term:spec.effect},statement:clone(relation.statement),participants:[{role:{term:spec.roles[0]},judgment_ref:judged(relation.from)},{role:{term:spec.roles[1]},judgment_ref:judged(relation.to)}]});
+    }
+  }
   const proposalDigests=[...new Set(declarations.map(x=>x.adoption_proposal_digest))].sort(utf8);
-  const payload={profile:'kdna.payload.judgment',profile_version:'0.5.1',asset:{asset_id:s.asset.asset_id,asset_version:s.asset.version,judgment_version:s.asset.version},actors:[],scope:{statement:s.brief.scope},judgments,reasons,asset_capability:forms.has('rule')?(forms.has('conclusion')?'mixed':'result_forming_rules'):'asserted_answers',declarations:{highest_question:{state:'provided',value:s.brief.highest_question},boundaries:{state:'none',value:null}},kernel:{purpose:{kind:'summary'},foundation_refs:[]},shared_declarations:[],resources:[],relationships:[],dependencies:[],contracts:[],conditions:[],exceptions:[],misuse:[],examples:[],sources,source_uses:sourceUses,materials};
+  const payload={profile:'kdna.payload.judgment',profile_version:'0.5.1',asset:{asset_id:s.asset.asset_id,asset_version:s.asset.version,judgment_version:s.asset.version},actors:[],scope:{statement:s.brief.scope},judgments,reasons,asset_capability:forms.has('rule')?(forms.has('conclusion')?'mixed':'result_forming_rules'):'asserted_answers',declarations:{highest_question:{state:'provided',value:s.brief.highest_question},boundaries:{state:'none',value:null}},kernel:{purpose:{kind:'summary'},foundation_refs:[]},shared_declarations:sharedDeclarations,resources:[],relationships:relationships,dependencies:[],contracts:[],conditions:[],exceptions:[],misuse:[],examples:[],sources,source_uses:sourceUses,materials};
   let adoption=null;
   if(declarations.length) {
     if(!decision || !['human_claim_unverified','delegated_agent_editorial'].includes(decision.adoption_kind)) fail('CREATION_DECISION_REQUIRED');
