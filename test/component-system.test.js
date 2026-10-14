@@ -88,6 +88,34 @@ test('unknown keys resolve to a named refusal at compile, never a silent drop',a
   await f.s.receiveAdoptionReply(); // select
   assert.throws(()=>f.s.agent.compilePreview(),{code:'CREATION_SYSTEM_JUDGMENT_UNKNOWN'});
 });
+test('a proposed-but-unselected judgment reference is a named mapping refusal',async()=>{
+  // The session and the audit both refuse a partial selection by name
+  // (CREATION_SELECTION_INCOMPLETE), and the audit additionally hash-pins the
+  // stored selected set against the replayed choices, so no session-derived
+  // snapshot can omit a proposed group. The documented code is therefore the
+  // mapping's own boundary: handed a snapshot whose selected set omits a
+  // proposed group, it refuses the relation by name, never silently drops it.
+  const groups=twoGroups();
+  const snapshot={asset:{asset_id:'asset:fixed',asset_uid:'uid:fixed',version:'0.1.2'},createdAt:'2026-10-15T00:00:00.000Z',corePackageVersion:'0.37.2',synthetic_fixture:true,
+    brief:{title:'Unselected',scope:'Scope.',highest_question:'Question?'},materials:[],
+    groups:[{localKey:'system-a',alternatives:[groups['system-a'].preserve,groups['system-a'].alt]},{localKey:'system-b',alternatives:[groups['system-b'].preserve,groups['system-b'].alt]}],
+    history:[],authorization:{coordinate:'fixture:local-only',statement:'Authorized synthetic implementation testing, no real editorial adoption.'},
+    selected:[{judgmentLocalKey:'system-a',alternative:groups['system-a'].preserve}],
+    system:{relations:[{localKey:'rel-unselected',kind:'support',from:'system-b',to:'system-a',statement:'References a proposed judgment outside the selection.'}]}};
+  assert.throws(()=>buildMaterialization(snapshot,descriptor,{adoption_kind:'delegated_agent_editorial',phase:'preview-only'}),{code:'CREATION_SYSTEM_JUDGMENT_UNSELECTED'});
+  // And the session boundary that keeps that snapshot out of reach: with the
+  // same relation declared, a select intent that omits a proposed group is
+  // refused before any preview is built.
+  let turn=0;
+  const s=api.createSession({agent:{name:'Synthetic partial-selection fixture',version:'1'},syntheticFixture:true,
+    adoptionInput:{kind:'delegated_agent_editorial',channel:'synthetic-provider:partial',authorization:{coordinate:'fixture:local-only',statement:'Authorized synthetic implementation testing, no real editorial adoption.'},receive:async review=>({id:'response:partial:'+(++turn),role:'agent',channel:'synthetic-provider:partial',review_id:review.review_id,text:'select'})},
+    interpretReply:async()=>({kind:'select',choices:[{judgmentLocalKey:'system-a',alternativeLocalKey:'a-preserve'}]})});
+  s.agent.setBrief({title:'Partial',scope:'Partial scope.',highest_question:'Partial question?'});
+  const m=s.agent.recordMaterial({kind:'text',title:'Private input',content:'PRIVATE_PARTIAL_SELECTION_'+serial,coordinate:'private:partial:'+(++serial)});
+  for(const key of ['system-a','system-b']){const g=groups[key];for(const a of Object.values(g))a.materialRefs=[m.id];s.agent.propose({localKey:key,alternatives:[g.preserve,g.alt]});}
+  s.agent.declareSystem(standardDeclaration());
+  await assert.rejects(()=>s.receiveAdoptionReply(),{code:'CREATION_SELECTION_INCOMPLETE'});
+});
 test('system declaration grammar refuses boundaries, empties and unknown kinds by name',async()=>{
   const {createSession}=api;
   const make=()=>createSession({agent:{name:'Synthetic grammar fixture',version:'1'},syntheticFixture:true,
