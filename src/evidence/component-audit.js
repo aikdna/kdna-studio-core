@@ -1,9 +1,10 @@
 "use strict";
 const crypto=require('node:crypto');
-const {record,own,text,group,hash,clone,fail}=require('../creation-engine/component-input');
+const {record,own,text,group,hash,clone,fail,systemDeclaration}=require('../creation-engine/component-input');
 function validateAudit(evidence,descriptor,buildMaterialization,semantics){
  const c=evidence.context,d=evidence.decision;
- record(c,['session_id','revision','agent','asset','createdAt','adoption_channel','corePackageVersion','synthetic_fixture','brief','materials','groups','history','authorization','selected']);
+ record(c,['session_id','revision','agent','asset','createdAt','adoption_channel','corePackageVersion','synthetic_fixture','brief','materials','groups','history','authorization','selected','system'],['session_id','revision','agent','asset','createdAt','adoption_channel','corePackageVersion','synthetic_fixture','brief','materials','groups','history','authorization','selected']);
+ if(own(c,'system')&&hash(systemDeclaration(c.system))!==hash(c.system))fail('CREATION_AUDIT_SYSTEM_INVALID');
  record(c.agent,['name','version']);text(c.agent.name);text(c.agent.version);
  record(c.asset,['asset_id','asset_uid','version']);for(const x of Object.values(c.asset))text(x);
  record(c.adoption_channel,['kind','channel']);text(c.adoption_channel.channel);
@@ -11,7 +12,7 @@ function validateAudit(evidence,descriptor,buildMaterialization,semantics){
  if(!Number.isSafeInteger(c.revision)||c.revision<1||typeof c.synthetic_fixture!=='boolean'||!Number.isFinite(Date.parse(c.createdAt)))fail('CREATION_CONTEXT_INVALID');
  record(d,['format','adoption_kind','session_id','revision','context_digest','preview_digest','proposal_digests','actual_reply','authorization']);
  if(d.format!=='kdna.studio-decision/2'||d.adoption_kind!==c.adoption_channel.kind)fail('CREATION_DECISION_INVALID');
- let state={revision:0,brief:null,materials:[],groups:[],choices:null};let previous=null;const seen=new Set();
+ let state={revision:0,brief:null,materials:[],groups:[],choices:null,system:null};let previous=null;const seen=new Set();
  function reply(entry){
   record(entry,['response','interpretation','review','interpreted_by','identity']);record(entry.response,['id','role','channel','review_id','text']);text(entry.response.id);text(entry.response.text);
   record(entry.review,['review_id','session_id','revision','kind','channel','groups','preview']);
@@ -30,6 +31,7 @@ function validateAudit(evidence,descriptor,buildMaterialization,semantics){
   const v=event.detail;
   if(event.event==='reply_rejected'){record(v,['code']);text(v.code);if(event.revision!==state.revision)fail('CREATION_HISTORY_REVISION_MISMATCH');continue;}
   if(event.event==='brief'){record(v,['title','scope','highest_question']);text(v.title);text(v.scope);text(v.highest_question);state.brief=clone(v);state.choices=null;}
+  else if(event.event==='system'){if(hash(systemDeclaration(v))!==hash(v))fail('CREATION_AUDIT_SYSTEM_INVALID');state.system=clone(v);}
   else if(event.event==='material'){validateMaterial(v);state.materials.push(clone(v));state.choices=null;}
   else if(event.event==='proposal'){record(v,['localKey','alternatives','revision']);if(v.revision!==1||state.groups.some(g=>g.localKey===v.localKey))fail('CREATION_AUDIT_PROPOSAL_INVALID');group({localKey:v.localKey,alternatives:v.alternatives},state.materials,semantics);state.groups.push(clone(v));state.choices=null;}
   else if(event.event==='revision'){record(v,['prior','next','explanation']);text(v.explanation);const index=state.groups.findIndex(g=>g.localKey===v.prior.localKey);if(index<0||hash(state.groups[index])!==hash(v.prior)||v.next.localKey!==v.prior.localKey||v.next.revision!==v.prior.revision+1)fail('CREATION_AUDIT_REVISION_INVALID');record(v.next,['localKey','alternatives','revision']);group({localKey:v.next.localKey,alternatives:v.next.alternatives},state.materials,semantics);state.groups[index]=clone(v.next);state.choices=null;}
@@ -40,10 +42,10 @@ function validateAudit(evidence,descriptor,buildMaterialization,semantics){
   }else fail('CREATION_HISTORY_EVENT_UNSUPPORTED');
   state.revision++;if(event.revision!==state.revision)fail('CREATION_HISTORY_REVISION_MISMATCH');
  }
- if(!state.choices||state.revision!==c.revision||hash(state.brief)!==hash(c.brief)||hash(state.materials)!==hash(c.materials)||hash(state.groups)!==hash(c.groups))fail('CREATION_AUDIT_STATE_MISMATCH');
+ if(!state.choices||state.revision!==c.revision||hash(state.brief)!==hash(c.brief)||hash(state.materials)!==hash(c.materials)||hash(state.groups)!==hash(c.groups)||hash(state.system)!==hash(own(c,'system')?c.system:null))fail('CREATION_AUDIT_STATE_MISMATCH');
  const selected=state.groups.map(g=>({judgmentLocalKey:g.localKey,alternative:g.alternatives.find(a=>a.localKey===state.choices[g.localKey])}));if(hash(selected)!==hash(c.selected))fail('CREATION_AUDIT_SELECTED_MISMATCH');
  const plan=buildMaterialization(c,descriptor,{adoption_kind:d.adoption_kind,phase:'preview-only'});
- const review={session_id:c.session_id,revision:c.revision,kind:'pre_compiler_authoring_review',context_digest:hash(c),selected:clone(c.selected),expected_component_bindings:plan.expectedComponents,presence:plan.presence,proposal_digests:plan.proposalDigests,creation_accepted:'not_evaluated'};
+ const review={session_id:c.session_id,revision:c.revision,kind:'pre_compiler_authoring_review',context_digest:hash(c),selected:clone(c.selected),...(own(c,'system')?{system:clone(c.system)}:{}),expected_component_bindings:plan.expectedComponents,presence:plan.presence,proposal_digests:plan.proposalDigests,creation_accepted:'not_evaluated'};
  const preview={...review,preview_digest:hash(review)};reply(d.actual_reply);
  if(d.actual_reply.review.revision!==c.revision||hash(d.actual_reply.review.groups)!==hash(c.groups)||d.actual_reply.interpretation.kind!=='confirm'||own(d.actual_reply.interpretation,'choices')||hash(d.actual_reply.review.preview)!==hash(preview)||d.preview_digest!==preview.preview_digest||hash(d.proposal_digests)!==hash(plan.proposalDigests))fail('CREATION_PREVIEW_ADOPTION_MISMATCH');
  if(evidence.history.length!==c.history.length+1||hash(evidence.history.slice(0,-1))!==hash(c.history))fail('CREATION_CONTEXT_HISTORY_MISMATCH');

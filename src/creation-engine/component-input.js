@@ -91,6 +91,36 @@ function alternative(v, materials, semantics) {
   }
   return clone(v);
 }
+// The system layer the session can declare. Boundaries stay out until the
+// actor model exists: the contract requires a resolvable `declared_by` actor
+// and Core enforces it, so a provided boundaries key is a named refusal, never
+// a silent drop. Directed families carry an ordered role pair:
+// support supporter->claim, qualify qualifier->qualified,
+// complement supplement->base; conflict is undirected side_a/side_b.
+function systemDeclaration(v) {
+  record(v, ['worldview', 'value_order', 'relations', 'boundaries'], []);
+  if (own(v, 'boundaries')) throw Object.assign(new Error('CREATION_BOUNDARIES_ACTOR_REQUIRED'), { code: 'CREATION_BOUNDARIES_ACTOR_REQUIRED', detail: 'The actor face is not open yet: declared boundaries arrive with the identity-model unit.' });
+  if (!own(v, 'worldview') && !own(v, 'value_order') && !own(v, 'relations')) fail('CREATION_SYSTEM_EMPTY');
+  const out = {};
+  for (const kind of ['worldview', 'value_order']) if (own(v, kind)) {
+    const entry = v[kind];
+    record(entry, ['statement', 'items'], ['statement', 'items']);
+    text(entry.statement); array(entry.items);
+    if (!entry.items.length) fail('CREATION_SYSTEM_LIST_EMPTY');
+    entry.items.forEach(item => text(item));
+    out[kind] = { statement: entry.statement, items: clone(entry.items) };
+  }
+  if (own(v, 'relations')) {
+    array(v.relations); uniqueKeys(v.relations);
+    out.relations = v.relations.map(relation => {
+      record(relation, ['localKey', 'kind', 'from', 'to', 'statement'], ['localKey', 'kind', 'from', 'to', 'statement']);
+      local(relation.localKey); text(relation.statement); local(relation.from); local(relation.to);
+      if (!['support', 'qualify', 'conflict', 'complement'].includes(relation.kind)) fail('CREATION_SYSTEM_RELATION_KIND_UNSUPPORTED');
+      return clone(relation);
+    });
+  }
+  return out;
+}
 function group(v, materials, semantics) {
   record(v,['localKey','alternatives']); local(v.localKey); array(v.alternatives);
   if (v.alternatives.length < 2) fail('CREATION_TWO_ALTERNATIVES_REQUIRED');
@@ -99,4 +129,4 @@ function group(v, materials, semantics) {
   if (new Set(meanings).size !== alternatives.length) fail('CREATION_ALTERNATIVES_NOT_DISTINCT');
   return {localKey:v.localKey,alternatives};
 }
-module.exports = { own,fail,hash,clone,freeze,record,hostRecord,text,local,array,group };
+module.exports = { own,fail,hash,clone,freeze,record,hostRecord,text,local,array,group,systemDeclaration };
