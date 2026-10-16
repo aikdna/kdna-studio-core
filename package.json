@@ -1,6 +1,6 @@
 {
   "name": "@aikdna/kdna-studio-core",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Current ordinary and component Creation with actual role-specific adoption and one-use saved-byte context.",
   "type": "commonjs",
   "main": "src/index.js",

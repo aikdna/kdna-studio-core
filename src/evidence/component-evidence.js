@@ -5,6 +5,17 @@ const {hash,clone,freeze,record,group}=require('../creation-engine/component-inp
 const {buildMaterialization}=require('../compile/component-materialization');
 const {encodeComponentRuntime}=require('../compile/component-encoding');
 const {validateAudit}=require('./component-audit');
+// Recognized producer coordinates for the one current graph. This table is
+// explicit and pinned by test/component-lifecycle.test.js. Studio Core `4.1.0`
+// is a purely additive update of `4.0.0` (identical Core/Read graph, identical
+// public exports), so both JavaScript coordinates stay recognized while `4.0.0`
+// remains a supported published coordinate: evidence produced by an already
+// released coordinate must not become unverifiable. Narrowing this table is a
+// compatibility decision and may not be done silently.
+const KNOWN_PRODUCERS=Object.freeze([
+  Object.freeze({provider:'javascript',name:'@aikdna/kdna-studio-core',versions:Object.freeze(['4.0.0','4.1.0'])}),
+  Object.freeze({provider:'swift',name:'KDNAStudioCore',versions:Object.freeze(['0.6.0-rc.components.1'])}),
+]);
 function verifyCreationEvidence(bytes,evidence,expectedBinding){
   const reject=reason=>freeze({status:'inconsistent',reason,creation_accepted:'not_evaluated',live_context:'unavailable',identity:'not_verified',action_authorization:'not_evaluated'});
   try{
@@ -17,7 +28,7 @@ function verifyCreationEvidence(bytes,evidence,expectedBinding){
     record(evidence.format,['id','version']);
     record(evidence.compiler,['name','version','provider','artifact_sha256']);
     const compiler=evidence.compiler;
-    const knownProvider=(compiler.provider==='javascript'&&compiler.name==='@aikdna/kdna-studio-core'&&compiler.version==='4.0.0')||(compiler.provider==='swift'&&compiler.name==='KDNAStudioCore'&&compiler.version==='0.6.0-rc.components.1');
+    const knownProvider=KNOWN_PRODUCERS.some(known=>known.provider===compiler.provider&&known.name===compiler.name&&known.versions.includes(compiler.version));
     if(!knownProvider||compiler.artifact_sha256!=='UNKNOWN'||hash(evidence.reference_contract)!==hash(runtime.tuple)||evidence.component_definition!==runtime.descriptor.definition_digest)return reject('CREATION_PROVIDER_CONTRACT_NOT_CURRENT');
     record(evidence.artifact,['bytes','digest']);
     if(evidence.artifact.bytes!==captured.length||evidence.artifact.digest!==admission.snapshot.digests.A.observed)return reject('CREATION_ARTIFACT_BINDING_MISMATCH');
@@ -45,4 +56,4 @@ function verifyCreationEvidence(bytes,evidence,expectedBinding){
     return freeze({status:'consistent',format:clone(evidence.format),asset_digest:admission.snapshot.digests.A.observed,evidence_digest:expectedBinding.evidence_digest,adoption_kind:decision.adoption_kind,core:'valid',interpretation:'supported',creation_accepted:'not_evaluated',live_context:'unavailable',identity:'not_verified',action_authorization:'not_evaluated'});
   }catch(e){return reject(typeof e.code==='string'?e.code:'CREATION_EVIDENCE_MALFORMED');}
 }
-module.exports={verifyCreationEvidence};
+module.exports={verifyCreationEvidence,KNOWN_PRODUCERS};

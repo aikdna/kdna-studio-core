@@ -1,3 +1,9 @@
+## 4.1.0 (2026-10-16)
+
+Add the declared system layer to the same typed creation lifecycle: `session.agent.declareSystem({worldview?,value_order?,relations?})` records the author's own worldview, ordered values and directed relations between selected judgments, and the mapping carries them into `shared_declarations` and `relationships` with minted `shared`/`relationship` ids under the unchanged `kdna.studio-materialization/2` rule. Declaration is additive: without it, `shared_declarations` and `relationships` remain the exact previous empty arrays and `declarations.boundaries` stays `{state:'none',value:null}`, so every previously accepted input keeps its byte-identical output and its rule id. Relation keys resolve against the selected set at materialization: an unknown key is `CREATION_SYSTEM_JUDGMENT_UNKNOWN` and a proposed but unselected key is `CREATION_SYSTEM_JUDGMENT_UNSELECTED`; `boundaries` is a named refusal (`CREATION_BOUNDARIES_ACTOR_REQUIRED`) because the contract requires a resolvable `declared_by` actor, never a silent drop.
+
+This is a compatible update of `4.0.0`: the package keeps the same Core `0.37.2` / Read `0.11.3` graph and the same public exports (`createSession`, `verifyCreationEvidence`, `./protected-export`). `verifyCreationEvidence` recognizes producer declarations from both `4.0.0` and `4.1.0` — the table is explicit and pinned by test — so evidence produced by the already published coordinate stays verifiable; any other version remains `CREATION_PROVIDER_CONTRACT_NOT_CURRENT`. The producer still emits container `0.5.0` / Read grammar `0.6.4`.
+
 ## 4.0.0
 
 Bind the current typed creation API to Core `0.37.2` and Read `0.11.3` with exact dependency archives and complete installed member checks. Version `4.0.0` exposes `createSession`, `verifyCreationEvidence` and `./protected-export`; the historical `3.0.0` project/card API and its evidence remain a separate compatibility line.
