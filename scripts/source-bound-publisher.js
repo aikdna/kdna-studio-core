@@ -12,7 +12,7 @@ const { readTarFileEntriesFromBytes } = require('./runtime-candidate-binding');
 
 const REGISTRY = 'https://registry.npmjs.org/';
 const VERSIONS = Object.freeze({
-  '@aikdna/kdna-studio-core': '4.0.0',
+  '@aikdna/kdna-studio-core': '4.1.0',
   '@aikdna/kdna-studio-cli': '0.13.0',
 });
 const PUBLICATION_ENVIRONMENT = Object.freeze([

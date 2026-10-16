@@ -3,7 +3,7 @@
 > **Coordinate scope.** This guide migrates to the **published `3.0.0`**
 > coordinate and the top-level responsibilities that version exposes
 > (`authoring`, `project`, `cards`, `compile`, `creationEngine`, …). The
-> repository's current source line is `4.0.0`, which exposes a different API; see
+> repository's current source line is `4.1.0`, which exposes a different API; see
 > [`CURRENT-CREATION-CONTRACT.md`](./CURRENT-CREATION-CONTRACT.md). Nothing in
 > this guide is an upgrade path to that line.
 
