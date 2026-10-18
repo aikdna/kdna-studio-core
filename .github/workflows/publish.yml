@@ -70,6 +70,10 @@ jobs:
       - run: node scripts/run-trusted-npm.js ci --ignore-scripts --omit=optional --no-audit --no-fund --registry=https://registry.npmjs.org/ --@aikdna:registry=https://registry.npmjs.org/
       - name: Reproduce both checked Runtime artifacts from their exact sources
         run: node scripts/ci-leg-receipt.js candidate-sources
+      # The tag checkout may not carry origin/main. Fetch it explicitly; the
+      # release gate refuses by name if the ref is missing or unreadable.
+      - name: Fetch origin/main for the release ancestry gate
+        run: node scripts/fetch-release-main.js
       - name: Verify release event, tag, commit, package, and changelog
         run: node scripts/run-trusted-npm.js run release:check
       - name: Run the complete release test suite
