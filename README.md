@@ -1,5 +1,7 @@
 # KDNA Studio Core — current typed creation
 
+> **Status Notice (Legacy Pre-0.6.0 Line):** This repository is preserved as a historical compatibility package and is not the active entrypoint for current KDNA Container `0.6.0` judgment works. For current specifications, offline CLI authoring/reading/encryption, Agent Skills, Desktop KDNA Reader, and *KDNA Whitepaper* (1.0.1), visit [`aikdna/kdna`](https://github.com/aikdna/kdna), [`aikdna/kdna-cli`](https://github.com/aikdna/kdna-cli), [`aikdna/kdna-skills`](https://github.com/aikdna/kdna-skills), and [`aikdna/kdna-assets`](https://github.com/aikdna/kdna-assets).
+
 Studio Core `4.1.0`: ordinary and component-rich authoring share one public Core/Read graph and one private creation evidence format2. Public exports are `createSession` and `verifyCreationEvidence`; see [the contract](docs/CURRENT-CREATION-CONTRACT.md) and `src/index.d.ts` for complete inputs and state rules. The historical `3.0.0` project/card API has a separate compatibility contract.
 
 Record materials, propose at least two real alternatives, obtain a channel-bound selection, review the current pre-compiler mapping and obtain a fresh final adoption reply. `exportAsset()` is pending until the embedding saves and reads back the file and calls `completeSave(bytes)`. Static reopening checks bindings and public observations, and never restores that live acceptance capability.
